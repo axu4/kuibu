@@ -163,9 +163,9 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           ./kuibu-darwin-arm64 version | grep -F "$VERSION"
-          # App 二进制的构建信息里应带上注入的版本号（确认 EXTRA_LDFLAGS 生效）。
-          go version -m "dist/跬步.app/Contents/MacOS/kuibu" | grep -- -ldflags || true
-          go version -m "dist/跬步.app/Contents/MacOS/kuibu" | grep -F "internal/version.Version=$VERSION"
+          # App 二进制里应含注入的版本号字符串（确认 KUIBU_LDFLAGS 生效）。
+          # 注意：带 -trimpath 构建时 go version -m 不记录 -ldflags，所以直接在二进制里找。
+          grep -a -q -F "$VERSION" "dist/跬步.app/Contents/MacOS/kuibu"
           # zip 解压后应是 跬步.app 结构。
           rm -rf /tmp/zipcheck && mkdir -p /tmp/zipcheck
           ditto -x -k kuibu-macos-arm64.zip /tmp/zipcheck
