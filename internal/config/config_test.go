@@ -210,6 +210,99 @@ func TestSaveQuickNoteShortcutRestoresDefault(t *testing.T) {
 	}
 }
 
+func TestAutoCheckUpdateEnabled(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	cases := []struct {
+		name string
+		cfg  UserConfig
+		want bool
+	}{
+		{"未配置默认开启", UserConfig{}, true},
+		{"显式开启", UserConfig{AutoCheckUpdate: &trueVal}, true},
+		{"显式关闭", UserConfig{AutoCheckUpdate: &falseVal}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.cfg.AutoCheckUpdateEnabled(); got != tc.want {
+				t.Errorf("AutoCheckUpdateEnabled() = %v，期望 %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGitHubTokenSaveLoadAndDelete(t *testing.T) {
+	vars := map[string]string{}
+	dir := newConfigDir(t, vars)
+
+	// 未保存时读取返回空字符串。
+	got, err := LoadGitHubToken(testEnv(vars))
+	if err != nil {
+		t.Fatalf("LoadGitHubToken 返回错误: %v", err)
+	}
+	if got != "" {
+		t.Errorf("未保存时 token = %q，期望空字符串", got)
+	}
+
+	// 保存后能读回，且文件权限为 0600。
+	if err := SaveGitHubToken(testEnv(vars), "  ghp_secret_123  "); err != nil {
+		t.Fatalf("SaveGitHubToken 返回错误: %v", err)
+	}
+	tokenPath := filepath.Join(dir, "github-token")
+	info, err := os.Stat(tokenPath)
+	if err != nil {
+		t.Fatalf("token 文件未写入: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("token 文件权限 = %o，期望 600", perm)
+	}
+
+	got, err = LoadGitHubToken(testEnv(vars))
+	if err != nil {
+		t.Fatalf("LoadGitHubToken 返回错误: %v", err)
+	}
+	if want := "ghp_secret_123"; got != want {
+		t.Errorf("token = %q，期望 %q", got, want)
+	}
+
+	// 空字符串表示删除文件。
+	if err := SaveGitHubToken(testEnv(vars), "   "); err != nil {
+		t.Fatalf("删除 token 返回错误: %v", err)
+	}
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Errorf("删除后 token 文件仍存在: %v", err)
+	}
+	got, err = LoadGitHubToken(testEnv(vars))
+	if err != nil {
+		t.Fatalf("删除后 LoadGitHubToken 返回错误: %v", err)
+	}
+	if got != "" {
+		t.Errorf("删除后 token = %q，期望空字符串", got)
+	}
+}
+
+func TestGitHubTokenNotInConfigJSON(t *testing.T) {
+	vars := map[string]string{}
+	dir := newConfigDir(t, vars)
+
+	if err := SaveGitHubToken(testEnv(vars), "ghp_secret_456"); err != nil {
+		t.Fatalf("SaveGitHubToken 返回错误: %v", err)
+	}
+
+	// 保存默认工作台会写 config.json，token 不应混进去。
+	if err := SaveDefaultWorkspace(testEnv(vars), "/tmp/ws"); err != nil {
+		t.Fatalf("写入默认工作台失败: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatalf("读取 config.json 失败: %v", err)
+	}
+	if strings.Contains(string(data), "ghp_secret_456") {
+		t.Errorf("config.json 不应包含 token：%s", data)
+	}
+}
+
 func TestLoadOldConfigWithoutQuickNoteShortcut(t *testing.T) {
 	vars := map[string]string{}
 	dir := newConfigDir(t, vars)

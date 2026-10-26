@@ -1,0 +1,198 @@
+# 跬步（kuibu）发布流程
+#
+# 触发方式：
+#   - push 一个 v* 标签（如 v0.2.0）
+#   - 手动 workflow_dispatch，填写要发布的 tag（失败重跑用）
+#   - 改了发布相关文件的 PR：只走一遍构建、打包与冒烟（版本号用 0.0.0-pr.<PR 号>），
+#     不创建 Release，用来在合并前验证发布流程。
+#
+# 流程（macos-latest = arm64）：
+#   1. 从 tag 计算 VERSION（去掉 v 前缀）并校验格式 MAJOR.MINOR.PATCH[-prerelease]。
+#   2. 构建 App（wails3 package），通过环境变量 KUIBU_LDFLAGS 把版本号注入
+#      internal/version.Version（Taskfile 的 EXTRA_LDFLAGS 变量读取它并拼进 -ldflags）。
+#   3. 用 PlistBuddy 把 Info.plist 的 CFBundleShortVersionString/CFBundleVersion 改成
+#      VERSION，再重新 ad-hoc 签名并校验。
+#   4. 把 .app 改名为「跬步.app」，打成 zip（ditto）与 dmg（hdiutil）。
+#   5. 交叉编译 darwin arm64 的 CLI 并 ad-hoc 签名。
+#   6. 生成 SHA256SUMS，冒烟检查 CLI version 与 Info.plist 版本。
+#   7. 用 gh 创建或更新 GitHub Release，资产文件名一律 ASCII。
+#
+# 说明：App 是独立 module，但 go build 时 -X github.com/axu4/kuibu/internal/version.Version
+# 一样有效（依赖包的 var 也能被 -X 设置），App 运行时读到的就是注入后的版本号。
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的 tag（如 v0.2.0，留空会报错）'
+        required: false
+        default: ''
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'app/build/darwin/**'
+      - 'internal/version/**'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release macOS arm64
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 手动重跑时切到指定的 tag；push tags 时用触发本次运行的 ref。
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || '' }}
+
+      - name: 确定 TAG 与 VERSION
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="v0.0.0-pr.${{ github.event.pull_request.number }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              echo "workflow_dispatch 必须填写 tag" >&2
+              exit 1
+            fi
+          else
+            TAG="${GITHUB_REF_NAME:-}"
+          fi
+
+          case "$TAG" in
+            v*) VERSION="${TAG#v}" ;;
+            *) VERSION="$TAG" ;;
+          esac
+
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$'; then
+            echo "版本号 $VERSION 格式不合法，应为 MAJOR.MINOR.PATCH 或带 -prerelease" >&2
+            exit 1
+          fi
+
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          cache: true
+          # 根模块与 app/ 是独立 module，两边的 go.sum 都要参与缓存 key。
+          cache-dependency-path: |
+            go.sum
+            app/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install wails3
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Frontend deps
+        working-directory: app/frontend
+        shell: bash
+        run: npm ci
+
+      - name: 构建 App（注入版本号）
+        working-directory: app
+        shell: bash
+        run: |
+          # wails3 package 走 Taskfile；build:native 会读环境变量 KUIBU_LDFLAGS 拼进 -ldflags。
+          export KUIBU_LDFLAGS="-X github.com/axu4/kuibu/internal/version.Version=${{ steps.version.outputs.VERSION }}"
+          wails3 package
+
+      - name: 修改 Info.plist 版本并重新签名
+        shell: bash
+        run: |
+          APP="app/bin/kuibu.app"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
+          xattr -cr "$APP"
+          codesign --force --deep -s - "$APP"
+          codesign --verify --deep --strict "$APP"
+
+      - name: 改名并打包 zip / dmg
+        shell: bash
+        run: |
+          rm -rf dist
+          mkdir -p dist
+          cp -R "app/bin/kuibu.app" "dist/跬步.app"
+
+          # zip：资产文件名用 ASCII，包内保留中文显示名。
+          (cd dist && ditto -c -k --norsrc --keepParent "跬步.app" "../kuibu-macos-arm64.zip")
+
+          # dmg：临时目录放 App + 指向 /Applications 的软链。
+          DMG_DIR="dist/dmg"
+          rm -rf "$DMG_DIR"
+          mkdir -p "$DMG_DIR"
+          cp -R "dist/跬步.app" "$DMG_DIR/跬步.app"
+          ln -s /Applications "$DMG_DIR/Applications"
+          hdiutil create -volname "跬步" -srcfolder "$DMG_DIR" -ov -format UDZO "kuibu-macos-arm64.dmg"
+
+      - name: 构建 CLI（darwin arm64）
+        shell: bash
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath \
+            -ldflags "-s -w -X github.com/axu4/kuibu/internal/version.Version=${{ steps.version.outputs.VERSION }}" \
+            -o kuibu-darwin-arm64 ./cmd/kuibu
+          codesign -s - kuibu-darwin-arm64
+
+      - name: 生成校验和
+        shell: bash
+        run: shasum -a 256 kuibu-macos-arm64.zip kuibu-macos-arm64.dmg kuibu-darwin-arm64 > SHA256SUMS
+
+      - name: 冒烟测试
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ./kuibu-darwin-arm64 version | grep -F "$VERSION"
+          # App 二进制里应含注入的版本号字符串（确认 KUIBU_LDFLAGS 生效）。
+          # 注意：带 -trimpath 构建时 go version -m 不记录 -ldflags，所以直接在二进制里找。
+          grep -a -q -F "$VERSION" "dist/跬步.app/Contents/MacOS/kuibu"
+          # zip 解压后应是 跬步.app 结构。
+          rm -rf /tmp/zipcheck && mkdir -p /tmp/zipcheck
+          ditto -x -k kuibu-macos-arm64.zip /tmp/zipcheck
+          test -x "/tmp/zipcheck/跬步.app/Contents/MacOS/kuibu"
+          codesign --verify --deep --strict "/tmp/zipcheck/跬步.app"
+          APP_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "dist/跬步.app/Contents/Info.plist")"
+          if [ "$APP_VERSION" != "$VERSION" ]; then
+            echo "Info.plist 版本 $APP_VERSION 与 $VERSION 不一致" >&2
+            exit 1
+          fi
+
+      - name: 创建或更新 Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.TAG }}"
+          ASSETS=(kuibu-macos-arm64.zip kuibu-macos-arm64.dmg kuibu-darwin-arm64 SHA256SUMS)
+
+          PRERELEASE_FLAG=()
+          case "$TAG" in
+            *-*) PRERELEASE_FLAG=(--prerelease) ;;
+          esac
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload --clobber "$TAG" "${ASSETS[@]}"
+          else
+            gh release create "$TAG" --title "跬步 $TAG" --generate-notes "${PRERELEASE_FLAG[@]}" "${ASSETS[@]}"
+          fi

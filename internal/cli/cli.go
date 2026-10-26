@@ -14,10 +14,8 @@ import (
 	"syscall"
 
 	"github.com/axu4/kuibu/internal/store"
+	"github.com/axu4/kuibu/internal/version"
 )
-
-// Version 是 kuibu 的版本号。
-const Version = "0.0.1-dev"
 
 // usageText 是中文用法总览。
 const usageText = `用法:
@@ -364,13 +362,13 @@ func runVersion(args []string, common *commonFlags, stdout io.Writer) error {
 	if common.json {
 		return writeJSON(stdout, versionInfo{
 			Name:    "kuibu",
-			Version: Version,
+			Version: version.Version,
 			Go:      runtime.Version(),
 			OS:      runtime.GOOS,
 			Arch:    runtime.GOARCH,
 		})
 	}
-	fmt.Fprintf(stdout, "kuibu %s\n", Version)
+	fmt.Fprintf(stdout, "kuibu %s\n", version.Version)
 	return nil
 }
 

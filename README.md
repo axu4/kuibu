@@ -74,11 +74,39 @@
 │   ├── core/           # 领域模型与业务逻辑
 │   ├── store/          # 工作台、Markdown 与 front matter 读写、树、资源
 │   ├── index/          # SQLite 索引，可删除重建
-│   ├── config/         # 用户配置与工作台定位
+│   ├── config/         # 用户配置与工作台定位、GitHub token
+│   ├── update/         # 面向 GitHub Releases 的在线更新（下载/校验/解压/替换）
+│   ├── version/        # 版本号（发布时 -ldflags 注入）
 │   └── cli/            # 命令实现、--json 输出与退出码
 ├── app/                # Wails v3 桌面外壳（独立 module）
 └── docs/               # 设计文档
 ```
+
+## 下载安装
+
+### App（macOS，Apple Silicon）
+
+1. 到 [Releases](https://github.com/axu4/kuibu/releases) 下载最新 `kuibu-macos-arm64.dmg`。
+2. 打开 dmg，把 `跬步.app` 拖到 `Applications`。
+3. 首次打开若被 Gatekeeper 拦（ad-hoc 签名、未公证），右键点 App 选「打开」；或执行：
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/跬步.app
+   ```
+
+启动后 App 会按需检查在线更新（详见 [docs/update.md](docs/update.md)），发布流程见 [docs/release.md](docs/release.md)。
+
+### CLI
+
+1. 下载 `kuibu-darwin-arm64`。
+2. 加执行权限并放到 PATH 里：
+
+   ```bash
+   chmod +x kuibu-darwin-arm64
+   sudo mv kuibu-darwin-arm64 /usr/local/bin/kuibu
+   ```
+
+3. 首次运行同样可能被 Gatekeeper 拦，执行 `xattr -dr com.apple.quarantine /usr/local/bin/kuibu` 后重试。
 
 ## 快速开始
 
@@ -128,6 +156,8 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | [docs/report.md](docs/report.md) | 周报收集：组员与周报目录/字段、识别规则、状态规则、CLI 用法、App 接口说明 |
 | [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
 | [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
+| [docs/update.md](docs/update.md) | 在线更新原理、token 来源顺序与限制 |
+| [docs/release.md](docs/release.md) | 发布步骤、资产命名约定、失败重跑与版本号规则 |
 | [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
 | [app/README.md](app/README.md) | 桌面外壳的目录、数据流与编辑器选型 |
 | [AGENTS.md](AGENTS.md) | 开发规范（硬性约束） |

@@ -42,6 +42,8 @@ Go 侧：
   `openFile`/`openURL`/`pickFiles` 可注入，便于单测。
 - `shellservice.go`：`ShellService`（快捷键状态/修改/恢复默认、随手记保存
   —— 笔记模式 `SaveQuickNote` 与待办模式 `SaveQuickTodo`、窗口控制）。
+- `updateservice.go`：`UpdateService`（在线更新：状态、检查、应用更新、自动检查开关
+  与 GitHub token；下载/校验/解压/替换复用 `internal/update`，进度通过事件推送）。
 - `shell_ui.go`：`shellUI` 的桌面实现（托盘菜单、主窗口显隐、随手记小窗的按需创建与销毁）。
 - `shortcut.go`：快捷键纯函数（`normalizeShortcut`、`shortcutDisplay`、`trayNewNoteLabel`）。
 - `build/tray/tray-template.png`：菜单栏模板图标；`build/tray/gen/main.go` 是带
@@ -58,7 +60,8 @@ Go 侧：
   搜索、缩进子任务、完成父任务确认）。
 - `frontend/src/components/TodoDetail.tsx`：待办详情面板（标题、状态、截止、标签、
   Milkdown 正文、子任务、链接、附件、来源笔记）。
-- `frontend/src/components/Settings.tsx`：设置面板（快捷键录制/保存/恢复默认/错误提示）。
+- `frontend/src/components/Settings.tsx`：设置面板（快捷键录制/保存/恢复默认/错误提示，
+  软件更新与 GitHub token）。
 - `frontend/src/components/Tree.tsx`：可展开的大纲树、右键菜单、行内重命名。
 - `frontend/src/components/Editor.tsx`：Milkdown（Crepe）编辑器封装。
 - `frontend/src/lib/markdown.ts`：`../assets/xxx` ↔ `/workspace-assets/xxx` 的路径改写。
@@ -79,11 +82,14 @@ Go 侧：
 | --- | --- |
 | `WorkspaceService` | `Current`、`ChooseWorkspace`、`Tree`、`Get`、`Create`、`SaveBody`、`Rename`、`Move`、`Delete` |
 | `ShellService` | `GetShortcutStatus`、`SetQuickNoteShortcut`、`ResetQuickNoteShortcut`、`SaveQuickNote`、`SaveQuickTodo`、`CloseQuickNote`、`OpenMainWindow` |
+| `UpdateService` | `Info`、`Check`、`SetAutoCheck`、`SetToken`、`Apply` |
 | `TodoService` | `Preview`、`Create`、`List`、`Tags`、`Get`、`UpdateTitle`、`UpdateDue`、`UpdateTags`、`UpdateBody`、`SetStatus`、`OpenChildrenCount`、`AddLink`、`RemoveLink`、`OpenLink`、`ChooseAndAttach`、`AttachPaths`、`Detach`、`OpenAttachment`、`Move`、`Delete`、`HandleDroppedFiles` |
 
 Go → 前端事件：`workspace:changed`（`{ ids }`，笔记）、`todo:changed`（`{ ids }`，待办）、
 `quicknote:saved`（`{ id, inboxId, title }`）、`shell:open-settings`、
-`shell:shortcut-changed`（`ShortcutStatus`）、`quicknote:focus`。
+`shell:shortcut-changed`（`ShortcutStatus`）、`quicknote:focus`、
+`update:available`（`CheckResult`，启动自动检查发现新版本）、
+`update:progress`（`{ stage, message }`，应用更新时的阶段进度）。
 
 文件拖放：主窗口开了 `EnableFileDrop`，前端在待办详情面板上写
 `data-todo-id`/`data-file-drop-target`；Wails 把 `DropTargetDetails.Attributes`

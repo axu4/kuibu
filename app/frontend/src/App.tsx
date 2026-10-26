@@ -5,6 +5,7 @@ import {
   WorkspaceService,
 } from "../bindings/github.com/axu4/kuibu/app";
 import type {
+  CheckResult,
   NoteData,
   QuickNoteSaved,
   ShortcutStatus,
@@ -109,6 +110,9 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
+  const [updateBanner, setUpdateBanner] = useState<CheckResult | null>(null);
+  // 从更新提示条进入设置时定位到「软件更新」一节。
+  const [settingsFocusUpdate, setSettingsFocusUpdate] = useState(false);
   const [view, setView] = useState<MainView>(loadMainView);
   const [titleDraft, setTitleDraft] = useState("");
   // 待办视图把分组与标签渲染进侧栏的这个容器。
@@ -306,6 +310,17 @@ export default function App() {
   useEffect(() => {
     const off = Events.On("shell:open-settings", () => {
       setSettingsOpen(true);
+    });
+    return off;
+  }, []);
+
+  // 启动时后台自动检查发现新版本：显示一条不打扰的提示条。
+  useEffect(() => {
+    const off = Events.On("update:available", (event) => {
+      const data = event.data as CheckResult | null;
+      if (data?.hasUpdate) {
+        setUpdateBanner(data);
+      }
     });
     return off;
   }, []);
@@ -622,6 +637,30 @@ export default function App() {
     </>
   );
 
+  // 启动自动检查发现新版本时的提示条，点击「查看」打开设置并定位到更新一节。
+  const updateBannerEl = updateBanner && (
+    <div className="banner">
+      <span>发现新版本 v{updateBanner.latest}</span>
+      <button
+        type="button"
+        onClick={() => {
+          setSettingsFocusUpdate(true);
+          setSettingsOpen(true);
+        }}
+      >
+        查看
+      </button>
+      <button
+        type="button"
+        className="banner-close"
+        title="关闭"
+        onClick={() => setUpdateBanner(null)}
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+  );
+
   const workspaceName = workspace ? workspace.split("/").filter(Boolean).pop() : "";
 
   const welcome = (
@@ -737,11 +776,13 @@ export default function App() {
         workspace ? (
           <div className="todo-shell">
             {shortcutBanners}
+            {updateBannerEl}
             <TodoView onOpenNote={openNoteFromTodo} navHost={todoNavHost} />
           </div>
         ) : (
           <main className="content">
             <div className="toolbar" />
+            {updateBannerEl}
             {welcome}
           </main>
         )
@@ -750,12 +791,14 @@ export default function App() {
           {!workspace ? (
             <>
               <div className="toolbar" />
+              {updateBannerEl}
               {welcome}
             </>
           ) : !note ? (
             <>
               <div className="toolbar" />
               {shortcutBanners}
+              {updateBannerEl}
               <div className="welcome">
                 <div className="welcome-mark is-quiet">
                   <Icon name="note" size={22} />
@@ -825,6 +868,7 @@ export default function App() {
               </div>
 
               {shortcutBanners}
+              {updateBannerEl}
 
               {external === "modified" && (
                 <div className="banner">
@@ -927,8 +971,12 @@ export default function App() {
 
       {settingsOpen && (
         <Settings
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            setSettingsFocusUpdate(false);
+          }}
           onStatusChange={applyShortcutStatus}
+          focusUpdate={settingsFocusUpdate}
         />
       )}
 

@@ -18,6 +18,13 @@ type UserConfig struct {
 	Workspace string `json:"workspace"`
 	// QuickNoteShortcut 是随手记全局快捷键（Wails v3 加速键语法），空表示用默认值。
 	QuickNoteShortcut string `json:"quickNoteShortcut,omitempty"`
+	// AutoCheckUpdate 是否自动检查在线更新；nil 视为 true。
+	AutoCheckUpdate *bool `json:"autoCheckUpdate,omitempty"`
+}
+
+// AutoCheckUpdateEnabled 返回是否自动检查更新；未配置（nil）时默认为 true。
+func (c UserConfig) AutoCheckUpdateEnabled() bool {
+	return c.AutoCheckUpdate == nil || *c.AutoCheckUpdate
 }
 
 // DefaultQuickNoteShortcut 是随手记全局快捷键的默认值。
@@ -178,6 +185,59 @@ func Resolve(env func(string) string, override string) (*store.Workspace, error)
 		return nil, fmt.Errorf("获取当前目录失败: %w", err)
 	}
 	return store.Find(cwd)
+}
+
+// TokenPath 返回 GitHub token 文件路径（与 config.json 同目录）。
+//
+// token 不放 config.json，而是单独文件 github-token，权限 0600。
+func TokenPath(env func(string) string) (string, error) {
+	path, err := Path(env)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(path), "github-token"), nil
+}
+
+// LoadGitHubToken 读取 GitHub token；文件不存在时返回空字符串（不算错误）。
+func LoadGitHubToken(env func(string) string) (string, error) {
+	path, err := TokenPath(env)
+	if err != nil {
+		return "", err
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("读取 GitHub token 失败: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// SaveGitHubToken 写入 GitHub token（权限 0600）；空字符串表示删除文件。
+func SaveGitHubToken(env func(string) string, token string) error {
+	path, err := TokenPath(env)
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("删除 GitHub token 文件失败: %w", err)
+		}
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("创建用户配置目录失败: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+		return fmt.Errorf("写入 GitHub token 失败: %w", err)
+	}
+	// 文件已存在时 os.WriteFile 不会改权限，显式 Chmod 保证 0600。
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("设置 GitHub token 权限失败: %w", err)
+	}
+	return nil
 }
 
 // Locate 返回 App 启动时应打开的工作台目录：

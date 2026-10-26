@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { ShellService } from "../../bindings/github.com/axu4/kuibu/app";
-import type { ShortcutStatus } from "../../bindings/github.com/axu4/kuibu/app";
+import { Events } from "@wailsio/runtime";
+import { ShellService, UpdateService } from "../../bindings/github.com/axu4/kuibu/app";
+import type {
+  CheckResult,
+  ShortcutStatus,
+  UpdateInfo,
+} from "../../bindings/github.com/axu4/kuibu/app";
+import { Icon } from "./Icon";
 import {
   keyboardEventToAccelerator,
   modifiersOnlyDisplay,
@@ -11,6 +17,8 @@ interface SettingsProps {
   onClose: () => void;
   /** 快捷键状态变化后通知外层刷新（例如顶部提示条）。 */
   onStatusChange: (status: ShortcutStatus) => void;
+  /** 打开后定位到「软件更新」一节（从顶部更新提示条进入）。 */
+  focusUpdate?: boolean;
 }
 
 /**
@@ -19,13 +27,24 @@ interface SettingsProps {
  * 录制模式：窗口级监听 keydown 并 preventDefault/stopPropagation，
  * 避免按键触发其它操作（例如 ⌘W 关窗、⌘Q 退出）。
  */
-export function Settings({ onClose, onStatusChange }: SettingsProps) {
+export function Settings({ onClose, onStatusChange, focusUpdate }: SettingsProps) {
   const [status, setStatus] = useState<ShortcutStatus | null>(null);
   const [recording, setRecording] = useState(false);
   const [preview, setPreview] = useState<string>("");
   const [pending, setPending] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // 软件更新状态。
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ stage: string; message: string } | null>(null);
+  const [tokenDraft, setTokenDraft] = useState("");
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [autoCheckBusy, setAutoCheckBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -40,6 +59,115 @@ export function Settings({ onClose, onStatusChange }: SettingsProps) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const loadUpdateInfo = useCallback(async () => {
+    try {
+      setUpdateInfo(await UpdateService.Info());
+    } catch (err) {
+      setUpdateError(readableError(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadUpdateInfo();
+  }, [loadUpdateInfo]);
+
+  // 从顶部「发现新版本」提示条进入时，滚动到软件更新一节。
+  useEffect(() => {
+    if (!focusUpdate) {
+      return;
+    }
+    const id = window.setTimeout(() => {
+      document.getElementById("settings-update")?.scrollIntoView({ block: "start" });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [focusUpdate]);
+
+  // 监听 Apply 期间推送的进度阶段。
+  useEffect(() => {
+    const off = Events.On("update:progress", (event) => {
+      const data = event.data as { stage?: string; message?: string } | null;
+      if (data?.stage) {
+        setProgress({ stage: data.stage, message: data.message ?? "" });
+      }
+    });
+    return off;
+  }, []);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    setUpdateError(null);
+    setCheckResult(null);
+    try {
+      setCheckResult(await UpdateService.Check());
+    } catch (err) {
+      setUpdateError(readableError(err));
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const toggleAutoCheck = async () => {
+    if (!updateInfo || autoCheckBusy) {
+      return;
+    }
+    setAutoCheckBusy(true);
+    setUpdateError(null);
+    const next = !updateInfo.autoCheck;
+    try {
+      await UpdateService.SetAutoCheck(next);
+      setUpdateInfo({ ...updateInfo, autoCheck: next });
+    } catch (err) {
+      setUpdateError(readableError(err));
+    } finally {
+      setAutoCheckBusy(false);
+    }
+  };
+
+  const applyUpdate = async () => {
+    setApplying(true);
+    setUpdateError(null);
+    setProgress({ stage: "download", message: "正在准备更新…" });
+    try {
+      await UpdateService.Apply();
+    } catch (err) {
+      setUpdateError(readableError(err));
+    } finally {
+      setApplying(false);
+      setProgress(null);
+    }
+  };
+
+  const saveToken = async () => {
+    if (!tokenDraft.trim()) {
+      return;
+    }
+    setTokenBusy(true);
+    setUpdateError(null);
+    try {
+      await UpdateService.SetToken(tokenDraft);
+      setTokenDraft("");
+      await loadUpdateInfo();
+    } catch (err) {
+      setUpdateError(readableError(err));
+    } finally {
+      setTokenBusy(false);
+    }
+  };
+
+  const clearToken = async () => {
+    setTokenBusy(true);
+    setUpdateError(null);
+    try {
+      await UpdateService.SetToken("");
+      setTokenDraft("");
+      await loadUpdateInfo();
+    } catch (err) {
+      setUpdateError(readableError(err));
+    } finally {
+      setTokenBusy(false);
+    }
+  };
 
   /** 录制时的按键处理。 */
   const onRecordKeyDown = useCallback((e: KeyboardEvent) => {
@@ -198,6 +326,121 @@ export function Settings({ onClose, onStatusChange }: SettingsProps) {
           )}
         </div>
 
+        <section className="settings-section" id="settings-update">
+          <h3>软件更新</h3>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>当前版本</span>
+              <span className="settings-desc">v{updateInfo?.current ?? "…"}</span>
+            </div>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void checkUpdate()}
+              disabled={checking || applying || (updateInfo?.isDev ?? false)}
+            >
+              <Icon name="refresh" size={14} />
+              {checking ? "检查中…" : "检查更新"}
+            </button>
+          </div>
+
+          {updateInfo?.isDev && (
+            <div className="settings-hint">
+              {updateInfo.devReason || "开发版不支持自更新，请打包成 .app 后再试。"}
+            </div>
+          )}
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>启动时自动检查更新</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={updateInfo?.autoCheck ?? false}
+              className={`switch${updateInfo?.autoCheck ? " is-on" : ""}`}
+              disabled={!updateInfo || autoCheckBusy}
+              onClick={() => void toggleAutoCheck()}
+            >
+              <span className="switch-knob" />
+            </button>
+          </div>
+
+          {checkResult && (
+            <div className="update-result">
+              {checkResult.hasUpdate ? (
+                <>
+                  <div className="update-result-head">
+                    <span className="update-new">发现新版本 v{checkResult.latest}</span>
+                    <span className="settings-desc">
+                      {formatDateTime(checkResult.publishedAt)} 发布
+                    </span>
+                  </div>
+                  {checkResult.notes && (
+                    <pre className="update-notes">{checkResult.notes}</pre>
+                  )}
+                  <div className="settings-actions">
+                    <button
+                      type="button"
+                      className="is-primary"
+                      disabled={applying}
+                      onClick={() => void applyUpdate()}
+                    >
+                      <Icon name="download" size={14} />
+                      {applying ? "更新中…" : "更新并重启"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="settings-hint">
+                  已是最新版本（v{checkResult.latest}）
+                </div>
+              )}
+            </div>
+          )}
+
+          {progress && (
+            <div className="settings-hint">更新进度：{progress.message}</div>
+          )}
+          {updateError && <div className="settings-error">{updateError}</div>}
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>GitHub Token</span>
+              <span className="settings-desc">
+                当前来源：{updateInfo ? tokenSourceText(updateInfo) : "…"}。
+                仅在未登录 gh 时需要；保存在本机配置目录，权限 600。
+              </span>
+            </div>
+          </div>
+          <div className="token-row">
+            <input
+              type="password"
+              className="field"
+              placeholder="填写有 axu4/kuibu 读权限的 token"
+              value={tokenDraft}
+              onChange={(e) => setTokenDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void saveToken()}
+              disabled={tokenBusy || !tokenDraft.trim()}
+            >
+              保存
+            </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void clearToken()}
+              disabled={tokenBusy || !updateInfo?.savedToken}
+            >
+              清除
+            </button>
+          </div>
+        </section>
+
         <div className="settings-footer">
           <span>快捷键保存在 config.json（可用 KUIBU_CONFIG_DIR 覆盖目录）</span>
           <button type="button" className="settings-close" onClick={onClose}>
@@ -213,4 +456,26 @@ export function Settings({ onClose, onStatusChange }: SettingsProps) {
 function readableError(err: unknown): string {
   const text = err instanceof Error ? err.message : String(err);
   return text.replace(/^Error:\s*/, "");
+}
+
+/** 把 RFC3339 时间显示成「2025年1月2日 03:04」。 */
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const hm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hm}`;
+}
+
+/** 把 Go 侧的 token 来源映射成更自然的展示文案。 */
+function tokenSourceText(info: UpdateInfo): string {
+  switch (info.tokenSource) {
+    case "gh 登录":
+      return "已通过 gh 登录获取";
+    case "设置中填写":
+      return "已在设置中填写";
+    default:
+      return info.tokenSource || "未找到";
+  }
 }
