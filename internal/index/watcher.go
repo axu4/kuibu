@@ -17,15 +17,22 @@ import (
 const debounceDelay = 200 * time.Millisecond
 
 // Event 是一次防抖后的文件变化汇总，供 App 刷新界面。
+//
+// Changes/IDs 只包含笔记变化；TodoChanges/TodoIDs 只包含待办变化，
+// 两者互不混入，App 可据此分别刷新笔记树与待办列表。
 type Event struct {
 	// Changes 是每个受影响笔记的变化明细。
 	Changes []Change `json:"changes"`
 	// IDs 是发生变化（新增、更新或删除）的笔记 ID 列表，已去重。
 	IDs []string `json:"ids"`
+	// TodoChanges 是每个受影响待办的变化明细。
+	TodoChanges []Change `json:"todoChanges,omitempty"`
+	// TodoIDs 是发生变化的待办 ID 列表，已去重。
+	TodoIDs []string `json:"todoIds,omitempty"`
 }
 
-// Watch 监听工作台的 notes/ 目录，把外部文件变化增量同步进索引，并在每次
-// 同步后调用 onChange 通知调用方。
+// Watch 监听工作台的 notes/ 与 todos/ 目录，把外部文件变化增量同步进索引，
+// 并在每次同步后调用 onChange 通知调用方。
 //
 // 只关心非隐藏的 .md 文件，以 "." 开头的临时文件会被忽略（store 的原子写
 // 会先写临时文件再 rename，macOS 上表现为 Create/Rename 事件）。事件在
@@ -48,8 +55,16 @@ func watch(ctx context.Context, ws *store.Workspace, idx *Index, onChange func(E
 	defer watcher.Close()
 
 	notesDir := ws.NotesDir()
+	todosDir := ws.TodosDir()
+	// 老工作台可能还没有 todos/ 目录，先建出来以便监听。
+	if err := os.MkdirAll(todosDir, 0o755); err != nil {
+		return fmt.Errorf("创建待办目录失败: %w", err)
+	}
 	if err := watcher.Add(notesDir); err != nil {
 		return fmt.Errorf("监听笔记目录失败: %w", err)
+	}
+	if err := watcher.Add(todosDir); err != nil {
+		return fmt.Errorf("监听待办目录失败: %w", err)
 	}
 	if ready != nil {
 		close(ready)
@@ -85,7 +100,8 @@ func watch(ctx context.Context, ws *store.Workspace, idx *Index, onChange func(E
 		}
 
 		event := Event{}
-		seen := map[string]bool{}
+		seenNotes := map[string]bool{}
+		seenTodos := map[string]bool{}
 		for _, path := range paths {
 			change, err := syncPath(idx, path)
 			if err != nil {
@@ -96,13 +112,21 @@ func watch(ctx context.Context, ws *store.Workspace, idx *Index, onChange func(E
 			if change.Kind == ChangeUnchanged || change.ID == "" {
 				continue
 			}
-			event.Changes = append(event.Changes, change)
-			if !seen[change.ID] {
-				seen[change.ID] = true
-				event.IDs = append(event.IDs, change.ID)
+			if isTodoPath(ws, path) {
+				event.TodoChanges = append(event.TodoChanges, change)
+				if !seenTodos[change.ID] {
+					seenTodos[change.ID] = true
+					event.TodoIDs = append(event.TodoIDs, change.ID)
+				}
+			} else {
+				event.Changes = append(event.Changes, change)
+				if !seenNotes[change.ID] {
+					seenNotes[change.ID] = true
+					event.IDs = append(event.IDs, change.ID)
+				}
 			}
 		}
-		if len(event.Changes) > 0 && onChange != nil {
+		if (len(event.Changes) > 0 || len(event.TodoChanges) > 0) && onChange != nil {
 			onChange(event)
 		}
 	}
@@ -116,7 +140,7 @@ func watch(ctx context.Context, ws *store.Workspace, idx *Index, onChange func(E
 			if !ok {
 				return nil
 			}
-			if !isWatchedEvent(event, notesDir) {
+			if !isWatchedEvent(event, notesDir, todosDir) {
 				continue
 			}
 			pending[filepath.Clean(event.Name)] = true
@@ -163,9 +187,9 @@ func syncPath(idx *Index, path string) (Change, error) {
 	return idx.UpsertFile(path)
 }
 
-// isWatchedEvent 判断事件是否是需要处理的笔记文件变化。
-func isWatchedEvent(event fsnotify.Event, notesDir string) bool {
-	// 只处理直接位于 notes/ 下的文件，忽略 Chmod 之类的纯元数据事件。
+// isWatchedEvent 判断事件是否是需要处理的笔记或待办文件变化。
+func isWatchedEvent(event fsnotify.Event, notesDir, todosDir string) bool {
+	// 只处理直接位于 notes/ 或 todos/ 下的文件，忽略 Chmod 之类的纯元数据事件。
 	if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 {
 		return false
 	}
@@ -173,10 +197,10 @@ func isWatchedEvent(event fsnotify.Event, notesDir string) bool {
 	if !isNoteFileName(name) {
 		return false
 	}
-	// 兼容监听目录内的子路径（正常情况下 notes/ 是平铺的）。
+	// 兼容监听目录内的子路径（正常情况下 notes/ 与 todos/ 都是平铺的）。
 	dir := filepath.Dir(filepath.Clean(event.Name))
-	if !strings.EqualFold(dir, filepath.Clean(notesDir)) {
-		return false
+	if strings.EqualFold(dir, filepath.Clean(notesDir)) {
+		return true
 	}
-	return true
+	return strings.EqualFold(dir, filepath.Clean(todosDir))
 }

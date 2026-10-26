@@ -14,6 +14,8 @@ import (
 const (
 	// notesDirName 是笔记目录名，笔记平铺存放于其中。
 	notesDirName = "notes"
+	// todosDirName 是待办目录名，待办平铺存放于其中。
+	todosDirName = "todos"
 	// assetsDirName 是资源目录名，图片等附件存放于此。
 	assetsDirName = "assets"
 	// metaDirName 是元数据目录名，存放配置与索引。
@@ -39,7 +41,7 @@ type Workspace struct {
 //
 // dir 可以不存在，也可以已存在但必须为空。若 dir 已经是工作台则返回
 // ErrAlreadyInit；若非空且不是工作台则返回 ErrInvalid。初始化会创建
-// notes/、assets/ 与 .kuibu/ 目录，并写入 .kuibu/config.json。
+// notes/、todos/、assets/ 与 .kuibu/ 目录，并写入 .kuibu/config.json。
 func Init(dir string) (*Workspace, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -74,7 +76,7 @@ func Init(dir string) (*Workspace, error) {
 		return nil, fmt.Errorf("检查工作台目录失败: %w", statErr)
 	}
 
-	for _, name := range []string{notesDirName, assetsDirName, metaDirName} {
+	for _, name := range []string{notesDirName, todosDirName, assetsDirName, metaDirName} {
 		if err := os.MkdirAll(filepath.Join(abs, name), 0o755); err != nil {
 			return nil, fmt.Errorf("创建工作台子目录 %s 失败: %w", name, err)
 		}
@@ -144,6 +146,11 @@ func (w *Workspace) NotesDir() string {
 	return filepath.Join(w.dir, notesDirName)
 }
 
+// TodosDir 返回待办目录的绝对路径。
+func (w *Workspace) TodosDir() string {
+	return filepath.Join(w.dir, todosDirName)
+}
+
 // AssetsDir 返回资源目录的绝对路径。
 func (w *Workspace) AssetsDir() string {
 	return filepath.Join(w.dir, assetsDirName)
@@ -193,6 +200,28 @@ func (w *Workspace) ListWorkspaceNotes() ([]string, error) {
 			continue
 		}
 		paths = append(paths, filepath.Join(w.NotesDir(), e.Name()))
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// ListWorkspaceTodos 返回待办目录下所有 .md 文件的绝对路径，按文件名排序。
+// 老工作台可能还没有 todos/ 目录，此时视为空列表而不是报错。
+func (w *Workspace) ListWorkspaceTodos() ([]string, error) {
+	entries, err := os.ReadDir(w.TodosDir())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("读取待办目录失败: %w", err)
+	}
+	var paths []string
+	for _, e := range entries {
+		// 跳过隐藏文件与非 .md 文件，规则与笔记一致。
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !strings.HasSuffix(e.Name(), noteExt) {
+			continue
+		}
+		paths = append(paths, filepath.Join(w.TodosDir(), e.Name()))
 	}
 	sort.Strings(paths)
 	return paths, nil
