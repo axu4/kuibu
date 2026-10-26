@@ -167,6 +167,11 @@ jobs:
         working-directory: app
         run: go vet ./...
 
+      # 快捷键校验、ShellService 等纯逻辑的单测；不启动 Wails / GUI。
+      - name: go test
+        working-directory: app
+        run: go test ./...
+
       - name: Verify bundle and create zip
         shell: bash
         run: |

@@ -516,3 +516,250 @@ button {
 .context-menu button.is-danger {
   color: #c0504d;
 }
+
+/* ---------- 侧栏底部设置入口 ---------- */
+
+.sidebar-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- 顶部提示条（快捷键注册失败） ---------- */
+
+.banner.banner-top {
+  flex: 0 0 auto;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-radius: 0;
+}
+
+/* ---------- 设置面板 ---------- */
+
+.settings {
+  width: 460px;
+  max-width: calc(100vw - 40px);
+  padding: 18px 20px 14px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+}
+
+.settings h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-label > span:first-child {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.settings-desc {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.settings-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.shortcut-key {
+  min-width: 92px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sidebar);
+  font-family: var(--font);
+  font-size: 13px;
+  text-align: center;
+  letter-spacing: 0.06em;
+}
+
+.shortcut-key.is-broken {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+}
+
+.shortcut-state {
+  font-size: 11px;
+}
+
+.shortcut-state.is-ok {
+  color: #4a9e63;
+}
+
+.shortcut-state.is-bad {
+  color: #c0504d;
+}
+
+.settings-hint {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sidebar);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.settings-error {
+  margin: 8px 0 0;
+  padding: 7px 10px;
+  border: 1px solid #f0c9c7;
+  border-radius: 6px;
+  background: #fdf1f0;
+  color: #a33a37;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.settings-actions button {
+  padding: 5px 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.settings-actions button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.settings-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.settings-close {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+}
+
+/* ---------- 随手记小窗 ---------- */
+
+body.quicknote-body {
+  background: transparent;
+}
+
+.quicknote {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.quicknote-input {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 8px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.quicknote-input::placeholder {
+  color: #b0b0aa;
+}
+
+.quicknote-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.quicknote-target {
+  flex: 0 0 auto;
+}
+
+.quicknote-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.quicknote-error {
+  flex: 1;
+  min-width: 0;
+  color: #c0504d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quicknote-save {
+  flex: 0 0 auto;
+  padding: 3px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+}
+
+.quicknote-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

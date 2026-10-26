@@ -52,6 +52,57 @@ export interface NoteData {
 }
 
 /**
+ * QuickNoteSaved 是 quicknote:saved 事件的数据。
+ */
+export interface QuickNoteSaved {
+    /**
+     * ID 是新建随手记笔记的 ID。
+     */
+    "id": string;
+
+    /**
+     * InboxID 是随手记收件箱的 ID。
+     */
+    "inboxId": string;
+
+    /**
+     * Title 是新笔记标题。
+     */
+    "title": string;
+}
+
+/**
+ * ShortcutStatus 是随手记全局快捷键的状态，暴露给前端与托盘。
+ */
+export interface ShortcutStatus {
+    /**
+     * Accelerator 是 Wails 语法的快捷键，例如 "Ctrl+Alt+N"。
+     */
+    "accelerator": string;
+
+    /**
+     * Display 是 macOS 符号形式，例如 "⌃⌥N"。
+     */
+    "display": string;
+
+    /**
+     * Registered 表示是否已在系统层注册成功。
+     */
+    "registered": boolean;
+
+    /**
+     * Error 是注册失败的中文原因，成功时为空。
+     */
+    "error": string;
+
+    /**
+     * Notice 是「已临时回退但仍需用户处理」的中文提示，例如启动时配置里的
+     * 快捷键不合法、已临时改用默认值。Registered 为 true 时也可能非空。
+     */
+    "notice": string;
+}
+
+/**
  * TreeItem 是笔记树的节点，字段带 json tag 以便 wails3 generate bindings 生成 TS 类型。
  */
 export interface TreeItem {

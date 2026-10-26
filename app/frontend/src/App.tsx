@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Events } from "@wailsio/runtime";
-import { WorkspaceService } from "../bindings/github.com/axu4/kuibu/app";
+import {
+  ShellService,
+  WorkspaceService,
+} from "../bindings/github.com/axu4/kuibu/app";
 import type {
   NoteData,
+  QuickNoteSaved,
+  ShortcutStatus,
   TreeItem,
 } from "../bindings/github.com/axu4/kuibu/app";
 import { Tree } from "./components/Tree";
 import { Editor } from "./components/Editor";
+import { Settings } from "./components/Settings";
 
 /** 自动保存防抖时间（毫秒）。 */
 const SAVE_DEBOUNCE_MS = 600;
@@ -98,6 +104,13 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>({ kind: "none" });
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
+
+  // 稳定的回调：Settings 里用它触发状态刷新，引用变化会导致重复拉取。
+  const applyShortcutStatus = useCallback((status: ShortcutStatus) => {
+    setShortcut(status);
+  }, []);
 
   // 用 ref 保存最新的正文与保存状态，供事件回调与定时器读取。
   const bodyRef = useRef(body);
@@ -262,6 +275,49 @@ export default function App() {
     });
     return off;
   }, [refreshTree]);
+
+  // 随手记保存成功：刷新树并展开收件箱。
+  useEffect(() => {
+    const off = Events.On("quicknote:saved", (event) => {
+      const data = event.data as QuickNoteSaved | null;
+      void (async () => {
+        // 先保存当前笔记，避免刷新树/展开时把本地改动丢掉。
+        await saveNow();
+        await refreshTree();
+        if (data?.inboxId) {
+          setExpanded((prev) => new Set(prev).add(data.inboxId));
+        }
+      })();
+    });
+    return off;
+  }, [refreshTree, saveNow]);
+
+  // 托盘「设置…」让主窗口打开设置面板。
+  useEffect(() => {
+    const off = Events.On("shell:open-settings", () => {
+      setSettingsOpen(true);
+    });
+    return off;
+  }, []);
+
+  // 快捷键状态（启动时读取一次，之后随改动事件刷新）。
+  useEffect(() => {
+    const load = () => {
+      void ShellService.GetShortcutStatus()
+        .then((status) => setShortcut(status))
+        .catch((err) => console.error("读取快捷键状态失败", err));
+    };
+    load();
+    const off = Events.On("shell:shortcut-changed", (event) => {
+      const data = event.data as ShortcutStatus | null;
+      if (data?.accelerator) {
+        setShortcut(data);
+      } else {
+        load();
+      }
+    });
+    return off;
+  }, []);
 
   // 展开状态持久化。
   useEffect(() => {
@@ -482,10 +538,38 @@ export default function App() {
           onRenameSubmit={(id, title) => void renameNote(id, title)}
           onRenameCancel={() => setRenamingId(null)}
         />
+        <div className="sidebar-footer">
+          <button
+            type="button"
+            className="icon-btn"
+            title="设置"
+            onClick={() => setSettingsOpen(true)}
+          >
+            ⚙
+          </button>
+        </div>
         <div className="resize-handle" onMouseDown={startResize} />
       </aside>
 
       <main className="content">
+        {shortcut && !shortcut.registered && shortcut.error && (
+          <div className="banner banner-top">
+            {/* Go 侧的错误已经带上「快捷键 ⌃⌥N 注册失败：原因」，这里只补建议。 */}
+            <span>{shortcut.error}，请在设置里换一个。</span>
+            <button type="button" onClick={() => setSettingsOpen(true)}>
+              打开设置
+            </button>
+          </div>
+        )}
+        {/* 已临时回退到默认值但仍需用户处理（例如配置里的快捷键不合法）。 */}
+        {shortcut && shortcut.registered && shortcut.notice && (
+          <div className="banner banner-top">
+            <span>{shortcut.notice}</span>
+            <button type="button" onClick={() => setSettingsOpen(true)}>
+              打开设置
+            </button>
+          </div>
+        )}
         {!workspace ? (
           <div className="welcome">
             <h1>跬步</h1>
@@ -644,6 +728,13 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {settingsOpen && (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          onStatusChange={applyShortcutStatus}
+        />
       )}
 
       {modal.kind === "create" && (
