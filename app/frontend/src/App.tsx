@@ -13,6 +13,9 @@ import type {
 import { Tree } from "./components/Tree";
 import { Editor } from "./components/Editor";
 import { Settings } from "./components/Settings";
+import { TodoView } from "./components/TodoView";
+import { loadMainView, saveMainView } from "./lib/todo";
+import type { MainView } from "./lib/todo";
 
 /** 自动保存防抖时间（毫秒）。 */
 const SAVE_DEBOUNCE_MS = 600;
@@ -106,6 +109,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
+  const [view, setView] = useState<MainView>(loadMainView);
 
   // 稳定的回调：Settings 里用它触发状态刷新，引用变化会导致重复拉取。
   const applyShortcutStatus = useCallback((status: ShortcutStatus) => {
@@ -319,6 +323,11 @@ export default function App() {
     return off;
   }, []);
 
+  // 主视图（笔记/待办）持久化。
+  useEffect(() => {
+    saveMainView(view);
+  }, [view]);
+
   // 展开状态持久化。
   useEffect(() => {
     localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]));
@@ -495,22 +504,119 @@ export default function App() {
   const statusText =
     status === "saved" ? "已保存" : status === "saving" ? "保存中…" : "未保存";
 
+  /** 从待办详情的来源笔记跳到笔记视图并打开该笔记。 */
+  const openNoteFromTodo = useCallback(
+    (id: string) => {
+      setView("notes");
+      void openNote(id);
+    },
+    [openNote],
+  );
+
+  /** 切换主视图；切到待办前先保存当前笔记。 */
+  const switchView = useCallback(
+    (next: MainView) => {
+      if (next === view) {
+        return;
+      }
+      void saveNow();
+      setView(next);
+    },
+    [saveNow, view],
+  );
+
+  // 快捷键注册失败/回退的提示条，两个视图共用。
+  const shortcutBanners = (
+    <>
+      {shortcut && !shortcut.registered && shortcut.error && (
+        <div className="banner banner-top">
+          {/* Go 侧的错误已经带上「快捷键 ⌃⌥N 注册失败：原因」，这里只补建议。 */}
+          <span>{shortcut.error}，请在设置里换一个。</span>
+          <button type="button" onClick={() => setSettingsOpen(true)}>
+            打开设置
+          </button>
+        </div>
+      )}
+      {/* 已临时回退到默认值但仍需用户处理（例如配置里的快捷键不合法）。 */}
+      {shortcut && shortcut.registered && shortcut.notice && (
+        <div className="banner banner-top">
+          <span>{shortcut.notice}</span>
+          <button type="button" onClick={() => setSettingsOpen(true)}>
+            打开设置
+          </button>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="app">
+      {/* 最左侧窄图标栏：笔记 / 待办两个视图，加工作台与设置入口。 */}
+      <nav className="apprail">
+        <button
+          type="button"
+          className={`apprail-btn${view === "notes" ? " is-active" : ""}`}
+          title="笔记"
+          onClick={() => switchView("notes")}
+        >
+          ✎
+        </button>
+        <button
+          type="button"
+          className={`apprail-btn${view === "todo" ? " is-active" : ""}`}
+          title="待办"
+          onClick={() => switchView("todo")}
+        >
+          ✓
+        </button>
+        <div className="apprail-spacer" />
+        <button
+          type="button"
+          className="apprail-btn"
+          title="选择或新建工作台文件夹"
+          onClick={() => void chooseWorkspace()}
+        >
+          ⌂
+        </button>
+        <button
+          type="button"
+          className="apprail-btn"
+          title="设置"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ⚙
+        </button>
+      </nav>
+
+      {view === "todo" ? (
+        workspace ? (
+          <div className="todo-shell">
+            {shortcutBanners}
+            <TodoView onOpenNote={openNoteFromTodo} />
+          </div>
+        ) : (
+          <main className="content">
+            <div className="welcome">
+              <h1>跬步</h1>
+              <p>待办和数据都保存在工作台文件夹里，先打开一个工作台。</p>
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => void chooseWorkspace()}
+              >
+                选择或新建工作台文件夹
+              </button>
+            </div>
+          </main>
+        )
+      ) : (
+      <>
       <aside className="sidebar" style={{ width: sidebarWidth }}>
         <div className="sidebar-header">
           <span className="sidebar-title" title={workspace || "未打开工作台"}>
             {workspace ? workspace.split("/").filter(Boolean).pop() : "跬步"}
           </span>
           <div className="sidebar-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              title="选择或新建工作台文件夹"
-              onClick={() => void chooseWorkspace()}
-            >
-              ⌂
-            </button>
             <button
               type="button"
               className="icon-btn"
@@ -538,38 +644,11 @@ export default function App() {
           onRenameSubmit={(id, title) => void renameNote(id, title)}
           onRenameCancel={() => setRenamingId(null)}
         />
-        <div className="sidebar-footer">
-          <button
-            type="button"
-            className="icon-btn"
-            title="设置"
-            onClick={() => setSettingsOpen(true)}
-          >
-            ⚙
-          </button>
-        </div>
         <div className="resize-handle" onMouseDown={startResize} />
       </aside>
 
       <main className="content">
-        {shortcut && !shortcut.registered && shortcut.error && (
-          <div className="banner banner-top">
-            {/* Go 侧的错误已经带上「快捷键 ⌃⌥N 注册失败：原因」，这里只补建议。 */}
-            <span>{shortcut.error}，请在设置里换一个。</span>
-            <button type="button" onClick={() => setSettingsOpen(true)}>
-              打开设置
-            </button>
-          </div>
-        )}
-        {/* 已临时回退到默认值但仍需用户处理（例如配置里的快捷键不合法）。 */}
-        {shortcut && shortcut.registered && shortcut.notice && (
-          <div className="banner banner-top">
-            <span>{shortcut.notice}</span>
-            <button type="button" onClick={() => setSettingsOpen(true)}>
-              打开设置
-            </button>
-          </div>
-        )}
+        {shortcutBanners}
         {!workspace ? (
           <div className="welcome">
             <h1>跬步</h1>
@@ -715,6 +794,8 @@ export default function App() {
           </>
         )}
       </main>
+      </>
+      )}
 
       {error && (
         <div className="modal-mask" onClick={() => setError(null)}>

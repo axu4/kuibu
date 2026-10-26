@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 // assets 是构建后的前端资源（frontend/dist），由 go:embed 打进二进制。
@@ -16,6 +17,8 @@ var assets embed.FS
 func main() {
 	workspace := newWorkspaceService()
 	shell := newShellService(workspace)
+	todos := newTodoService(workspace)
+	shell.todo = todos
 	ui := newShellUI(nil)
 
 	// quitting 在「真正退出」的路径上置位：WindowClosing 钩子看到它就放行，
@@ -33,6 +36,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(workspace),
 			application.NewService(shell),
+			application.NewService(todos),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
@@ -55,6 +59,7 @@ func main() {
 
 	workspace.app = app
 	shell.app = app
+	todos.app = app
 	shell.shortcuts = app.GlobalShortcut
 	shell.ui = ui
 	ui.app = app
@@ -65,8 +70,27 @@ func main() {
 		Width:  1200,
 		Height: 780,
 		URL:    "/",
+		// 允许从 Finder 拖文件到主窗口；只有带 data-file-drop-target 属性的
+		// 元素（待办详情面板）会成为目标，事件在下面转发给 TodoService。
+		EnableFileDrop: true,
 	})
 	ui.mainWindow = mainWindow
+
+	// 文件拖放：Wails 在 macOS 上把 DropTargetDetails 里的元素属性原样带回来，
+	// 前端在详情面板上写 data-todo-id，这里据此把文件挂到对应待办。
+	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		files := e.Context().DroppedFiles()
+		todoID := ""
+		if details := e.Context().DropTargetDetails(); details != nil {
+			todoID = details.Attributes["data-todo-id"]
+		}
+		if todoID == "" || len(files) == 0 {
+			return
+		}
+		if err := todos.HandleDroppedFiles(todoID, files); err != nil {
+			log.Printf("kuibu: 添加拖入的附件失败: %v", err)
+		}
+	})
 
 	hideMainWindowOnClose(mainWindow, quitting.Load)
 	ui.setupDockReopen()

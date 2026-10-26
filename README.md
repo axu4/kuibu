@@ -37,14 +37,29 @@
 - **App**：Wails v3 外壳，左侧大纲树 + 右侧 Milkdown（Crepe）编辑器，外部修改自动刷新，`wails3 package` 可打出 macOS `.app`。
 - **CI**：Linux/macOS 上 gofmt + vet + build + race 测试，macOS 上校验绑定并打包上传 artifact。
 
-## 里程碑 2：A 线桌面外壳已完成
+## 里程碑 2 已完成：A 线桌面外壳、B 线待办核心与 CLI、C 线待办界面与随手记接入
+
+**A 线 · 桌面外壳**
 
 - **菜单栏托盘**：自绘 macOS 模板图标（`app/build/tray/tray-template.png`，44×44），菜单含「新建随手记」（带当前快捷键）、「打开跬步」、「设置…」、「退出跬步」。
 - **关窗不退出**：`ApplicationShouldTerminateAfterLastWindowClosed=false`，关主窗口只隐藏、应用常驻菜单栏；Dock 图标保留，点 Dock / 托盘「打开跬步」重新显示。⌘Q 与托盘「退出跬步」才真正退出。
 - **全局快捷键**：默认 ⌃⌥N（可自定义），应用启动完成后注册以拿到真实错误；注册失败在设置面板与主窗口顶部提示，托盘菜单项始终可用。
 - **随手记小窗**：560×300 居中浮窗、可跨 Space 与全屏应用、按需创建关闭即销毁；⌘Enter 保存到工作台「随手记」收件箱，Esc 关闭并把草稿存 localStorage。
 - **设置面板**：录制式改快捷键、恢复默认、就地显示注册状态与错误。
-- 待办核心库与 CLI（B 线）、随手记接入待办（C 线）仍进行中。
+
+**B 线 · 待办核心与 CLI**
+
+- 待办平铺存放在工作台 `todos/`，Markdown + YAML front matter（标题、状态、截止、标签、父任务、order、链接、附件、来源笔记），未知字段无损保留。
+- 快速录入 `core.ParseQuickAdd`：日期、时间（含中文数字与时段）、`#标签`，规则与示例见 [docs/todo.md](docs/todo.md)。
+- `kuibu todo add/list/show/done/reopen/start/cancel/edit/sub/link/unlink/attach/detach/mv/rm` 全套命令，支持 `--json` 与树形显示。
+- 索引侧 `todos` 表与 FTS 检索，监听 `todos/` 目录并用 `TodoIDs` 与笔记变化分开上报。
+
+**C 线 · 待办界面与随手记接入**
+
+- **待办视图**：最左图标栏切换「笔记 / 待办」并记住上次视图。左侧分组「今天（含逾期）/ 本周 / 全部未完成 / 已完成」+ 标签筛选，中间快速录入实时预览与搜索，右侧详情面板（标题、状态、截止、标签、Milkdown 正文、子任务、链接、附件、来源笔记）。
+- **完成父任务确认**：有未完成子任务时弹应用内模态，「一起完成 / 只完成父任务 / 取消」。
+- **随手记接入待办**：小窗 Tab 切换笔记/待办模式（输入法组合中不切换），待办模式第一行快速录入、其余行为正文，⌘Enter 保存为待办。
+- **外部变化**：待办变化发 `todo:changed` 事件刷新列表与详情，正在编辑的标题/正文不被覆盖。
 
 ## 目录结构
 
@@ -109,7 +124,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | 文档 | 内容 |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 整体架构、数据流、工作台目录、front matter、树存储、索引、资源 |
-| [docs/todo.md](docs/todo.md) | 待办 CLI 用法与示例、快速录入规则、KUIBU_NOW、App 接口说明 |
+| [docs/todo.md](docs/todo.md) | 待办 CLI 用法与示例、快速录入规则、KUIBU_NOW、App 接口说明、App 待办界面 |
 | [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
 | [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
 | [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
@@ -208,6 +223,6 @@ kuibu watch --json
 ## 里程碑
 
 1. **骨架**（已完成）：核心库、CLI、存储、索引、Wails 外壳（树 + 内容区）。
-2. **随手记与待办**（进行中）：A 线桌面外壳已完成（托盘、关窗不退出、全局快捷键 ⌃⌥N、随手记小窗、设置面板）；待办 B/C 线进行中。
+2. **随手记与待办**（已完成）：A 线桌面外壳（托盘、关窗不退出、全局快捷键 ⌃⌥N、随手记小窗、设置面板）、B 线待办核心库与 CLI、C 线待办界面与随手记接入待办。
 3. **周报收集**：粘贴归档、提交状态。
 4. **逐级汇总**：组报 / 产品项目报、月报、导出。
