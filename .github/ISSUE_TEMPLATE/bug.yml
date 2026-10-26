@@ -1,0 +1,45 @@
+name: Bug 反馈
+description: 报告一个问题，附上复现步骤与版本信息
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么
+      description: 简单描述遇到的问题，以及当时在做什么。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 怎么复现
+      description: 按顺序写出操作步骤，能稳定复现最好。
+      placeholder: |
+        1. 打开 …
+        2. 点击 …
+        3. 看到 …
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 你原本期望看到什么。
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: 版本/提交
+      description: 版本号或提交 hash。
+      placeholder: 可运行 `kuibu version` 查看
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: 截图或日志
+      description: 可直接把截图粘贴到这里，也可以附上日志或报错信息。
+    validations:
+      required: false

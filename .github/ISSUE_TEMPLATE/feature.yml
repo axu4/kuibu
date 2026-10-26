@@ -1,0 +1,37 @@
+name: 需求
+description: 提出一个新功能或改进想法
+title: "[需求] "
+labels: [需求]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: 想要什么
+      description: 想增加或改进什么，尽量具体。
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: 为什么/使用场景
+      description: 这个需求解决什么问题，你会在什么场景下用到。
+    validations:
+      required: false
+  - type: dropdown
+    id: module
+    attributes:
+      label: 所属模块
+      description: 这个需求主要涉及哪一块。
+      multiple: false
+      options:
+        - 笔记
+        - 待办
+        - 随手记
+        - 周报-框架组长
+        - 周报-SE
+        - 月报
+        - 日历
+        - CLI
+        - 其他
+    validations:
+      required: false
