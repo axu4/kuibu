@@ -1,0 +1,89 @@
+# 跬步（kuibu）CI
+#
+# 说明：核心库（internal/...）与 CLI（cmd/kuibu）必须能在 Linux 上构建和测试，
+# Mac 相关能力用 build tag 隔离，因此这里同时跑 Linux 与 macOS 两个 job。
+#
+# 关于 app/：后续 app/ 目录会是独立的 Go module（app/go.mod），根模块的
+# `./...` 不会包含它，所以本工作流无需为 app/ 做特殊排除处理；App 的构建与
+# wails3 打包留到里程碑 1 完成后在 go-macos job 里追加（见文件末尾注释）。
+#
+# 注意：这里不设置 CGO_ENABLED=0，因为 `go test -race` 需要 cgo。
+# 构建不依赖 cgo 由依赖约束保证（SQLite 使用纯 Go 的 modernc.org/sqlite）。
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# 同一 ref 只保留最新一次运行，新运行会取消旧的进行中运行。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go-linux:
+    name: Go (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt check
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未通过 gofmt，请运行 gofmt -w . 后重新提交："
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "gofmt 检查通过"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test -race ./...
+
+  go-macos:
+    name: Go (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test
+        run: go test -race ./...
+
+      # TODO(里程碑 1)：App（app/ 独立 module）完成后，在此追加：
+      #   1) 前端构建（npm ci && npm run build）
+      #   2) wails3 build 打包 .app
+      #   3) actions/upload-artifact@v4 上传 .app 产物（用于真机回归托盘、
+      #      全局快捷键、关窗不退出）
