@@ -80,7 +80,9 @@ var standaloneWeekdayPrefixes = []string{"星期", "礼拜", "周"}
 //
 // now 会先转换到 store.TodoLocation()（Asia/Shanghai）。规则：
 //   - 只识别第一处日期表达（最左匹配，同位置取最长）；后续日期原样留在标题。
+//     日期支持相对日、周X、M-D、M月D日、月底/下月底 等。
 //   - 时间可选，必须紧跟日期（中间允许空格）；没有日期时取第一处时间表达，日期为今天。
+//     小时与分钟都支持阿拉伯数字与中文数字（三点、十点半、九点十五、下午3点半 等）。
 //   - 标签 #xxx / ＃xxx，必须位于开头或空白之后，内容不能为空且不能是纯数字。
 //
 // 解析后若标题为空，则回退为原始输入去首尾空白。
@@ -216,6 +218,17 @@ func matchDateAt(rs []rune, i int, now time.Time) (int, string, bool) {
 		}
 	}
 
+	// 月底/下月底/下个月底：本月/下月的最后一天。
+	if hasRunePrefix(rs[i:], "下个月底") {
+		set(i+4, lastDayOfMonth(now, 1))
+	}
+	if hasRunePrefix(rs[i:], "下月底") {
+		set(i+3, lastDayOfMonth(now, 1))
+	}
+	if hasRunePrefix(rs[i:], "月底") {
+		set(i+2, lastDayOfMonth(now, 0))
+	}
+
 	// 周X/星期X/礼拜X：前一个字是「每」时不识别。
 	if i == 0 || rs[i-1] != '每' {
 		for _, p := range weekdayPrefixes {
@@ -303,7 +316,7 @@ func findTime(rs []rune, dateEnd int, hasDate bool) (int, int, string, bool) {
 func matchTimeAt(rs []rune, i int) (int, int, int, bool) {
 	j := i
 	prefix := ""
-	for _, p := range []string{"上午", "早上", "中午", "下午", "晚上"} {
+	for _, p := range []string{"上午", "早上", "中午", "下午", "晚上", "傍晚", "凌晨"} {
 		if hasRunePrefix(rs[j:], p) {
 			prefix = p
 			j += len([]rune(p))
@@ -314,12 +327,17 @@ func matchTimeAt(rs []rune, i int) (int, int, int, bool) {
 		j++
 	}
 
+	// 保守边界：数字串中间（如「二十五点」里的「十五点」）与「第3点」「第二点」不当作时间。
+	if j > 0 && (isNumeralRune(rs[j-1]) || rs[j-1] == '第') {
+		return 0, 0, 0, false
+	}
+
 	h, m, end, ok := matchTimeToken(rs, j)
 	if !ok {
 		return 0, 0, 0, false
 	}
 	switch prefix {
-	case "下午", "晚上":
+	case "下午", "晚上", "傍晚":
 		if h < 12 {
 			h += 12
 		}
@@ -336,24 +354,155 @@ func matchTimeAt(rs []rune, i int) (int, int, int, bool) {
 
 // matchTimeToken 匹配不含前缀的时间片段。
 func matchTimeToken(rs []rune, i int) (hour, minute, end int, ok bool) {
-	// HH:MM 或 HH：MM。
+	// HH:MM 或 HH：MM（冒号形式仅支持阿拉伯数字）。
 	if h, j, ok := digitsAt(rs, i, 2); ok && j < len(rs) && (rs[j] == ':' || rs[j] == '：') {
 		if m, k, ok2 := digitsAt(rs, j+1, 2); ok2 && k-j-1 == 2 {
 			return h, m, k, true
 		}
 	}
 
-	// N点M分、N点半、N点。
-	if h, j, ok := digitsAt(rs, i, 2); ok && j < len(rs) && rs[j] == '点' {
-		if m, k, ok2 := digitsAt(rs, j+1, 2); ok2 && k < len(rs) && rs[k] == '分' {
-			return h, m, k + 1, true
-		}
-		if j+1 < len(rs) && rs[j+1] == '半' {
-			return h, 30, j + 2, true
-		}
-		return h, 0, j + 1, true
+	// N点M分、N点半、N点一刻、N点三刻、N点M、N点。
+	h, j, ok := hourNumberAt(rs, i)
+	if !ok || j >= len(rs) || rs[j] != '点' {
+		return 0, 0, 0, false
 	}
-	return 0, 0, 0, false
+	// 「一点点」等：点后紧跟点不当作时间。
+	if j+1 < len(rs) && rs[j+1] == '点' {
+		return 0, 0, 0, false
+	}
+	m, k, ok2, invalid := minuteAfterDian(rs, j+1)
+	if invalid {
+		return 0, 0, 0, false
+	}
+	if ok2 {
+		return h, m, k, true
+	}
+	return h, 0, j + 1, true
+}
+
+// minuteAfterDian 解析「点」之后的部分，返回 (minute, end, ok, invalid)。
+// invalid 表示出现了形如「二刻」这种不支持但明显属于时间的写法，整体不识别。
+func minuteAfterDian(rs []rune, i int) (minute, end int, ok, invalid bool) {
+	if i >= len(rs) {
+		return 0, i, false, false
+	}
+	if rs[i] == '半' {
+		return 30, i + 1, true, false
+	}
+	v, j, okNum := minuteNumberAt(rs, i)
+	if !okNum {
+		return 0, i, false, false
+	}
+	// 数字串后续仍是数字（如「九点123分」）时不认为时间。
+	if j < len(rs) && isNumeralRune(rs[j]) {
+		return 0, i, false, true
+	}
+	if j < len(rs) && rs[j] == '刻' {
+		switch v {
+		case 1:
+			return 15, j + 1, true, false
+		case 3:
+			return 45, j + 1, true, false
+		default:
+			return 0, i, false, true
+		}
+	}
+	if j < len(rs) && rs[j] == '分' {
+		return v, j + 1, true, false
+	}
+	return v, j, true, false
+}
+
+// hourNumberAt 读取小时数字，支持阿拉伯数字与中文数字。
+func hourNumberAt(rs []rune, i int) (int, int, bool) {
+	if v, j, ok := digitsAt(rs, i, 2); ok {
+		return v, j, true
+	}
+	return chineseNumberAt(rs, i)
+}
+
+// minuteNumberAt 读取分钟数字，支持阿拉伯数字与中文数字。
+func minuteNumberAt(rs []rune, i int) (int, int, bool) {
+	return hourNumberAt(rs, i)
+}
+
+// cnDigitValue 把中文数字字符映射为 0-9 的值。
+func cnDigitValue(c rune) (int, bool) {
+	switch c {
+	case '零', '〇':
+		return 0, true
+	case '一':
+		return 1, true
+	case '二', '两':
+		return 2, true
+	case '三':
+		return 3, true
+	case '四':
+		return 4, true
+	case '五':
+		return 5, true
+	case '六':
+		return 6, true
+	case '七':
+		return 7, true
+	case '八':
+		return 8, true
+	case '九':
+		return 9, true
+	}
+	return 0, false
+}
+
+// chineseNumberAt 解析中文数字，支持 零/〇、一..九、两、十、十X、X十、X十Y。
+// 采用最长匹配：如「二十五」整体解析为 25，不会退化成「二十」+「五」。
+func chineseNumberAt(rs []rune, i int) (int, int, bool) {
+	if i >= len(rs) {
+		return 0, i, false
+	}
+	c := rs[i]
+	if c == '零' || c == '〇' {
+		// 零X 表示 0X，用于分钟（如「九点零五」）。
+		if i+1 < len(rs) {
+			if v, ok := cnDigitValue(rs[i+1]); ok && v > 0 {
+				return v, i + 2, true
+			}
+		}
+		return 0, i + 1, true
+	}
+	if c == '十' {
+		if i+1 < len(rs) {
+			if d, ok := cnDigitValue(rs[i+1]); ok && d > 0 {
+				return 10 + d, i + 2, true
+			}
+		}
+		return 10, i + 1, true
+	}
+	d, ok := cnDigitValue(c)
+	if !ok || d == 0 {
+		return 0, i, false
+	}
+	if i+1 < len(rs) && rs[i+1] == '十' {
+		v := d * 10
+		if i+2 < len(rs) {
+			if d2, ok := cnDigitValue(rs[i+2]); ok && d2 > 0 {
+				return v + d2, i + 3, true
+			}
+		}
+		return v, i + 2, true
+	}
+	return d, i + 1, true
+}
+
+// isNumeralRune 判断是否为数字字符（阿拉伯或中文数字），用于避免从数字串中间开始匹配。
+func isNumeralRune(c rune) bool {
+	if isDigit(c) {
+		return true
+	}
+	if c == '十' {
+		return true
+	}
+	_, ok := cnDigitValue(c)
+	return ok
 }
 
 // tagMatch 是一处标签匹配。
@@ -384,6 +533,13 @@ func findTags(rs []rune) []tagMatch {
 		out = append(out, tagMatch{start: i, end: j, value: content})
 	}
 	return out
+}
+
+// lastDayOfMonth 返回相对 now 所在月份偏移 offset 个月的最后一天（YYYY-MM-DD）。
+// offset 为 0 表示本月，1 表示下个月；12 月会自动跨年。
+func lastDayOfMonth(now time.Time, offset int) string {
+	t := time.Date(now.Year(), now.Month()+time.Month(offset)+1, 0, 0, 0, 0, 0, now.Location())
+	return t.Format("2006-01-02")
 }
 
 // resolveMonthDay 把 M-D 解析为今年（早于今天则明年）的日期。
