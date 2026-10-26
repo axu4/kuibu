@@ -23,6 +23,33 @@
 
 token 只用于认证，任何地方都不会打印或记录 token 本身。
 
+## App 内使用
+
+设置 → 软件更新：
+
+- 显示当前版本与是否为开发版；开发版（`0.0.0-dev` 或可执行文件不在 `.app` 包内）不支持自更新，按钮禁用并显示原因。
+- 「检查更新」拉取 GitHub 最新 Release；有新版本时显示发布时间与更新说明（Markdown 按纯文本保留换行展示），可点「更新并重启」。
+- 「启动时自动检查更新」开关写入 config.json，不覆盖其它字段；启动 5 秒后后台检查一次，发现新版本只在主窗口顶部提示条显示「发现新版本 vX」，不打扰用户。
+- GitHub Token 一栏显示当前来源（环境变量 / gh 登录 / 设置中填写 / 未找到），可手填或清除；token 保存在 config.json 同目录的 `github-token`，权限 600。
+
+### 更新进度阶段
+
+`Apply` 期间 Go 通过 `update:progress` 事件推送阶段，设置面板显示阶段文字：
+
+| stage | 含义 |
+| --- | --- |
+| `download` | 下载 `SHA256SUMS` 与 `kuibu-macos-arm64.zip` |
+| `verify` | SHA-256 校验 |
+| `extract` | 解压更新包 |
+| `replace` | 替换当前 `.app` |
+| `restart` | 启动新 App 并退出当前进程 |
+
+### 失败处理
+
+- 检查失败（无 token、网络错误、404/401/403 速率限制）只在设置面板显示中文错误，不弹窗、不动当前 App。
+- 更新失败：`Prepare` 阶段（下载/校验/解压）失败不会调用 `ReplaceApp`；`ReplaceApp` 阶段失败会自动回滚；任一步失败都会删除临时目录并保留当前 App，可在设置面板点「检查更新」重试。
+- 替换成功后启动新版本失败时，当前 App 已是新版本，下次手动启动即可生效。
+
 ## 限制
 
 - **无 Apple 开发者证书无法公证**：ad-hoc 签名的 App 首次从浏览器下载会被 Gatekeeper 拦，需右键点开或 `xattr -dr com.apple.quarantine /Applications/跬步.app`。App 自己下载的更新包不携带隔离属性，一般不会被拦。

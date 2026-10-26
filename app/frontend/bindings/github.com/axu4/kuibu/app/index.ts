@@ -3,14 +3,17 @@
 
 import * as ShellService from "./shellservice.js";
 import * as TodoService from "./todoservice.js";
+import * as UpdateService from "./updateservice.js";
 import * as WorkspaceService from "./workspaceservice.js";
 export {
     ShellService,
     TodoService,
+    UpdateService,
     WorkspaceService
 };
 
 export type {
+    CheckResult,
     NoteData,
     QuickAddPreview,
     QuickNoteSaved,
@@ -22,5 +25,6 @@ export type {
     TodoListFilter,
     TodoTag,
     TreeItem,
+    UpdateInfo,
     WorkspaceInfo
 } from "./models.js";

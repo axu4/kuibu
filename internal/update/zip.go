@@ -150,13 +150,26 @@ func extractRegularFile(f *zip.File, target string, perm os.FileMode) error {
 }
 
 // FindAppBundle 在 dir 中查找唯一的 *.app 目录。
+//
+// 跳过 macOS 解压常见的干扰条目：__MACOSX 目录以及以 ._ 开头的
+// AppleDouble 条目，避免把元数据目录里的同名 .app 误算进去。
 func FindAppBundle(dir string) (string, error) {
 	var found []string
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() && strings.HasSuffix(d.Name(), ".app") {
+		name := d.Name()
+		if strings.HasPrefix(name, "._") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() && name == "__MACOSX" {
+			return filepath.SkipDir
+		}
+		if d.IsDir() && strings.HasSuffix(name, ".app") {
 			found = append(found, p)
 			return filepath.SkipDir
 		}

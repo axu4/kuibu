@@ -193,6 +193,23 @@ func TestFindAppBundle(t *testing.T) {
 			t.Error("多个 .app 时应返回错误")
 		}
 	})
+	t.Run("跳过 __MACOSX 与 ._ 条目", func(t *testing.T) {
+		dir := t.TempDir()
+		app := filepath.Join(dir, "跬步.app")
+		for _, p := range []string{
+			app,
+			filepath.Join(dir, "__MACOSX", "跬步.app"),
+			filepath.Join(dir, "._跬步.app"),
+		} {
+			if err := os.MkdirAll(p, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := FindAppBundle(dir)
+		if err != nil || got != app {
+			t.Errorf("FindAppBundle = %q, %v，期望 %q", got, err, app)
+		}
+	})
 }
 
 // 确认权限解析辅助函数（覆盖三位八进制解析）。

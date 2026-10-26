@@ -15,10 +15,21 @@ const (
 	ChecksumsAssetName = "SHA256SUMS"
 )
 
+// ProgressFunc 是 PrepareWithProgress 的进度回调。
+//
+// stage 取值：download（下载校验文件/更新包）、verify（校验更新包）、
+// extract（解压更新包）。message 是给用户看的中文说明。
+type ProgressFunc func(stage, message string)
+
 // Prepare 下载并校验更新包，解压后返回新 .app 的路径。
 //
 // 只下载与解压，不碰当前 App；任何一步失败都返回错误，由调用方决定是否中止更新。
 func Prepare(ctx context.Context, client *Client, rel *Release, workDir string) (string, error) {
+	return PrepareWithProgress(ctx, client, rel, workDir, nil)
+}
+
+// PrepareWithProgress 与 Prepare 相同，但在下载、校验、解压时回调 progress。
+func PrepareWithProgress(ctx context.Context, client *Client, rel *Release, workDir string, progress ProgressFunc) (string, error) {
 	if client == nil {
 		return "", fmt.Errorf("更新客户端不能为空")
 	}
@@ -27,6 +38,12 @@ func Prepare(ctx context.Context, client *Client, rel *Release, workDir string) 
 	}
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		return "", fmt.Errorf("创建工作目录失败: %w", err)
+	}
+
+	notify := func(stage, message string) {
+		if progress != nil {
+			progress(stage, message)
+		}
 	}
 
 	sumsAsset, ok := FindAsset(rel, ChecksumsAssetName)
@@ -38,6 +55,7 @@ func Prepare(ctx context.Context, client *Client, rel *Release, workDir string) 
 		return "", fmt.Errorf("Release 中缺少更新包 %s", AppAssetName)
 	}
 
+	notify("download", "正在下载校验文件…")
 	sumsPath := filepath.Join(workDir, ChecksumsAssetName)
 	if err := downloadToFile(ctx, client, sumsAsset, sumsPath); err != nil {
 		return "", err
@@ -52,14 +70,18 @@ func Prepare(ctx context.Context, client *Client, rel *Release, workDir string) 
 		return "", fmt.Errorf("校验文件 %s 中缺少 %s 的哈希", ChecksumsAssetName, AppAssetName)
 	}
 
+	notify("download", "正在下载更新包…")
 	zipPath := filepath.Join(workDir, AppAssetName)
 	if err := downloadToFile(ctx, client, zipAsset, zipPath); err != nil {
 		return "", err
 	}
+
+	notify("verify", "正在校验更新包…")
 	if err := VerifyFile(zipPath, want); err != nil {
 		return "", fmt.Errorf("更新包校验失败: %w", err)
 	}
 
+	notify("extract", "正在解压更新包…")
 	extractDir := filepath.Join(workDir, "extracted")
 	if err := os.RemoveAll(extractDir); err != nil {
 		return "", fmt.Errorf("清理解压目录失败: %w", err)

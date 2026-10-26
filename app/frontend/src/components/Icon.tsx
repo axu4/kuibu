@@ -30,6 +30,8 @@ const PATHS = {
   external: "M9.5 2.75h3.75V6.5 M13.25 2.75L7.5 8.5 M11.5 9.5v3.75h-8.75V4.5H6.5",
   file: "M4 2.75h5.5L12.25 5.5v7.75H4z M9.25 2.75v3h3",
   arrowUp: "M8 13V3 M4 7l4-4 4 4",
+  refresh: "M13.5 8a5.5 5.5 0 1 1-1.5-4 M13.5 1.75V5.5H10.75",
+  download: "M8 2.5v7 M4.5 7L8 10.5 11.5 7 M2.75 13.25h10.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;
