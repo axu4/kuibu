@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { TreeItem } from "../../bindings/github.com/axu4/kuibu/app";
+import { Icon } from "./Icon";
+import { Menu } from "./Menu";
 
 interface TreeProps {
   items: TreeItem[];
@@ -8,6 +10,8 @@ interface TreeProps {
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
   onAddChild: (parent: string) => void;
+  /** 空树时的「新建笔记」。 */
+  onCreateRoot: () => void;
   onRename: (item: TreeItem) => void;
   onDelete: (item: TreeItem) => void;
   /** 正在重命名的笔记 ID。 */
@@ -33,6 +37,7 @@ export function Tree(props: TreeProps) {
     onToggle,
     onSelect,
     onAddChild,
+    onCreateRoot,
     onRename,
     onDelete,
     renamingId,
@@ -42,25 +47,15 @@ export function Tree(props: TreeProps) {
 
   const [menu, setMenu] = useState<MenuState | null>(null);
 
-  // 点击任意位置关闭右键菜单。
-  useEffect(() => {
-    if (!menu) {
-      return;
-    }
-    const close = () => setMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [menu]);
-
   if (items.length === 0) {
     return (
       <div className="tree">
         <div className="tree-empty">
-          还没有笔记。点右上角「+」新建一条根笔记。
+          <p>这里还空着。</p>
+          <button type="button" className="btn btn-ghost" onClick={onCreateRoot}>
+            <Icon name="plus" size={14} />
+            新建笔记
+          </button>
         </div>
       </div>
     );
@@ -91,46 +86,23 @@ export function Tree(props: TreeProps) {
       ))}
 
       {menu && (
-        <div
-          className="context-menu"
-          style={{ left: menu.x, top: menu.y }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(null);
-              onRename(menu.item);
-            }}
-          >
-            重命名
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(null);
-              onAddChild(menu.item.id);
-            }}
-          >
-            新建子笔记
-          </button>
-          <button
-            type="button"
-            className="is-danger"
-            onClick={() => {
-              setMenu(null);
-              onDelete(menu.item);
-            }}
-          >
-            删除…
-          </button>
-        </div>
+        <Menu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            { label: "重命名", icon: "edit", onClick: () => onRename(menu.item) },
+            { label: "新建子笔记", icon: "plus", onClick: () => onAddChild(menu.item.id) },
+            { label: "删除…", icon: "trash", danger: true, onClick: () => onDelete(menu.item) },
+          ]}
+        />
       )}
     </div>
   );
 }
 
-interface TreeRowProps extends Omit<TreeProps, "items" | "renamingId" | "onRenameSubmit" | "onRenameCancel"> {
+interface TreeRowProps
+  extends Omit<TreeProps, "items" | "renamingId" | "onRenameSubmit" | "onRenameCancel" | "onCreateRoot"> {
   item: TreeItem;
   depth: number;
   onContextMenu: (e: React.MouseEvent, item: TreeItem) => void;
@@ -166,21 +138,21 @@ function TreeRow(props: TreeRowProps) {
     <>
       <div
         className={`tree-row${isSelected ? " is-selected" : ""}`}
-        style={{ paddingLeft: 4 + depth * 14 }}
+        style={{ paddingLeft: 4 + depth * 16 }}
         onClick={() => onSelect(item.id)}
         onDoubleClick={() => onRename(item)}
         onContextMenu={(e) => onContextMenu(e, item)}
       >
         <button
           type="button"
-          className={`tree-caret${hasChildren ? "" : " is-hidden"}`}
+          className={`tree-caret${hasChildren ? "" : " is-hidden"}${isOpen ? " is-open" : ""}`}
           aria-label={isOpen ? "折叠" : "展开"}
           onClick={(e) => {
             e.stopPropagation();
             onToggle(item.id);
           }}
         >
-          {isOpen ? "▾" : "▸"}
+          <Icon name="chevron" size={12} />
         </button>
 
         {isRenaming ? (
@@ -208,17 +180,31 @@ function TreeRow(props: TreeRowProps) {
         )}
 
         {!isRenaming && (
-          <button
-            type="button"
-            className="tree-add"
-            title="新建子笔记"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddChild(item.id);
-            }}
-          >
-            +
-          </button>
+          <span className="tree-actions">
+            <button
+              type="button"
+              className="tree-action"
+              title="更多"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onContextMenu(e, item);
+              }}
+            >
+              <Icon name="more" size={14} className="icon-bold" />
+            </button>
+            <button
+              type="button"
+              className="tree-action"
+              title="新建子笔记"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddChild(item.id);
+              }}
+            >
+              <Icon name="plus" size={14} />
+            </button>
+          </span>
         )}
       </div>
 

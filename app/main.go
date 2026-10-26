@@ -70,6 +70,12 @@ func main() {
 		Width:  1200,
 		Height: 780,
 		URL:    "/",
+		// 隐藏标题栏，红绿灯浮在侧栏左上角；可拖动区域由前端的
+		// --wails-draggable 标出（侧栏顶部与各工具栏）。
+		Mac: application.MacWindow{
+			TitleBar:                application.MacTitleBarHiddenInset,
+			InvisibleTitleBarHeight: 40,
+		},
 		// 允许从 Finder 拖文件到主窗口；只有带 data-file-drop-target 属性的
 		// 元素（待办详情面板）会成为目标，事件在下面转发给 TodoService。
 		EnableFileDrop: true,

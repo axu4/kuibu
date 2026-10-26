@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { TodoService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { TodoItem } from "../../bindings/github.com/axu4/kuibu/app";
 import { Editor } from "./Editor";
+import { Icon } from "./Icon";
 import { formatDueLong, linkDisplay, readableError, statusLabel } from "../lib/todo";
 
 /** 正文自动保存防抖时间（与笔记编辑器一致）。 */
@@ -54,6 +55,10 @@ export function TodoDetail({
   const [confirmDone, setConfirmDone] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dropping, setDropping] = useState(false);
+  // 链接输入默认收起，点「添加链接」再展开。
+  const [linkOpen, setLinkOpen] = useState(false);
+  // 截止输入框不在编辑时显示友好格式（2026-10-27 周二 15:00），聚焦后换成原文。
+  const [dueFocused, setDueFocused] = useState(false);
 
   const bodyRef = useRef(body);
   bodyRef.current = body;
@@ -307,6 +312,7 @@ export function TodoDetail({
     if (updated) {
       setLinkURL("");
       setLinkTitle("");
+      setLinkOpen(false);
     }
   }, [item.id, linkTitle, linkURL, run]);
 
@@ -349,6 +355,25 @@ export function TodoDetail({
     : "";
   const dueTime = detail.due.length > 10 ? detail.due.slice(11, 16) : "";
 
+  const closed = detail.status === "done" || detail.status === "canceled";
+
+  // Esc 关闭面板；正在输入时 Esc 只退出输入框。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || confirmDelete || confirmDone !== null) {
+        return;
+      }
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) {
+        target.blur();
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [confirmDelete, confirmDone, onClose]);
+
   return (
     <aside
       className={`todo-detail${dropping ? " is-dropping" : ""}`}
@@ -358,186 +383,230 @@ export function TodoDetail({
       onDragLeave={() => setDropping(false)}
       onDrop={() => setDropping(false)}
     >
-      <div className="todo-detail-header">
-        <span className="todo-detail-id" title={item.id}>
-          {detail.source ? "来自笔记" : item.id}
-        </span>
+      <div className="toolbar">
+        <span className="detail-saving">{stateText}</span>
+        <div className="toolbar-spacer" />
         <button
           type="button"
-          className="icon-btn"
+          className="icon-btn is-danger"
           title="删除待办"
           onClick={() => setConfirmDelete(true)}
         >
-          ⌫
+          <Icon name="trash" />
         </button>
-        <button type="button" className="icon-btn" title="关闭详情" onClick={onClose}>
-          ✕
+        <button type="button" className="icon-btn" title="关闭（Esc）" onClick={onClose}>
+          <Icon name="close" />
         </button>
       </div>
 
-      <div className="todo-detail-body">
-        <input
-          className="todo-detail-title"
-          value={title}
-          onChange={(e) => {
-            titleEditing.current = true;
-            setTitle(e.target.value);
-          }}
-          onFocus={() => {
-            titleEditing.current = true;
-          }}
-          onBlur={() => void commitTitle()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-          }}
-        />
-
-        <div className="todo-detail-row">
-          <span className="todo-detail-label">状态</span>
-          <div className="todo-status-group">
-            {STATUS_OPTIONS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className={`todo-status-btn${detail.status === s ? " is-active" : ""}`}
-                disabled={busy}
-                onClick={() => void changeStatus(s)}
-              >
-                {statusLabel(s)}
-              </button>
-            ))}
-          </div>
+      <div className="detail-body">
+        <div className="detail-title-row">
+          <input
+            type="checkbox"
+            className="check is-large"
+            checked={closed}
+            disabled={busy}
+            aria-label={closed ? "标为未完成" : "标为完成"}
+            onChange={() => void changeStatus(closed ? "todo" : "done")}
+          />
+          <input
+            className={`detail-title${closed ? " is-closed" : ""}`}
+            value={title}
+            onChange={(e) => {
+              titleEditing.current = true;
+              setTitle(e.target.value);
+            }}
+            onFocus={() => {
+              titleEditing.current = true;
+            }}
+            onBlur={() => void commitTitle()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+          />
         </div>
 
-        <div className="todo-detail-row is-column">
-          <span className="todo-detail-label">截止</span>
-          <div className="todo-due-editor">
-            <input
-              className="todo-due-text"
-              value={dueText}
-              placeholder="如：明天下午三点（留空清除）"
-              onChange={(e) => {
-                dueEditing.current = true;
-                setDueText(e.target.value);
-              }}
-              onFocus={() => {
-                dueEditing.current = true;
-              }}
-              onBlur={() => void commitDue()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-            />
-            <input
-              className="todo-due-date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => void setDueParts(e.target.value, dueTime)}
-            />
-            <input
-              className="todo-due-time"
-              type="time"
-              value={dueTime}
-              disabled={!dueDate}
-              onChange={(e) => void setDueParts(dueDate, e.target.value)}
-            />
-            {detail.due && (
+        <div className="props">
+          <div className="prop">
+            <span className="prop-label">
+              <Icon name="flag" size={14} />
+              状态
+            </span>
+            <div className="segmented">
+              {STATUS_OPTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className={`segmented-btn is-${s}${detail.status === s ? " is-active" : ""}`}
+                  disabled={busy}
+                  onClick={() => void changeStatus(s)}
+                >
+                  {statusLabel(s)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="prop">
+            <span className="prop-label">
+              <Icon name="calendar" size={14} />
+              截止
+            </span>
+            <div className="prop-value">
+              <div className={`due-editor${detail.due ? " has-due" : ""}`}>
+                <input
+                  className={`field due-text${detail.overdue && !dueFocused ? " is-overdue" : ""}`}
+                  value={
+                    dueFocused || !detail.due
+                      ? dueText
+                      : `${formatDueLong(detail.due)}${detail.overdue ? " · 已逾期" : ""}`
+                  }
+                  placeholder="写「明天下午三点」或选日期"
+                  onChange={(e) => {
+                    dueEditing.current = true;
+                    setDueText(e.target.value);
+                  }}
+                  onFocus={(e) => {
+                    dueEditing.current = true;
+                    setDueFocused(true);
+                    const input = e.currentTarget;
+                    setTimeout(() => input.select(), 0);
+                  }}
+                  onBlur={() => {
+                    setDueFocused(false);
+                    void commitDue();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                />
+                <input
+                  className="field due-date"
+                  type="date"
+                  title="选择日期"
+                  value={dueDate}
+                  onChange={(e) => void setDueParts(e.target.value, dueTime)}
+                />
+                <input
+                  className="field due-time"
+                  type="time"
+                  title="选择时间"
+                  value={dueTime}
+                  disabled={!dueDate}
+                  onChange={(e) => void setDueParts(dueDate, e.target.value)}
+                />
+                {detail.due && (
+                  <button
+                    type="button"
+                    className="icon-btn is-small"
+                    title="清除截止"
+                    onClick={() => void run(() => TodoService.UpdateDue(item.id, ""), "清除截止失败")}
+                  >
+                    <Icon name="close" size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="prop">
+            <span className="prop-label">
+              <Icon name="tag" size={14} />
+              标签
+            </span>
+            <div className="tag-editor">
+              {tags.map((t) => (
+                <span key={t} className="chip is-removable">
+                  #{t}
+                  <button type="button" title="移除标签" onClick={() => void removeTag(t)}>
+                    <Icon name="close" size={10} />
+                  </button>
+                </span>
+              ))}
+              <input
+                className="tag-input"
+                value={tagInput}
+                placeholder={tags.length ? "添加" : "添加标签，回车确认"}
+                onChange={(e) => setTagInput(e.target.value)}
+                onBlur={() => void addTags()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void addTags();
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {detail.source && (
+            <div className="prop">
+              <span className="prop-label">
+                <Icon name="note" size={14} />
+                来源
+              </span>
               <button
                 type="button"
-                className="todo-link-btn"
-                onClick={() => void run(() => TodoService.UpdateDue(item.id, ""), "清除截止失败")}
+                className="source-link"
+                title="打开这条笔记"
+                onClick={() => onOpenNote(detail.source)}
               >
-                清除
+                {detail.sourceTitle || detail.source}
               </button>
-            )}
-          </div>
-          {detail.due && (
-            <div className={`todo-due-hint${detail.overdue ? " is-overdue" : ""}`}>
-              {formatDueLong(detail.due)}
-              {detail.overdue ? " · 已逾期" : ""}
             </div>
           )}
         </div>
 
-        <div className="todo-detail-row is-column">
-          <span className="todo-detail-label">标签</span>
-          <div className="todo-tag-editor">
-            {tags.map((t) => (
-              <span key={t} className="todo-tag-chip">
-                #{t}
-                <button type="button" title="移除标签" onClick={() => void removeTag(t)}>
-                  ✕
-                </button>
-              </span>
-            ))}
-            <input
-              className="todo-tag-input"
-              value={tagInput}
-              placeholder="加标签后回车"
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  void addTags();
-                }
-              }}
-            />
-          </div>
+        <div className="detail-editor">
+          <Editor
+            key={`${item.id}-${editorRev}`}
+            noteId={item.id}
+            initialBody={body}
+            onChange={onBodyChange}
+            placeholder="添加描述…"
+          />
         </div>
 
-        <div className="todo-detail-section">
-          <div className="todo-detail-section-title">
-            详情
-            {stateText && <span className="todo-detail-saving">{stateText}</span>}
-          </div>
-          <div className="todo-detail-editor">
-            <Editor
-              key={`${item.id}-${editorRev}`}
-              noteId={item.id}
-              initialBody={body}
-              onChange={onBodyChange}
-            />
-          </div>
-        </div>
-
-        <div className="todo-detail-section">
-          <div className="todo-detail-section-title">
+        <section className="detail-section">
+          <h3>
             子任务
-            <span className="todo-detail-count">
-              {children.filter((c) => c.status === "done").length}/{children.length}
-            </span>
-          </div>
-          <div className="todo-subtasks">
-            {children.length === 0 && <div className="todo-detail-empty">还没有子任务</div>}
-            {children.map((child) => {
-              const closed = child.status === "done" || child.status === "canceled";
-              return (
-                <div key={child.id} className={`todo-subtask${closed ? " is-closed" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={closed}
-                    disabled={busy}
-                    onChange={() => void toggleChild(child)}
-                  />
-                  <span className="todo-subtask-title">{child.title}</span>
-                  {child.due && (
-                    <span className={`todo-due${child.overdue ? " is-overdue" : ""}`}>
-                      {formatDueLong(child.due).slice(5)}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+            {children.length > 0 && (
+              <span className="detail-count">
+                {children.filter((c) => c.status === "done").length}/{children.length}
+              </span>
+            )}
+          </h3>
+          {children.map((child) => {
+            const childClosed = child.status === "done" || child.status === "canceled";
+            return (
+              <div key={child.id} className={`subtask${childClosed ? " is-closed" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="check is-small"
+                  checked={childClosed}
+                  disabled={busy}
+                  onChange={() => void toggleChild(child)}
+                />
+                <span className="subtask-title">{child.title}</span>
+                {child.due && (
+                  <span className={`todo-due${child.overdue ? " is-overdue" : ""}`}>
+                    {formatDueLong(child.due).slice(5)}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+          <div className="add-row">
+            <Icon name="plus" size={14} />
             <input
-              className="todo-subtask-input"
               value={childInput}
-              placeholder="添加子任务，回车即建"
+              placeholder="添加子任务"
               onChange={(e) => setChildInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -547,128 +616,135 @@ export function TodoDetail({
               }}
             />
           </div>
-        </div>
+        </section>
 
-        <div className="todo-detail-section">
-          <div className="todo-detail-section-title">链接</div>
-          {links.length === 0 && <div className="todo-detail-empty">还没有链接</div>}
-          <div className="todo-links">
-            {links.map((l) => (
-              <div key={l.url} className="todo-link">
-                <button
-                  type="button"
-                  className="todo-link-open"
-                  title={l.url}
-                  onClick={() => openLink(l.url)}
-                >
-                  {linkDisplay(l.url, l.title)}
-                </button>
-                <button
-                  type="button"
-                  className="todo-link-btn"
-                  onClick={() => void run(() => TodoService.RemoveLink(item.id, l.url), "删除链接失败")}
-                >
-                  删除
-                </button>
-              </div>
-            ))}
-            <div className="todo-link-add">
+        <section className="detail-section">
+          <h3>链接与附件</h3>
+          {links.map((l) => (
+            <div key={l.url} className="resource">
+              <Icon name="link" size={14} />
+              <button
+                type="button"
+                className="resource-open"
+                title={l.url}
+                onClick={() => openLink(l.url)}
+              >
+                {linkDisplay(l.url, l.title)}
+              </button>
+              <button
+                type="button"
+                className="icon-btn is-small"
+                title="删除链接"
+                onClick={() => void run(() => TodoService.RemoveLink(item.id, l.url), "删除链接失败")}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ))}
+          {attachments.map((a) => (
+            <div key={a.path} className="resource">
+              <Icon name="file" size={14} />
+              <button
+                type="button"
+                className="resource-open"
+                title={a.path}
+                onClick={() => openAttachment(a.path)}
+              >
+                {a.name}
+              </button>
+              <button
+                type="button"
+                className="icon-btn is-small"
+                title="移除附件"
+                onClick={() => void detach(a.path)}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
+          ))}
+
+          {linkOpen && (
+            <div className="link-form">
               <input
-                className="todo-link-url"
+                className="field"
+                autoFocus
                 value={linkURL}
-                placeholder="https://…"
+                placeholder="粘贴链接 https://…"
                 onChange={(e) => setLinkURL(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void addLink();
+                  } else if (e.key === "Escape") {
+                    setLinkOpen(false);
                   }
                 }}
               />
               <input
-                className="todo-link-title"
+                className="field"
                 value={linkTitle}
-                placeholder="标题（可选）"
+                placeholder="显示名称（可选）"
                 onChange={(e) => setLinkTitle(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void addLink();
+                  } else if (e.key === "Escape") {
+                    setLinkOpen(false);
                   }
                 }}
               />
-              <button type="button" className="todo-link-btn" disabled={busy} onClick={() => void addLink()}>
-                添加
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="todo-detail-section">
-          <div className="todo-detail-section-title">
-            附件
-            <button type="button" className="todo-link-btn" disabled={busy} onClick={() => void chooseFile()}>
-              选择文件
-            </button>
-          </div>
-          {attachments.length === 0 && (
-            <div className="todo-detail-empty">把文件拖到这里，或点「选择文件」</div>
-          )}
-          <div className="todo-attachments">
-            {attachments.map((a) => (
-              <div key={a.path} className="todo-attachment">
-                <button
-                  type="button"
-                  className="todo-attachment-open"
-                  title={a.path}
-                  onClick={() => openAttachment(a.path)}
-                >
-                  {a.name}
+              <div className="link-form-actions">
+                <button type="button" className="btn" onClick={() => setLinkOpen(false)}>
+                  取消
                 </button>
                 <button
                   type="button"
-                  className="todo-link-btn"
-                  onClick={() => void detach(a.path)}
+                  className="btn btn-primary"
+                  disabled={busy || !linkURL.trim()}
+                  onClick={() => void addLink()}
                 >
-                  移除
+                  添加链接
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
 
-        {detail.source && (
-          <div className="todo-detail-section">
-            <div className="todo-detail-section-title">来源笔记</div>
-            <button
-              type="button"
-              className="todo-source"
-              onClick={() => onOpenNote(detail.source)}
-            >
-              {detail.sourceTitle || detail.source}
+          <div className="resource-actions">
+            {!linkOpen && (
+              <button type="button" className="btn btn-ghost" onClick={() => setLinkOpen(true)}>
+                <Icon name="link" size={14} />
+                添加链接
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void chooseFile()}>
+              <Icon name="paperclip" size={14} />
+              添加附件
             </button>
+            <span className="resource-hint">也可以把文件拖进来</span>
           </div>
-        )}
+        </section>
       </div>
+
+      {dropping && <div className="drop-overlay">松开即可添加为附件</div>}
 
       {confirmDelete && (
         <div className="modal-mask" onClick={() => setConfirmDelete(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>删除待办</h2>
+            <h2>删除「{detail.title}」？</h2>
             <p>
-              「{detail.title}」
               {detail.childTotal > 0
-                ? `还有 ${detail.childTotal} 条子任务，会一起删掉，`
-                : "删除后"}
-              无法撤销。
+                ? `它的 ${detail.childTotal} 条子任务会一起删除，`
+                : ""}
+              删除后无法恢复。
             </p>
             <div className="modal-buttons">
-              <button type="button" onClick={() => setConfirmDelete(false)}>
+              <button type="button" className="btn" onClick={() => setConfirmDelete(false)}>
                 取消
               </button>
               <button
                 type="button"
-                className="is-danger"
+                className="btn btn-danger"
                 disabled={busy}
                 onClick={() => {
                   setConfirmDelete(false);
@@ -692,18 +768,18 @@ export function TodoDetail({
       {confirmDone !== null && (
         <div className="modal-mask" onClick={() => setConfirmDone(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>完成父任务</h2>
+            <h2>子任务还没做完</h2>
             <p>
-              「{detail.title}」还有 {confirmDone} 条未完成的子任务，要一起完成吗？
+              「{detail.title}」下还有 {confirmDone} 条子任务未完成，要一起标为完成吗？
             </p>
             <div className="modal-buttons">
-              <button type="button" onClick={() => setConfirmDone(null)}>
+              <button type="button" className="btn" onClick={() => setConfirmDone(null)}>
                 取消
               </button>
-              <button type="button" onClick={() => void finishWithChildren(false)}>
+              <button type="button" className="btn" onClick={() => void finishWithChildren(false)}>
                 只完成父任务
               </button>
-              <button type="button" className="is-primary" onClick={() => void finishWithChildren(true)}>
+              <button type="button" className="btn btn-primary" onClick={() => void finishWithChildren(true)}>
                 一起完成
               </button>
             </div>

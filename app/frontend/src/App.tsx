@@ -14,6 +14,8 @@ import { Tree } from "./components/Tree";
 import { Editor } from "./components/Editor";
 import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
+import { Icon } from "./components/Icon";
+import { MoreMenu } from "./components/Menu";
 import { loadMainView, saveMainView } from "./lib/todo";
 import type { MainView } from "./lib/todo";
 
@@ -41,8 +43,6 @@ interface LoadedNote {
 /** 弹窗类型。 */
 type ModalState =
   | { kind: "none" }
-  | { kind: "create"; parent: string; title: string }
-  | { kind: "rename"; id: string; title: string }
   | { kind: "delete"; item: TreeItem; childCount: number };
 
 function loadExpanded(): Set<string> {
@@ -110,6 +110,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
   const [view, setView] = useState<MainView>(loadMainView);
+  const [titleDraft, setTitleDraft] = useState("");
+  // 待办视图把分组与标签渲染进侧栏的这个容器。
+  const [todoNavHost, setTodoNavHost] = useState<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLInputElement | null>(null);
+  // 新建笔记后需要聚焦标题，等笔记加载完再处理。
+  const focusTitleRef = useRef(false);
 
   // 稳定的回调：Settings 里用它触发状态刷新，引用变化会导致重复拉取。
   const applyShortcutStatus = useCallback((status: ShortcutStatus) => {
@@ -338,17 +344,19 @@ export default function App() {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
   }, [sidebarWidth]);
 
-  // ⌘S 立即保存。
+  // 打开的笔记变化时同步标题输入框；新建的笔记直接选中标题等待输入。
+  const noteTitle = note?.data.title ?? "";
+  const noteId = note?.data.id ?? "";
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        void saveNow();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [saveNow]);
+    setTitleDraft(noteTitle);
+  }, [noteId, noteTitle]);
+  useEffect(() => {
+    if (noteId && focusTitleRef.current) {
+      focusTitleRef.current = false;
+      titleRef.current?.focus();
+      titleRef.current?.select();
+    }
+  }, [noteId]);
 
   /** 切换节点展开状态。 */
   const toggleExpanded = useCallback((id: string) => {
@@ -384,22 +392,23 @@ export default function App() {
     });
   }, []);
 
-  /** 新建笔记。 */
+  /** 新建笔记：直接建一条「未命名笔记」并聚焦标题，省掉弹窗。 */
   const createNote = useCallback(
-    async (parent: string, title: string) => {
+    async (parent: string) => {
       try {
-        const created = await WorkspaceService.Create(title, parent);
+        await saveNow();
+        const created = await WorkspaceService.Create("", parent);
         if (parent) {
           setExpanded((prev) => new Set(prev).add(parent));
         }
         await refreshTree();
+        focusTitleRef.current = true;
         await openNote(created.id);
-        setModal({ kind: "none" });
       } catch (err) {
         setError(`新建笔记失败：${String(err)}`);
       }
     },
-    [openNote, refreshTree],
+    [openNote, refreshTree, saveNow],
   );
 
   /** 重命名笔记。 */
@@ -496,6 +505,21 @@ export default function App() {
     [sidebarWidth],
   );
 
+  /** 提交页面标题的修改。 */
+  const commitTitle = useCallback(() => {
+    if (!note) {
+      return;
+    }
+    const next = titleDraft.trim();
+    if (!next) {
+      setTitleDraft(note.data.title);
+      return;
+    }
+    if (next !== note.data.title) {
+      void renameNote(note.data.id, next);
+    }
+  }, [note, renameNote, titleDraft]);
+
   const selectedItem = useMemo(
     () => (selectedId ? findItem(tree, selectedId) : null),
     [tree, selectedId],
@@ -525,11 +549,60 @@ export default function App() {
     [saveNow, view],
   );
 
+  // 全局快捷键：⌘S 立即保存，⌘1/⌘2 切换视图，笔记视图下 ⌘N 新建笔记。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "s") {
+        e.preventDefault();
+        void saveNow();
+      } else if (key === "1") {
+        e.preventDefault();
+        switchView("notes");
+      } else if (key === "2") {
+        e.preventDefault();
+        switchView("todo");
+      } else if (key === "n" && view === "notes" && workspace) {
+        e.preventDefault();
+        void createNote("");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [createNote, saveNow, switchView, view, workspace]);
+
+
+  /** 面包屑：当前笔记的祖先标题。 */
+  const breadcrumb = useMemo(() => {
+    if (!selectedId) {
+      return [] as TreeItem[];
+    }
+    const trail: TreeItem[] = [];
+    const walk = (nodes: TreeItem[]): boolean => {
+      for (const node of nodes) {
+        if (node.id === selectedId) {
+          return true;
+        }
+        trail.push(node);
+        if (walk(node.children ?? [])) {
+          return true;
+        }
+        trail.pop();
+      }
+      return false;
+    };
+    walk(tree);
+    return trail;
+  }, [tree, selectedId]);
+
   // 快捷键注册失败/回退的提示条，两个视图共用。
   const shortcutBanners = (
     <>
       {shortcut && !shortcut.registered && shortcut.error && (
-        <div className="banner banner-top">
+        <div className="banner">
           {/* Go 侧的错误已经带上「快捷键 ⌃⌥N 注册失败：原因」，这里只补建议。 */}
           <span>{shortcut.error}，请在设置里换一个。</span>
           <button type="button" onClick={() => setSettingsOpen(true)}>
@@ -539,7 +612,7 @@ export default function App() {
       )}
       {/* 已临时回退到默认值但仍需用户处理（例如配置里的快捷键不合法）。 */}
       {shortcut && shortcut.registered && shortcut.notice && (
-        <div className="banner banner-top">
+        <div className="banner">
           <span>{shortcut.notice}</span>
           <button type="button" onClick={() => setSettingsOpen(true)}>
             打开设置
@@ -549,265 +622,306 @@ export default function App() {
     </>
   );
 
+  const workspaceName = workspace ? workspace.split("/").filter(Boolean).pop() : "";
+
+  const welcome = (
+    <div className="welcome">
+      <div className="welcome-mark">跬</div>
+      <h1>不积跬步，无以至千里</h1>
+      <p>笔记和待办都以 Markdown 文件存在你选的文件夹里，随时可以用别的工具打开。</p>
+      <button type="button" className="btn btn-primary" onClick={() => void chooseWorkspace()}>
+        选择工作台文件夹
+      </button>
+    </div>
+  );
+
   return (
     <div className="app">
-      {/* 最左侧窄图标栏：笔记 / 待办两个视图，加工作台与设置入口。 */}
-      <nav className="apprail">
-        <button
-          type="button"
-          className={`apprail-btn${view === "notes" ? " is-active" : ""}`}
-          title="笔记"
-          onClick={() => switchView("notes")}
-        >
-          ✎
-        </button>
-        <button
-          type="button"
-          className={`apprail-btn${view === "todo" ? " is-active" : ""}`}
-          title="待办"
-          onClick={() => switchView("todo")}
-        >
-          ✓
-        </button>
-        <div className="apprail-spacer" />
-        <button
-          type="button"
-          className="apprail-btn"
-          title="选择或新建工作台文件夹"
-          onClick={() => void chooseWorkspace()}
-        >
-          ⌂
-        </button>
-        <button
-          type="button"
-          className="apprail-btn"
-          title="设置"
-          onClick={() => setSettingsOpen(true)}
-        >
-          ⚙
-        </button>
-      </nav>
+      <aside className="sidebar" style={{ width: sidebarWidth }}>
+        <div className="sidebar-top">
+          <button
+            type="button"
+            className="workspace-switch"
+            title={workspace ? `${workspace}\n点击切换工作台` : "选择工作台文件夹"}
+            onClick={() => void chooseWorkspace()}
+          >
+            <span className="workspace-mark">跬</span>
+            <span className="workspace-name">{workspaceName || "选择工作台"}</span>
+            <Icon name="chevronDown" size={14} className="workspace-chevron" />
+          </button>
+        </div>
+
+        <nav className="view-switch" aria-label="视图">
+          <button
+            type="button"
+            className={`view-switch-btn${view === "notes" ? " is-active" : ""}`}
+            title="笔记（⌘1）"
+            onClick={() => switchView("notes")}
+          >
+            <Icon name="note" />
+            笔记
+          </button>
+          <button
+            type="button"
+            className={`view-switch-btn${view === "todo" ? " is-active" : ""}`}
+            title="待办（⌘2）"
+            onClick={() => switchView("todo")}
+          >
+            <Icon name="todo" />
+            待办
+          </button>
+        </nav>
+
+        {view === "notes" ? (
+          <>
+            <div className="sidebar-section">
+              <span>全部笔记</span>
+              <button
+                type="button"
+                className="icon-btn"
+                title="新建笔记（⌘N）"
+                disabled={!workspace}
+                onClick={() => void createNote("")}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            </div>
+            {workspace ? (
+              <Tree
+                items={tree}
+                selectedId={selectedId}
+                expanded={expanded}
+                onToggle={toggleExpanded}
+                onSelect={(id) => void selectNote(id)}
+                onAddChild={(parent) => {
+                  expandTo(parent, tree);
+                  void createNote(parent);
+                }}
+                onCreateRoot={() => void createNote("")}
+                onRename={(item) => setRenamingId(item.id)}
+                onDelete={requestDelete}
+                renamingId={renamingId}
+                onRenameSubmit={(id, title) => void renameNote(id, title)}
+                onRenameCancel={() => setRenamingId(null)}
+              />
+            ) : (
+              <div className="tree" />
+            )}
+          </>
+        ) : (
+          <div className="sidebar-slot" ref={setTodoNavHost} />
+        )}
+
+        <div className="sidebar-bottom">
+          <span
+            className="sidebar-hint"
+            title="在任意应用里按下，弹出随手记小窗"
+          >
+            <Icon name="bolt" size={14} />
+            随手记
+            {shortcut?.display && <kbd>{shortcut.display}</kbd>}
+          </span>
+          <button
+            type="button"
+            className="icon-btn"
+            title="设置"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Icon name="settings" />
+          </button>
+        </div>
+        <div className="resize-handle" onMouseDown={startResize} />
+      </aside>
 
       {view === "todo" ? (
         workspace ? (
           <div className="todo-shell">
             {shortcutBanners}
-            <TodoView onOpenNote={openNoteFromTodo} />
+            <TodoView onOpenNote={openNoteFromTodo} navHost={todoNavHost} />
           </div>
         ) : (
           <main className="content">
-            <div className="welcome">
-              <h1>跬步</h1>
-              <p>待办和数据都保存在工作台文件夹里，先打开一个工作台。</p>
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => void chooseWorkspace()}
-              >
-                选择或新建工作台文件夹
-              </button>
-            </div>
+            <div className="toolbar" />
+            {welcome}
           </main>
         )
       ) : (
-      <>
-      <aside className="sidebar" style={{ width: sidebarWidth }}>
-        <div className="sidebar-header">
-          <span className="sidebar-title" title={workspace || "未打开工作台"}>
-            {workspace ? workspace.split("/").filter(Boolean).pop() : "跬步"}
-          </span>
-          <div className="sidebar-actions">
-            <button
-              type="button"
-              className="icon-btn"
-              title="新建根笔记"
-              disabled={!workspace}
-              onClick={() => setModal({ kind: "create", parent: "", title: "" })}
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <Tree
-          items={tree}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={toggleExpanded}
-          onSelect={(id) => void selectNote(id)}
-          onAddChild={(parent) => {
-            expandTo(parent, tree);
-            setModal({ kind: "create", parent, title: "" });
-          }}
-          onRename={(item) => setRenamingId(item.id)}
-          onDelete={requestDelete}
-          renamingId={renamingId}
-          onRenameSubmit={(id, title) => void renameNote(id, title)}
-          onRenameCancel={() => setRenamingId(null)}
-        />
-        <div className="resize-handle" onMouseDown={startResize} />
-      </aside>
-
-      <main className="content">
-        {shortcutBanners}
-        {!workspace ? (
-          <div className="welcome">
-            <h1>跬步</h1>
-            <p>
-              工作台里的 Markdown 文件是唯一事实来源。
-              <br />
-              先选择或新建一个工作台文件夹开始记录。
-            </p>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => void chooseWorkspace()}
-            >
-              选择或新建工作台文件夹
-            </button>
-          </div>
-        ) : !note ? (
-          <div className="welcome">
-            <h1>跬步</h1>
-            <p>从左侧选择一条笔记，或新建一条。</p>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => setModal({ kind: "create", parent: "", title: "" })}
-            >
-              新建根笔记
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="content-header">
-              <span className="note-title" title={note.data.title}>
-                {note.data.title}
-              </span>
-              <div className="mode-toggle">
-                <button
-                  type="button"
-                  className={mode === "wysiwyg" ? "is-active" : ""}
-                  onClick={() => setMode("wysiwyg")}
-                >
-                  所见即所得
-                </button>
-                <button
-                  type="button"
-                  className={mode === "source" ? "is-active" : ""}
-                  onClick={() => setMode("source")}
-                >
-                  源码
+        <main className="content">
+          {!workspace ? (
+            <>
+              <div className="toolbar" />
+              {welcome}
+            </>
+          ) : !note ? (
+            <>
+              <div className="toolbar" />
+              {shortcutBanners}
+              <div className="welcome">
+                <div className="welcome-mark is-quiet">
+                  <Icon name="note" size={22} />
+                </div>
+                <h1>{tree.length === 0 ? "写下第一条笔记" : "选一条笔记开始"}</h1>
+                <p>从左侧打开，或者新建一条。按 {shortcut?.display || "⌃⌥N"} 可以在任意应用里随手记。</p>
+                <button type="button" className="btn btn-primary" onClick={() => void createNote("")}>
+                  <Icon name="plus" size={14} />
+                  新建笔记
                 </button>
               </div>
-              <button
-                type="button"
-                className="icon-btn"
-                title="重命名"
-                onClick={() =>
-                  setModal({ kind: "rename", id: note.data.id, title: note.data.title })
-                }
-              >
-                ✎
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                title="删除"
-                onClick={() => {
-                  const item = selectedItem ?? {
-                    id: note.data.id,
-                    title: note.data.title,
-                    orphan: false,
-                    cycle: false,
-                    children: [],
-                  };
-                  requestDelete(item);
-                }}
-              >
-                ⌫
-              </button>
-            </div>
-
-            {external === "modified" && (
-              <div className="banner">
-                <span>文件已在外部修改，当前还有未保存的修改。</span>
+            </>
+          ) : (
+            <>
+              <div className="toolbar">
+                <div className="breadcrumb">
+                  {breadcrumb.map((item) => (
+                    <span key={item.id} className="breadcrumb-part">
+                      <button type="button" onClick={() => void selectNote(item.id)}>
+                        {item.title}
+                      </button>
+                      <Icon name="chevron" size={12} />
+                    </span>
+                  ))}
+                  <span className="breadcrumb-current">{note.data.title}</span>
+                </div>
+                <span className={`save-state is-${status}`}>
+                  <span className="save-dot" />
+                  {statusText}
+                </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    const id = note.data.id;
-                    setExternal("none");
-                    void openNote(id);
-                  }}
+                  className={`icon-btn${mode === "source" ? " is-on" : ""}`}
+                  title={mode === "source" ? "切回所见即所得" : "查看 Markdown 源码"}
+                  onClick={() => setMode(mode === "source" ? "wysiwyg" : "source")}
                 >
-                  重新加载
+                  <Icon name="code" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setExternal("none")}
-                >
-                  保留我的
-                </button>
-              </div>
-            )}
-
-            {external === "deleted" && (
-              <div className="banner">
-                <span>当前笔记已在外部被删除。</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedId(null);
-                    setNote(null);
-                    setBody("");
-                    setSavedBody("");
-                    setExternal("none");
-                  }}
-                >
-                  关闭
-                </button>
-              </div>
-            )}
-
-            <div className="editor-area">
-              {mode === "wysiwyg" ? (
-                <Editor
-                  key={`${note.data.id}-${note.revision}`}
-                  noteId={note.data.id}
-                  initialBody={body}
-                  onChange={onBodyChange}
+                <MoreMenu
+                  items={[
+                    { label: "重命名", icon: "edit", onClick: () => titleRef.current?.select() },
+                    {
+                      label: "新建子笔记",
+                      icon: "plus",
+                      onClick: () => {
+                        expandTo(note.data.id, tree);
+                        void createNote(note.data.id);
+                      },
+                    },
+                    {
+                      label: "删除…",
+                      icon: "trash",
+                      danger: true,
+                      onClick: () => {
+                        const item = selectedItem ?? {
+                          id: note.data.id,
+                          title: note.data.title,
+                          orphan: false,
+                          cycle: false,
+                          children: [],
+                        };
+                        requestDelete(item);
+                      },
+                    },
+                  ]}
                 />
-              ) : (
-                <textarea
-                  className="source-editor"
-                  value={body}
-                  spellCheck={false}
-                  onChange={(e) => onBodyChange(e.target.value)}
-                />
+              </div>
+
+              {shortcutBanners}
+
+              {external === "modified" && (
+                <div className="banner">
+                  <span>文件已在外部修改，而这里还有没保存的改动。</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = note.data.id;
+                      setExternal("none");
+                      void openNote(id);
+                    }}
+                  >
+                    载入外部版本
+                  </button>
+                  <button type="button" onClick={() => setExternal("none")}>
+                    保留我的
+                  </button>
+                </div>
               )}
-            </div>
 
-            <div className="status-bar">
-              <span className={`status-dot${status === "dirty" ? " is-dirty" : status === "saving" ? " is-saving" : ""}`} />
-              <span>{statusText}</span>
-              <span style={{ marginLeft: "auto" }}>{note.data.id}</span>
-            </div>
-          </>
-        )}
-      </main>
-      </>
+              {external === "deleted" && (
+                <div className="banner">
+                  <span>这条笔记已在外部被删除。</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedId(null);
+                      setNote(null);
+                      setBody("");
+                      setSavedBody("");
+                      setExternal("none");
+                    }}
+                  >
+                    关闭
+                  </button>
+                </div>
+              )}
+
+              <div className="editor-area">
+                <div className="page">
+                  <input
+                    ref={titleRef}
+                    className="page-title"
+                    value={titleDraft}
+                    placeholder="未命名笔记"
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    onBlur={commitTitle}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) {
+                        return;
+                      }
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                        // 回车后进入正文继续写。
+                        const editable = document.querySelector<HTMLElement>(
+                          ".page .ProseMirror, .page .source-editor",
+                        );
+                        editable?.focus();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setTitleDraft(note.data.title);
+                        e.currentTarget.blur();
+                      }
+                    }}
+                  />
+                  <div className="page-meta">
+                    {note.data.updated && <span>更新于 {formatTime(note.data.updated)}</span>}
+                    {selectedItem && (selectedItem.children?.length ?? 0) > 0 && (
+                      <span>{selectedItem.children?.length} 条子笔记</span>
+                    )}
+                  </div>
+                  {mode === "wysiwyg" ? (
+                    <Editor
+                      key={`${note.data.id}-${note.revision}`}
+                      noteId={note.data.id}
+                      initialBody={body}
+                      onChange={onBodyChange}
+                    />
+                  ) : (
+                    <textarea
+                      className="source-editor"
+                      value={body}
+                      spellCheck={false}
+                      onChange={(e) => onBodyChange(e.target.value)}
+                    />
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </main>
       )}
 
       {error && (
-        <div className="modal-mask" onClick={() => setError(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>出错了</h2>
-            <p>{error}</p>
-            <div className="modal-buttons">
-              <button type="button" className="is-primary" onClick={() => setError(null)}>
-                知道了
-              </button>
-            </div>
-          </div>
+        <div className="toast" role="alert" onClick={() => setError(null)}>
+          {error}
         </div>
       )}
 
@@ -818,48 +932,23 @@ export default function App() {
         />
       )}
 
-      {modal.kind === "create" && (
-        <TitleModal
-          title={modal.parent ? "新建子笔记" : "新建根笔记"}
-          initial=""
-          placeholder="笔记标题"
-          confirmText="新建"
-          onCancel={() => setModal({ kind: "none" })}
-          onConfirm={(title) => void createNote(modal.parent, title)}
-        />
-      )}
-
-      {modal.kind === "rename" && (
-        <TitleModal
-          title="重命名笔记"
-          initial={modal.title}
-          placeholder="笔记标题"
-          confirmText="保存"
-          onCancel={() => setModal({ kind: "none" })}
-          onConfirm={(title) => {
-            setModal({ kind: "none" });
-            void renameNote(modal.id, title);
-          }}
-        />
-      )}
-
       {modal.kind === "delete" && (
-        <div className="modal-mask">
-          <div className="modal">
-            <h2>删除笔记</h2>
+        <div className="modal-mask" onMouseDown={() => setModal({ kind: "none" })}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>删除「{modal.item.title}」？</h2>
             <p>
-              「{modal.item.title}」下还有 {modal.childCount} 条子笔记，删除后会一起删掉，且无法撤销。
+              它下面还有 {modal.childCount} 条子笔记，会一起删除，删除后无法恢复。
             </p>
             <div className="modal-buttons">
-              <button type="button" onClick={() => setModal({ kind: "none" })}>
+              <button type="button" className="btn" onClick={() => setModal({ kind: "none" })}>
                 取消
               </button>
               <button
                 type="button"
-                className="is-danger"
+                className="btn btn-danger"
                 onClick={() => void deleteNote(modal.item, true)}
               >
-                递归删除
+                全部删除
               </button>
             </div>
           </div>
@@ -869,61 +958,20 @@ export default function App() {
   );
 }
 
-interface TitleModalProps {
-  title: string;
-  initial: string;
-  placeholder: string;
-  confirmText: string;
-  onCancel: () => void;
-  onConfirm: (title: string) => void;
-}
-
-/** 输入标题的简易弹窗。 */
-function TitleModal(props: TitleModalProps) {
-  const [value, setValue] = useState(props.initial);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
-
-  const submit = () => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return;
-    }
-    props.onConfirm(trimmed);
-  };
-
-  return (
-    <div className="modal-mask" onMouseDown={props.onCancel}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>{props.title}</h2>
-        <input
-          ref={inputRef}
-          value={value}
-          placeholder={props.placeholder}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              props.onCancel();
-            }
-          }}
-        />
-        <div className="modal-buttons">
-          <button type="button" onClick={props.onCancel}>
-            取消
-          </button>
-          <button type="button" className="is-primary" onClick={submit}>
-            {props.confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+/** 把 RFC3339 时间显示成「今天 10:12」「10月27日 10:12」或带年份。 */
+function formatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const now = new Date();
+  const hm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  if (date.toDateString() === now.toDateString()) {
+    return `今天 ${hm}`;
+  }
+  const md = `${date.getMonth() + 1}月${date.getDate()}日`;
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${md} ${hm}`;
+  }
+  return `${date.getFullYear()}年${md}`;
 }

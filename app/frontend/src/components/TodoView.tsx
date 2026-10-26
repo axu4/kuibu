@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Events } from "@wailsio/runtime";
 import { TodoService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { TodoItem, TodoTag } from "../../bindings/github.com/axu4/kuibu/app";
 import { TodoDetail } from "./TodoDetail";
+import { Icon } from "./Icon";
+import type { IconName } from "./Icon";
 import { formatDue, readableError, statusClass } from "../lib/todo";
 
 /** 列表视图。 */
@@ -17,18 +20,30 @@ const SEARCH_DEBOUNCE_MS = 200;
 interface GroupDef {
   key: Group;
   label: string;
+  icon: IconName;
+  /** 空列表时的引导文案。 */
+  empty: string;
 }
 
 const GROUPS: GroupDef[] = [
-  { key: "today", label: "今天" },
-  { key: "week", label: "本周" },
-  { key: "all", label: "全部未完成" },
-  { key: "done", label: "已完成" },
+  { key: "today", label: "今天", icon: "sun", empty: "今天没有到期的事。在上面记一条，写上「今天」就会出现在这里。" },
+  { key: "week", label: "本周", icon: "week", empty: "未来 7 天没有到期的事。" },
+  { key: "all", label: "全部未完成", icon: "list", empty: "所有事都做完了。" },
+  { key: "done", label: "已完成", icon: "checkCircle", empty: "完成的待办会收在这里。" },
 ];
+
+/** 列表标题下的日期，如「10月27日 周二」。 */
+function todayText(): string {
+  const now = new Date();
+  const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+  return `${now.getMonth() + 1}月${now.getDate()}日 ${weekdays[now.getDay()]}`;
+}
 
 interface TodoViewProps {
   /** 点击来源笔记：切到笔记视图并打开该笔记。 */
   onOpenNote: (id: string) => void;
+  /** 侧栏里留给分组与标签的容器。 */
+  navHost: HTMLElement | null;
 }
 
 /**
@@ -37,7 +52,7 @@ interface TodoViewProps {
  * 所有读写都经 TodoService（Go 侧再走 internal/store 与 internal/index），
  * 前端不拼路径、不解析文件。
  */
-export function TodoView({ onOpenNote }: TodoViewProps) {
+export function TodoView({ onOpenNote, navHost }: TodoViewProps) {
   const [group, setGroup] = useState<Group>("today");
   const [tag, setTag] = useState("");
   const [query, setQuery] = useState("");
@@ -59,6 +74,7 @@ export function TodoView({ onOpenNote }: TodoViewProps) {
   const [preview, setPreview] = useState<{ title: string; due: string; tags: string[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedIdRef = useRef<string | null>(null);
@@ -235,113 +251,171 @@ export function TodoView({ onOpenNote }: TodoViewProps) {
     [refreshAll],
   );
 
-  const groupLabel = useMemo(() => GROUPS.find((g) => g.key === group)?.label ?? "", [group]);
+  const groupDef = useMemo(() => GROUPS.find((g) => g.key === group) ?? GROUPS[0], [group]);
+
+  // ⌘N 聚焦录入框，⌘F 聚焦搜索。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === "n") {
+        e.preventDefault();
+        inputRef.current?.focus();
+      } else if (key === "f") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const nav = (
+    <nav className="todo-nav">
+      {GROUPS.map((g) => (
+        <button
+          key={g.key}
+          type="button"
+          className={`nav-item${group === g.key ? " is-active" : ""}`}
+          onClick={() => {
+            setGroup(g.key);
+            setError(null);
+          }}
+        >
+          <Icon name={g.icon} />
+          <span className="nav-item-label">{g.label}</span>
+          {g.key !== "done" && counts[g.key] > 0 && (
+            <span className="nav-item-count">{counts[g.key]}</span>
+          )}
+        </button>
+      ))}
+
+      <div className="sidebar-section">
+        <span>标签</span>
+      </div>
+      {tags.length === 0 && <div className="nav-empty">录入时写 #标签 就会出现在这里</div>}
+      {tags.map((t) => (
+        <button
+          key={t.name}
+          type="button"
+          className={`nav-item is-tag${tag === t.name ? " is-active" : ""}`}
+          title={tag === t.name ? "再点一次取消筛选" : `只看 #${t.name}`}
+          onClick={() => setTag((prev) => (prev === t.name ? "" : t.name))}
+        >
+          <span className="tag-hash">#</span>
+          <span className="nav-item-label">{t.name}</span>
+          <span className="nav-item-count">{t.count}</span>
+        </button>
+      ))}
+    </nav>
+  );
+
+  const hasPreview = !!preview && (preview.due !== "" || preview.tags.length > 0);
 
   return (
     <div className="todo-view">
-      <nav className="todo-nav">
-        <div className="todo-nav-groups">
-          {GROUPS.map((g) => (
-            <button
-              key={g.key}
-              type="button"
-              className={`todo-nav-item${group === g.key ? " is-active" : ""}`}
-              onClick={() => {
-                setGroup(g.key);
-                setError(null);
-              }}
-            >
-              <span className="todo-nav-label">{g.label}</span>
-              <span className="todo-nav-count">{counts[g.key]}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="todo-nav-section">标签</div>
-        <div className="todo-nav-tags">
-          {tags.length === 0 && <div className="todo-nav-empty">还没有标签</div>}
-          {tags.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              className={`todo-tag-chip${tag === t.name ? " is-active" : ""}`}
-              title={tag === t.name ? "再点一次取消筛选" : `只看 #${t.name}`}
-              onClick={() => setTag((prev) => (prev === t.name ? "" : t.name))}
-            >
-              #{t.name}
-              <span className="todo-tag-count">{t.count}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
+      {navHost && createPortal(nav, navHost)}
 
       <section className="todo-main">
-        <div className="todo-toolbar">
-          <div className="todo-quickadd">
+        <div className="toolbar">
+          <div className="toolbar-spacer" />
+          <label className="search">
+            <Icon name="search" size={14} />
+            <input
+              ref={searchRef}
+              value={query}
+              placeholder="搜索待办"
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setQuery("");
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+            {query && (
+              <button type="button" title="清除搜索" onClick={() => setQuery("")}>
+                <Icon name="close" size={12} />
+              </button>
+            )}
+          </label>
+        </div>
+
+        <div className="todo-scroll">
+          <header className="todo-head">
+            <h1>{groupDef.label}</h1>
+            <div className="todo-head-meta">
+              {group === "today" && <span>{todayText()}</span>}
+              <span>{loading ? "刷新中…" : `${list.length} 项`}</span>
+              {tag && (
+                <button type="button" className="filter-chip" onClick={() => setTag("")}>
+                  #{tag}
+                  <Icon name="close" size={11} />
+                </button>
+              )}
+            </div>
+          </header>
+
+          <div className={`composer${draft ? " has-text" : ""}`}>
+            <span className="composer-icon">
+              <Icon name="plus" />
+            </span>
             <input
               ref={inputRef}
-              className="todo-quickadd-input"
+              className="composer-input"
               value={draft}
-              placeholder="添加待办，如：明天下午三点 交周报 #工作"
+              placeholder="记一件事，如：明天下午三点 交周报 #工作"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   void create();
+                } else if (e.key === "Escape") {
+                  setDraft("");
                 }
               }}
             />
-            {preview && (preview.title || preview.due || preview.tags.length > 0) && (
-              <div className="todo-preview">
-                <span className="todo-preview-title">{preview.title || "（标题为空）"}</span>
-                {preview.due && <span className="todo-preview-due">{formatDue(preview.due)}</span>}
+            {draft.trim() && <kbd className="composer-enter">↵</kbd>}
+            {hasPreview && preview && (
+              <div className="composer-preview">
+                <span className="composer-preview-label">识别为</span>
+                {preview.due && (
+                  <span className="chip chip-due">
+                    <Icon name="calendar" size={12} />
+                    {formatDue(preview.due)}
+                  </span>
+                )}
                 {preview.tags.map((t) => (
-                  <span key={t} className="todo-preview-tag">
+                  <span key={t} className="chip">
                     #{t}
                   </span>
                 ))}
+                <span className="composer-preview-title">{preview.title || "（标题为空）"}</span>
               </div>
             )}
           </div>
-          <input
-            className="todo-search"
-            value={query}
-            placeholder="搜索标题或正文"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
 
-        <div className="todo-list-header">
-          <span>{groupLabel}</span>
-          {tag && (
-            <button type="button" className="todo-filter-chip" onClick={() => setTag("")}>
-              #{tag} ✕
-            </button>
-          )}
-          <span className="todo-list-count">{loading ? "刷新中…" : `${list.length} 条`}</span>
-        </div>
-
-        <div className="todo-list">
-          {list.length === 0 && !loading && (
-            <div className="todo-empty">
-              {query
-                ? "没有匹配的待办。"
-                : group === "done"
-                  ? "还没有已完成的待办。"
-                  : "这个分组是空的，在上面的输入框里记一条。"}
-            </div>
-          )}
-          {list.map((item) => (
-            <TodoRow
-              key={item.id}
-              item={item}
-              depth={0}
-              selectedId={selectedId}
-              onSelect={(id) => void openDetail(id)}
-              onChanged={() => void refreshAll()}
-              onError={setError}
-            />
-          ))}
+          <div className="todo-list">
+            {list.length === 0 && !loading && (
+              <div className="todo-empty">
+                {query ? `没有包含「${query}」的待办。` : groupDef.empty}
+              </div>
+            )}
+            {list.map((item) => (
+              <TodoRow
+                key={item.id}
+                item={item}
+                depth={0}
+                selectedId={selectedId}
+                onSelect={(id) => void openDetail(id)}
+                onChanged={() => void refreshAll()}
+                onError={setError}
+              />
+            ))}
+          </div>
         </div>
       </section>
 
@@ -359,7 +433,7 @@ export function TodoView({ onOpenNote }: TodoViewProps) {
       )}
 
       {error && (
-        <div className="todo-toast" onClick={() => setError(null)}>
+        <div className="toast" role="alert" onClick={() => setError(null)}>
           {error}
         </div>
       )}
@@ -427,20 +501,20 @@ function TodoRow({ item, depth, selectedId, onSelect, onChanged, onError }: Todo
     <>
       <div
         className={`todo-row${isSelected ? " is-selected" : ""}${statusClass(item.status)}`}
-        style={{ paddingLeft: 10 + depth * 18 }}
+        style={{ paddingLeft: 6 + depth * 26 }}
         onClick={() => onSelect(item.id)}
       >
         {children.length > 0 ? (
           <button
             type="button"
-            className="todo-caret"
+            className={`todo-caret${open ? " is-open" : ""}`}
             aria-label={open ? "折叠子任务" : "展开子任务"}
             onClick={(e) => {
               e.stopPropagation();
               setOpen((prev) => !prev);
             }}
           >
-            {open ? "▾" : "▸"}
+            <Icon name="chevron" size={12} />
           </button>
         ) : (
           <span className="todo-caret is-hidden" />
@@ -448,9 +522,10 @@ function TodoRow({ item, depth, selectedId, onSelect, onChanged, onError }: Todo
 
         <input
           type="checkbox"
-          className="todo-check"
+          className="check"
           checked={closed}
           disabled={busy}
+          aria-label={closed ? "标为未完成" : "标为完成"}
           onClick={(e) => e.stopPropagation()}
           onChange={() => void toggle()}
         />
@@ -459,23 +534,30 @@ function TodoRow({ item, depth, selectedId, onSelect, onChanged, onError }: Todo
           {item.title}
         </span>
 
-        {item.childTotal > 0 && (
-          <span className="todo-progress">
-            {item.childDone}/{item.childTotal}
-          </span>
-        )}
+        <span className="todo-meta">
+          {(item.tags ?? []).map((t) => (
+            <span key={t} className="todo-row-tag">
+              #{t}
+            </span>
+          ))}
 
-        {item.due && (
-          <span className={`todo-due${item.overdue ? " is-overdue" : ""}`}>
-            {formatDue(item.due)}
-          </span>
-        )}
+          {((item.links?.length ?? 0) > 0 || (item.attachments?.length ?? 0) > 0) && (
+            <Icon name="paperclip" size={13} className="todo-meta-icon" />
+          )}
 
-        {(item.tags ?? []).map((t) => (
-          <span key={t} className="todo-row-tag">
-            #{t}
-          </span>
-        ))}
+          {item.childTotal > 0 && (
+            <span className="todo-progress" title="子任务完成情况">
+              <Icon name="checkCircle" size={13} />
+              {item.childDone}/{item.childTotal}
+            </span>
+          )}
+
+          {item.due && (
+            <span className={`todo-due${item.overdue ? " is-overdue" : ""}`}>
+              {formatDue(item.due)}
+            </span>
+          )}
+        </span>
       </div>
 
       {open &&
@@ -494,18 +576,18 @@ function TodoRow({ item, depth, selectedId, onSelect, onChanged, onError }: Todo
       {confirm && (
         <div className="modal-mask" onClick={() => setConfirm(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>完成父任务</h2>
+            <h2>子任务还没做完</h2>
             <p>
-              「{item.title}」还有 {confirm.openChildren} 条未完成的子任务，要一起完成吗？
+              「{item.title}」下还有 {confirm.openChildren} 条子任务未完成，要一起标为完成吗？
             </p>
             <div className="modal-buttons">
-              <button type="button" onClick={() => setConfirm(null)}>
+              <button type="button" className="btn" onClick={() => setConfirm(null)}>
                 取消
               </button>
-              <button type="button" onClick={() => void finish(false)}>
+              <button type="button" className="btn" onClick={() => void finish(false)}>
                 只完成父任务
               </button>
-              <button type="button" className="is-primary" onClick={() => void finish(true)}>
+              <button type="button" className="btn btn-primary" onClick={() => void finish(true)}>
                 一起完成
               </button>
             </div>

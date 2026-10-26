@@ -11,6 +11,8 @@ interface EditorProps {
   initialBody: string;
   /** 正文变化回调，参数是 Markdown 原文。 */
   onChange: (body: string) => void;
+  /** 空文档时的提示文字。 */
+  placeholder?: string;
 }
 
 /**
@@ -20,7 +22,12 @@ interface EditorProps {
  * markdownUpdated 把内容转回 Markdown。仅在内容与初始值不同才回调，
  * 避免“只是打开笔记”就被序列化改写并写回文件。
  */
-export function Editor({ noteId, initialBody, onChange }: EditorProps) {
+export function Editor({
+  noteId,
+  initialBody,
+  onChange,
+  placeholder = "开始写…输入 / 插入标题、列表、代码块",
+}: EditorProps) {
   const [host, setHost] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -40,7 +47,13 @@ export function Editor({ noteId, initialBody, onChange }: EditorProps) {
       host.addEventListener(name, markInteracted, true);
     }
 
-    const crepe = new Crepe({ root: host, defaultValue: initial });
+    const crepe = new Crepe({
+      root: host,
+      defaultValue: initial,
+      featureConfigs: {
+        [Crepe.Feature.Placeholder]: { text: placeholder },
+      },
+    });
     let lastMarkdown = initial;
 
     crepe.on((listener) => {
