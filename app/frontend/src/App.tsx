@@ -15,6 +15,7 @@ import { Tree } from "./components/Tree";
 import { Editor } from "./components/Editor";
 import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
+import { ReportView } from "./components/ReportView";
 import { Icon } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
 import { loadMainView, saveMainView } from "./lib/todo";
@@ -580,6 +581,9 @@ export default function App() {
       } else if (key === "2") {
         e.preventDefault();
         switchView("todo");
+      } else if (key === "3") {
+        e.preventDefault();
+        switchView("report");
       } else if (key === "n" && view === "notes" && workspace) {
         e.preventDefault();
         void createNote("");
@@ -709,6 +713,15 @@ export default function App() {
             <Icon name="todo" />
             待办
           </button>
+          <button
+            type="button"
+            className={`view-switch-btn${view === "report" ? " is-active" : ""}`}
+            title="周报（⌘3）"
+            onClick={() => switchView("report")}
+          >
+            <Icon name="report" />
+            周报
+          </button>
         </nav>
 
         {view === "notes" ? (
@@ -747,6 +760,8 @@ export default function App() {
               <div className="tree" />
             )}
           </>
+        ) : view === "report" ? (
+          <div className="sidebar-slot" />
         ) : (
           <div className="sidebar-slot" ref={setTodoNavHost} />
         )}
@@ -783,6 +798,18 @@ export default function App() {
           <main className="content">
             <div className="toolbar" />
             {updateBannerEl}
+            {welcome}
+          </main>
+        )
+      ) : view === "report" ? (
+        workspace ? (
+          <div className="report-shell">
+            {shortcutBanners}
+            <ReportView key={workspace} />
+          </div>
+        ) : (
+          <main className="content">
+            <div className="toolbar" />
             {welcome}
           </main>
         )

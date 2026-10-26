@@ -97,6 +97,86 @@ export interface NoteData {
 }
 
 /**
+ * PersonData 是一名组员的前端结构。
+ */
+export interface PersonData {
+    /**
+     * ID 是组员标识。
+     */
+    "id": string;
+
+    /**
+     * Name 是姓名。
+     */
+    "name": string;
+
+    /**
+     * Aliases 是别名列表。
+     */
+    "aliases": string[] | null;
+
+    /**
+     * Group 是当前所属组。
+     */
+    "group": string;
+
+    /**
+     * ProductLines 是当前产品线。
+     */
+    "productLines": string[] | null;
+
+    /**
+     * Role 是角色：member / lead。
+     */
+    "role": string;
+
+    /**
+     * Active 表示是否在职。
+     */
+    "active": boolean;
+
+    /**
+     * Created 是创建时间（RFC3339）。
+     */
+    "created": string;
+
+    /**
+     * Updated 是最后更新时间（RFC3339）。
+     */
+    "updated": string;
+}
+
+/**
+ * PersonInput 是新增 / 修改组员时传入的字段。
+ */
+export interface PersonInput {
+    /**
+     * Name 是姓名。
+     */
+    "name": string;
+
+    /**
+     * Aliases 是别名列表。
+     */
+    "aliases": string[] | null;
+
+    /**
+     * Group 是所属组。
+     */
+    "group": string;
+
+    /**
+     * ProductLines 是产品线。
+     */
+    "productLines": string[] | null;
+
+    /**
+     * Role 是角色：member / lead，空视为 member。
+     */
+    "role": string;
+}
+
+/**
  * QuickAddPreview 是快速录入的实时预览结果。
  */
 export interface QuickAddPreview {
@@ -152,6 +232,287 @@ export interface QuickTodoSaved {
 }
 
 /**
+ * ReportCounts 是提交状态的汇总计数。
+ */
+export interface ReportCounts {
+    /**
+     * Expected 是应交人数。
+     */
+    "expected": number;
+
+    /**
+     * Submitted 是按时已交人数。
+     */
+    "submitted": number;
+
+    /**
+     * Late 是迟交人数。
+     */
+    "late": number;
+
+    /**
+     * Missing 是未交人数。
+     */
+    "missing": number;
+
+    /**
+     * Extra 是有提交但不在应交名单里的人数。
+     */
+    "extra": number;
+
+    /**
+     * Total 是名单与名单外的总数。
+     */
+    "total": number;
+}
+
+/**
+ * ReportData 是一份周报的原文与元数据。
+ */
+export interface ReportData {
+    /**
+     * Person 是组员 ID。
+     */
+    "person": string;
+
+    /**
+     * Name 是提交时姓名快照。
+     */
+    "name": string;
+
+    /**
+     * Week 是 ISO 周编号。
+     */
+    "week": string;
+
+    /**
+     * Level 是层级：member / lead。
+     */
+    "level": string;
+
+    /**
+     * Group 是提交时所属组快照。
+     */
+    "group": string;
+
+    /**
+     * ProductLines 是提交时产品线快照。
+     */
+    "productLines": string[] | null;
+
+    /**
+     * Source 是来源：paste / cli。
+     */
+    "source": string;
+
+    /**
+     * FirstSubmittedAt 是首次提交时间（RFC3339）。
+     */
+    "firstSubmittedAt": string;
+
+    /**
+     * SubmittedAt 是最近一次提交时间（RFC3339）。
+     */
+    "submittedAt": string;
+
+    /**
+     * HeaderDate 是原文头行里的日期，可为空。
+     */
+    "headerDate": string;
+
+    /**
+     * Body 是原文（只去首尾空行）。
+     */
+    "body": string;
+}
+
+/**
+ * ReportPerson 是提交状态里的一个人。
+ */
+export interface ReportPerson {
+    /**
+     * PersonID 是组员 ID。
+     */
+    "personId": string;
+
+    /**
+     * Name 是姓名。
+     */
+    "name": string;
+
+    /**
+     * Group 是该周周一时所属组。
+     */
+    "group": string;
+
+    /**
+     * ProductLines 是该周周一时所属产品线。
+     */
+    "productLines": string[] | null;
+
+    /**
+     * Role 是角色：member / lead。
+     */
+    "role": string;
+
+    /**
+     * Active 表示是否在职。
+     */
+    "active": boolean;
+
+    /**
+     * Status 是 submitted / late / missing。
+     */
+    "status": string;
+
+    /**
+     * FirstSubmittedAt 是首次提交时间（RFC3339），missing 时为空。
+     */
+    "firstSubmittedAt": string;
+
+    /**
+     * SubmittedAt 是最近一次提交时间（RFC3339），missing 时为空。
+     */
+    "submittedAt": string;
+}
+
+/**
+ * ReportPreview 是一份粘贴文本的识别预览结果。
+ */
+export interface ReportPreview {
+    /**
+     * HasHeader 表示该段是否以【周报】头行开头。
+     */
+    "hasHeader": boolean;
+
+    /**
+     * Name 是头行里的姓名。
+     */
+    "name": string;
+
+    /**
+     * Date 是头行里的日期。
+     */
+    "date": string;
+
+    /**
+     * DateInvalid 表示头行日期无法解析。
+     */
+    "dateInvalid": boolean;
+
+    /**
+     * Week 是识别出的 ISO 周。
+     */
+    "week": string;
+
+    /**
+     * Level 是层级。
+     */
+    "level": string;
+
+    /**
+     * PersonID 是匹配到的人员 ID，为空表示未匹配或需用户选择。
+     */
+    "personId": string;
+
+    /**
+     * PersonName 是匹配到的人员姓名。
+     */
+    "personName": string;
+
+    /**
+     * Overwrite 表示是否会覆盖已有提交。
+     */
+    "overwrite": boolean;
+
+    /**
+     * Late 表示现在提交是否会迟交。
+     */
+    "late": boolean;
+
+    /**
+     * Duplicate 表示同一次粘贴里同一 person+week+level 的非最后一份。
+     */
+    "duplicate": boolean;
+
+    /**
+     * Reason 是无法识别的原因。
+     */
+    "reason": string;
+
+    /**
+     * StartLine 与 EndLine 是该段在原文里的起止行号。
+     */
+    "startLine": number;
+    "endLine": number;
+
+    /**
+     * Text 是该段原文。
+     */
+    "text": string;
+}
+
+/**
+ * ReportStatusData 是一次提交状态统计。
+ */
+export interface ReportStatusData {
+    /**
+     * Week 是 ISO 周编号。
+     */
+    "week": string;
+
+    /**
+     * Level 是层级：member / lead。
+     */
+    "level": string;
+
+    /**
+     * Counts 是汇总计数。
+     */
+    "counts": ReportCounts;
+
+    /**
+     * Entries 是应交名单及状态。
+     */
+    "entries": ReportPerson[] | null;
+
+    /**
+     * Extra 是有提交但不在应交名单里的人。
+     */
+    "extra": ReportPerson[] | null;
+}
+
+/**
+ * ReportWeek 是一周的信息。
+ */
+export interface ReportWeek {
+    /**
+     * Week 是 ISO 周编号，形如 2026-W44。
+     */
+    "week": string;
+
+    /**
+     * Start 是该周周一（YYYY-MM-DD）。
+     */
+    "start": string;
+
+    /**
+     * End 是该周周日（YYYY-MM-DD）。
+     */
+    "end": string;
+
+    /**
+     * ReportDay 是周报日（1=周一 … 7=周日）。
+     */
+    "reportDay": number;
+
+    /**
+     * IsCurrent 表示是否是当前周。
+     */
+    "isCurrent": boolean;
+}
+
+/**
  * ShortcutStatus 是随手记全局快捷键的状态，暴露给前端与托盘。
  */
 export interface ShortcutStatus {
@@ -180,6 +541,31 @@ export interface ShortcutStatus {
      * 快捷键不合法、已临时改用默认值。Registered 为 true 时也可能非空。
      */
     "notice": string;
+}
+
+/**
+ * SubmitItem 是一次提交的输入。
+ */
+export interface SubmitItem {
+    /**
+     * Text 是周报原文。
+     */
+    "text": string;
+
+    /**
+     * Person 是组员 ID 或姓名/别名。
+     */
+    "person": string;
+
+    /**
+     * Week 是 ISO 周编号。
+     */
+    "week": string;
+
+    /**
+     * Level 是层级：member / lead。
+     */
+    "level": string;
 }
 
 /**

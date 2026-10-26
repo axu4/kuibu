@@ -166,13 +166,25 @@ func (s *WorkspaceService) emit(name string, data any) {
 
 // handleWatchEvent 把一次文件变化转换成前端事件。
 //
-// 抽成纯函数便于单测：只有对应 ID 列表非空时才发事件，笔记与待办互不混入。
+// 抽成纯函数便于单测：只有对应 ID 列表非空时才发事件，笔记、待办与周报
+// 互不混入；组员或周报任一变化都发 report:changed（前端据此整体刷新周报视图）。
 func handleWatchEvent(e index.Event, emit func(name string, data any)) {
 	if len(e.IDs) > 0 {
 		emit(changedEvent, ChangeEvent{IDs: e.IDs})
 	}
 	if len(e.TodoIDs) > 0 {
 		emit(todoChangedEvent, TodoChangeEvent{IDs: e.TodoIDs})
+	}
+	if len(e.PeopleIDs) > 0 || len(e.ReportIDs) > 0 {
+		people := e.PeopleIDs
+		if people == nil {
+			people = []string{}
+		}
+		reports := e.ReportIDs
+		if reports == nil {
+			reports = []string{}
+		}
+		emit(reportChangedEvent, ReportChangeEvent{PeopleIDs: people, ReportIDs: reports})
 	}
 }
 
