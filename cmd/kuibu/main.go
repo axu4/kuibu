@@ -6,10 +6,12 @@ import (
 	"os"
 
 	"github.com/axu4/kuibu/internal/cli"
+	kuibuversion "github.com/axu4/kuibu/internal/version"
 )
 
-// version 是当前版本号，与 cli.Version 保持一致。
-const version = cli.Version
+// version 是当前版本号，来自 internal/version.Version。
+// 发布时用 -ldflags "-X github.com/axu4/kuibu/internal/version.Version=x.y.z" 注入。
+var version = kuibuversion.Version
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
