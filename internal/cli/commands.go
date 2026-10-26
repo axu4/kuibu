@@ -200,7 +200,11 @@ func runSearch(ctx context.Context, args []string, common *commonFlags, stdout, 
 		return nil
 	}
 	for _, h := range hits {
-		fmt.Fprintf(stdout, "%s  %s\n    %s\n", h.ID, h.Title, strings.TrimSpace(h.Snippet))
+		kind := ""
+		if h.Type == "report" {
+			kind = "[周报] "
+		}
+		fmt.Fprintf(stdout, "%s%s  %s\n    %s\n", kind, h.ID, h.Title, strings.TrimSpace(h.Snippet))
 	}
 	return nil
 }

@@ -16,6 +16,10 @@ const (
 	notesDirName = "notes"
 	// todosDirName 是待办目录名，待办平铺存放于其中。
 	todosDirName = "todos"
+	// peopleDirName 是组员目录名，组员平铺存放于其中。
+	peopleDirName = "people"
+	// reportsDirName 是周报目录名，按周/层级归档。
+	reportsDirName = "reports"
 	// assetsDirName 是资源目录名，图片等附件存放于此。
 	assetsDirName = "assets"
 	// metaDirName 是元数据目录名，存放配置与索引。
@@ -29,6 +33,8 @@ const (
 // config 是 .kuibu/config.json 的内容。
 type config struct {
 	Version int `json:"version"`
+	// ReportWeekday 是周报日（1=周一…7=周日），缺省或 0 视为 4（周四）。
+	ReportWeekday int `json:"reportWeekday,omitempty"`
 }
 
 // Workspace 代表一个已打开的工作台目录。
@@ -76,7 +82,7 @@ func Init(dir string) (*Workspace, error) {
 		return nil, fmt.Errorf("检查工作台目录失败: %w", statErr)
 	}
 
-	for _, name := range []string{notesDirName, todosDirName, assetsDirName, metaDirName} {
+	for _, name := range []string{notesDirName, todosDirName, peopleDirName, reportsDirName, assetsDirName, metaDirName} {
 		if err := os.MkdirAll(filepath.Join(abs, name), 0o755); err != nil {
 			return nil, fmt.Errorf("创建工作台子目录 %s 失败: %w", name, err)
 		}
@@ -151,6 +157,16 @@ func (w *Workspace) TodosDir() string {
 	return filepath.Join(w.dir, todosDirName)
 }
 
+// PeopleDir 返回组员目录的绝对路径。
+func (w *Workspace) PeopleDir() string {
+	return filepath.Join(w.dir, peopleDirName)
+}
+
+// ReportsDir 返回周报目录的绝对路径。
+func (w *Workspace) ReportsDir() string {
+	return filepath.Join(w.dir, reportsDirName)
+}
+
 // AssetsDir 返回资源目录的绝对路径。
 func (w *Workspace) AssetsDir() string {
 	return filepath.Join(w.dir, assetsDirName)
@@ -222,6 +238,61 @@ func (w *Workspace) ListWorkspaceTodos() ([]string, error) {
 			continue
 		}
 		paths = append(paths, filepath.Join(w.TodosDir(), e.Name()))
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// ListWorkspacePeople 返回组员目录下所有 .md 文件的绝对路径，按文件名排序。
+// 老工作台可能还没有 people/ 目录，此时视为空列表而不是报错。
+func (w *Workspace) ListWorkspacePeople() ([]string, error) {
+	entries, err := os.ReadDir(w.PeopleDir())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("读取组员目录失败: %w", err)
+	}
+	var paths []string
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || !strings.HasSuffix(e.Name(), noteExt) {
+			continue
+		}
+		paths = append(paths, filepath.Join(w.PeopleDir(), e.Name()))
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// ListWorkspaceReports 返回 reports/ 下所有周报 .md 文件的绝对路径（递归），
+// 按路径排序；.history/ 与隐藏文件不参与。老工作台可能还没有 reports/ 目录，
+// 此时视为空列表而不是报错。
+func (w *Workspace) ListWorkspaceReports() ([]string, error) {
+	var paths []string
+	err := filepath.WalkDir(w.ReportsDir(), func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == historyDirName || strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), ".") || !strings.HasSuffix(d.Name(), noteExt) {
+			return nil
+		}
+		paths = append(paths, filepath.Clean(path))
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("读取周报目录失败: %w", err)
 	}
 	sort.Strings(paths)
 	return paths, nil

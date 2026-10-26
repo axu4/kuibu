@@ -41,6 +41,17 @@ const usageText = `用法:
   todo attach|detach <id> <file>         管理待办附件
   todo mv <id> [--parent <id>|--root]    移动待办
   todo rm <id> [-r|--recursive]          删除待办
+  person add <姓名> [--alias a]...       新增组员
+  person list [--group g] [--role r]     列出组员
+  person show <id|姓名>                  查看组员
+  person edit <id|姓名> ...              修改组员
+  person move <id|姓名> --group g        转组
+  report add [--person p] [--week W]     归档周报
+  report list [--week W] [--search 词]   列出周报
+  report show <week> <person>            查看周报
+  report status [--week W] [--level L]   提交状态
+  report rm <week> <person>              删除周报
+  report config [--weekday N]            查看/修改周报日
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
   asset add <file>                       归档资源并输出相对路径
@@ -138,6 +149,10 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runNote(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "todo":
 		err = runTodo(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "person":
+		err = runPerson(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "report":
+		err = runReport(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "tree":
 		err = runTree(cmdArgs, &common, stdout, stderr, env)
 	case "search":
@@ -310,6 +325,10 @@ func classify(err error) (string, int) {
 		return "HAS_CHILDREN", Error
 	case errors.Is(err, store.ErrInvalid):
 		return "INVALID", Error
+	case errors.Is(err, store.ErrConflict):
+		return "CONFLICT", Error
+	case errors.Is(err, store.ErrAmbiguousPerson):
+		return "AMBIGUOUS_PERSON", Error
 	default:
 		return "INTERNAL", Error
 	}

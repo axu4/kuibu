@@ -46,6 +46,8 @@ type Hit struct {
 	ID string `json:"id"`
 	// Title 是命中的笔记标题。
 	Title string `json:"title"`
+	// Type 是结果类型：note / todo / report，空表示未标注。
+	Type string `json:"type,omitempty"`
 	// Snippet 是带少量上下文的命中片段，命中词用 [] 包裹。
 	Snippet string `json:"snippet"`
 }
@@ -176,11 +178,12 @@ func parseTime(s string) time.Time {
 	return time.Time{}
 }
 
-// Search 在标题与正文中检索，返回最多 limit 条命中。
+// Search 在笔记标题/正文与周报姓名/正文中检索，返回最多 limit 条命中，结果用
+// Type 标注类型（note / report）。
 //
 // 查询长度为 3 个及以上字符时使用 FTS5 trigram 索引（支持中文子串），
 // 少于 3 个字符时 trigram 无法匹配，回退为对 title/body 的 LIKE 检索。
-// limit <= 0 时使用默认值 20。结果按相关度、更新时间倒序排列。
+// limit <= 0 时使用默认值 20。
 func (ix *Index) Search(query string, limit int) ([]Hit, error) {
 	q := strings.TrimSpace(query)
 	if q == "" {
@@ -190,6 +193,24 @@ func (ix *Index) Search(query string, limit int) ([]Hit, error) {
 		limit = 20
 	}
 
+	notes, err := ix.searchNotes(q, limit)
+	if err != nil {
+		return nil, err
+	}
+	reports, err := ix.SearchReports(q, limit)
+	if err != nil {
+		// 周报检索失败不阻塞笔记检索。
+		reports = nil
+	}
+	hits := append(notes, reports...)
+	if len(hits) > limit {
+		hits = hits[:limit]
+	}
+	return hits, nil
+}
+
+// searchNotes 只在笔记中检索，保持原有的 FTS/LIKE 回退逻辑。
+func (ix *Index) searchNotes(q string, limit int) ([]Hit, error) {
 	if utf8.RuneCountInString(q) >= 3 {
 		hits, err := ix.searchFTS(q, limit)
 		if err == nil {
@@ -227,6 +248,7 @@ func (ix *Index) searchFTS(q string, limit int) ([]Hit, error) {
 		hits = append(hits, Hit{
 			ID:      id,
 			Title:   title,
+			Type:    "note",
 			Snippet: pickSnippet(titleSnippet, bodySnippet, q),
 		})
 	}
@@ -260,6 +282,7 @@ func (ix *Index) searchLike(q string, limit int) ([]Hit, error) {
 		hits = append(hits, Hit{
 			ID:      id,
 			Title:   title,
+			Type:    "note",
 			Snippet: likeSnippet(body.String, q),
 		})
 	}
