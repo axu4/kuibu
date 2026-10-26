@@ -11,6 +11,7 @@ import (
 
 	"github.com/axu4/kuibu/internal/config"
 	"github.com/axu4/kuibu/internal/quicknote"
+	"github.com/axu4/kuibu/internal/store"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 )
@@ -84,6 +85,9 @@ type ShellService struct {
 
 	// workspace 用于取当前打开的工作台，不另开工作台实例。
 	workspace *WorkspaceService
+
+	// todo 用于随手记的待办模式保存，复用同一套与工作台/索引的交互。
+	todo *TodoService
 
 	// env / now 可在测试里替换，默认读真实环境与系统时间。
 	env func(string) string
@@ -373,6 +377,29 @@ func (s *ShellService) SaveQuickNote(text string) (QuickNoteSaved, error) {
 	saved := QuickNoteSaved{ID: note.ID, InboxID: inbox.ID, Title: note.Title}
 	if s.ui != nil {
 		s.ui.Emit(quickNoteSavedEvent, saved)
+		s.ui.CloseQuickNote()
+	}
+	return saved, nil
+}
+
+// SaveQuickTodo 把随手记内容按「待办模式」保存：第一行快速录入，其余行作正文。
+//
+// 保存成功后关闭小窗，并发 todo:changed，让主窗口的待办列表刷新。
+func (s *ShellService) SaveQuickTodo(text string) (QuickTodoSaved, error) {
+	if s.todo == nil {
+		return QuickTodoSaved{}, fmt.Errorf("待办服务不可用")
+	}
+	todo, err := s.todo.createQuickTodo(text)
+	if err != nil {
+		if errors.Is(err, store.ErrInvalid) {
+			return QuickTodoSaved{}, err
+		}
+		return QuickTodoSaved{}, fmt.Errorf("保存待办失败：%w", err)
+	}
+
+	saved := QuickTodoSaved{ID: todo.ID, Title: todo.Title}
+	if s.ui != nil {
+		s.ui.Emit(todoChangedEvent, TodoChangeEvent{IDs: []string{todo.ID}})
 		s.ui.CloseQuickNote()
 	}
 	return saved, nil

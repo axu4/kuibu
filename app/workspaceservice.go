@@ -22,6 +22,9 @@ import (
 // changedEvent 是外部文件变化时发给前端的事件名。
 const changedEvent = "workspace:changed"
 
+// todoChangedEvent 是待办文件变化时发给前端的事件名。
+const todoChangedEvent = "todo:changed"
+
 // assetPrefix 是工作台图片资源在前端的 URL 前缀。
 const assetPrefix = "/workspace-assets/"
 
@@ -70,6 +73,12 @@ type WorkspaceInfo struct {
 // ChangeEvent 是 workspace:changed 事件的数据。
 type ChangeEvent struct {
 	// IDs 是发生变化的笔记 ID 列表。
+	IDs []string `json:"ids"`
+}
+
+// TodoChangeEvent 是 todo:changed 事件的数据。
+type TodoChangeEvent struct {
+	// IDs 是发生变化的待办 ID 列表。
 	IDs []string `json:"ids"`
 }
 
@@ -132,6 +141,39 @@ func (s *WorkspaceService) workspace() *store.Workspace {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.ws
+}
+
+// index 返回当前工作台的索引，未打开时为 nil。
+//
+// 仅供同模块的 TodoService 使用，复用同一个索引实例，不另开数据库。
+func (s *WorkspaceService) index() *index.Index {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.idx
+}
+
+// emit 向前端发事件；app 尚未注入时安全忽略。
+func (s *WorkspaceService) emit(name string, data any) {
+	if s.app == nil {
+		return
+	}
+	if data == nil {
+		s.app.Event.Emit(name)
+		return
+	}
+	s.app.Event.Emit(name, data)
+}
+
+// handleWatchEvent 把一次文件变化转换成前端事件。
+//
+// 抽成纯函数便于单测：只有对应 ID 列表非空时才发事件，笔记与待办互不混入。
+func handleWatchEvent(e index.Event, emit func(name string, data any)) {
+	if len(e.IDs) > 0 {
+		emit(changedEvent, ChangeEvent{IDs: e.IDs})
+	}
+	if len(e.TodoIDs) > 0 {
+		emit(todoChangedEvent, TodoChangeEvent{IDs: e.TodoIDs})
+	}
 }
 
 // Current 返回当前工作台路径，未打开时为空字符串。
@@ -341,9 +383,7 @@ func (s *WorkspaceService) open(dir string) error {
 	go func() {
 		defer close(done)
 		err := index.Watch(ctx, ws, idx, func(e index.Event) {
-			if s.app != nil && len(e.IDs) > 0 {
-				s.app.Event.Emit(changedEvent, ChangeEvent{IDs: e.IDs})
-			}
+			handleWatchEvent(e, s.emit)
 		})
 		if err != nil && ctx.Err() == nil {
 			log.Printf("kuibu: 监听工作台失败: %v", err)

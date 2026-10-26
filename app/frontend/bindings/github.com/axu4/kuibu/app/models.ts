@@ -52,6 +52,26 @@ export interface NoteData {
 }
 
 /**
+ * QuickAddPreview 是快速录入的实时预览结果。
+ */
+export interface QuickAddPreview {
+    /**
+     * Title 是解析后的标题。
+     */
+    "title": string;
+
+    /**
+     * Due 是解析出的截止日期字符串，可空。
+     */
+    "due": string;
+
+    /**
+     * Tags 是解析出的标签。
+     */
+    "tags": string[] | null;
+}
+
+/**
  * QuickNoteSaved 是 quicknote:saved 事件的数据。
  */
 export interface QuickNoteSaved {
@@ -67,6 +87,21 @@ export interface QuickNoteSaved {
 
     /**
      * Title 是新笔记标题。
+     */
+    "title": string;
+}
+
+/**
+ * QuickTodoSaved 是随手记待办模式保存成功后的结果。
+ */
+export interface QuickTodoSaved {
+    /**
+     * ID 是新建待办的 ID。
+     */
+    "id": string;
+
+    /**
+     * Title 是待办标题。
      */
     "title": string;
 }
@@ -100,6 +135,176 @@ export interface ShortcutStatus {
      * 快捷键不合法、已临时改用默认值。Registered 为 true 时也可能非空。
      */
     "notice": string;
+}
+
+/**
+ * TodoAttachment 是待办附件的前端结构。
+ */
+export interface TodoAttachment {
+    /**
+     * Path 是相对待办文件的资源路径，形如 ../assets/xxx。
+     */
+    "path": string;
+
+    /**
+     * Name 是显示用的文件名。
+     */
+    "name": string;
+}
+
+/**
+ * TodoItem 是给前端的待办结构，元数据来自索引，正文与子任务按需补齐。
+ */
+export interface TodoItem {
+    /**
+     * ID 是待办标识。
+     */
+    "id": string;
+
+    /**
+     * Title 是标题。
+     */
+    "title": string;
+
+    /**
+     * Status 是状态：todo/doing/done/canceled。
+     */
+    "status": string;
+
+    /**
+     * Due 是截止日期字符串（"2026-10-30" 或 "2026-10-30 15:00"），可空。
+     */
+    "due": string;
+
+    /**
+     * DueAt 是截止时刻（RFC3339），可空。
+     */
+    "dueAt": string;
+
+    /**
+     * DoneAt 是完成时刻（RFC3339），未完成时为空。
+     */
+    "doneAt": string;
+
+    /**
+     * Overdue 表示未完成且已过截止时刻。
+     */
+    "overdue": boolean;
+
+    /**
+     * Tags 是标签列表。
+     */
+    "tags": string[] | null;
+
+    /**
+     * Parent 是父待办 ID，空字符串表示顶层。
+     */
+    "parent": string;
+
+    /**
+     * Order 是同级排序序号。
+     */
+    "order": number;
+
+    /**
+     * Body 是详情 Markdown，列表接口返回空字符串。
+     */
+    "body": string;
+
+    /**
+     * Links 是链接列表。
+     */
+    "links": TodoLink[] | null;
+
+    /**
+     * Attachments 是附件列表。
+     */
+    "attachments": TodoAttachment[] | null;
+
+    /**
+     * Source 是来源笔记 ID，可空。
+     */
+    "source": string;
+
+    /**
+     * SourceTitle 是来源笔记标题，仅在 Get 中填充。
+     */
+    "sourceTitle": string;
+
+    /**
+     * Children 是子任务（仅列表的顶层项与 Get 填充）。
+     */
+    "children": TodoItem[] | null;
+
+    /**
+     * ChildDone 是已完成的直接子任务数。
+     */
+    "childDone": number;
+
+    /**
+     * ChildTotal 是直接子任务总数。
+     */
+    "childTotal": number;
+
+    /**
+     * Created 是创建时刻（RFC3339）。
+     */
+    "created": string;
+
+    /**
+     * Updated 是最后更新时刻（RFC3339）。
+     */
+    "updated": string;
+}
+
+/**
+ * TodoLink 是待办链接的前端结构。
+ */
+export interface TodoLink {
+    /**
+     * URL 是链接地址。
+     */
+    "url": string;
+
+    /**
+     * Title 是链接标题，可为空。
+     */
+    "title": string;
+}
+
+/**
+ * TodoListFilter 是待办列表的过滤条件。
+ */
+export interface TodoListFilter {
+    /**
+     * View 是视图：today/week/all/done，空等同 all。
+     */
+    "view": string;
+
+    /**
+     * Tag 是标签筛选，空表示不过滤。
+     */
+    "tag": string;
+
+    /**
+     * Query 是按标题/正文的检索词，空表示不过滤。
+     */
+    "query": string;
+}
+
+/**
+ * TodoTag 是标签及其未完成数量。
+ */
+export interface TodoTag {
+    /**
+     * Name 是标签名。
+     */
+    "name": string;
+
+    /**
+     * Count 是带该标签的未完成待办数。
+     */
+    "count": number;
 }
 
 /**

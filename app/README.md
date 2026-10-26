@@ -1,8 +1,9 @@
 # app/ —— 跬步桌面外壳
 
 Wails v3（v3.0.0 GA）+ React 18 + TypeScript + Vite 8。
-里程碑 1：左侧大纲树 + 右侧 Markdown 编辑。里程碑 2 A 线：菜单栏托盘、关窗不退出、
-全局快捷键（默认 ⌃⌥N）、随手记小窗、设置面板。
+里程碑 1：左侧大纲树 + 右侧 Markdown 编辑。里程碑 2：菜单栏托盘、关窗不退出、
+全局快捷键（默认 ⌃⌥N）、随手记小窗（笔记 / 待办两种模式）、设置面板，以及
+待办界面（分组列表 + 详情面板，轻量版飞书任务）。
 
 ## 运行与构建
 
@@ -33,8 +34,14 @@ Go 侧：
 - `main.go`：Wails 应用入口，创建服务、主窗口与托盘；`ShouldQuit` 里置位 `quitting` 放行真正退出。
 - `workspaceservice.go`：`WorkspaceService`（工作台定位、树的增删改查、正文保存、
   `/workspace-assets/` 静态资源中间件、外部变化事件），另有包内方法 `workspace()`
-  给 ShellService 复用当前工作台实例。
-- `shellservice.go`：`ShellService`（快捷键状态/修改/恢复默认、随手记保存、窗口控制）。
+  与 `index()` 给 ShellService / TodoService 复用当前工作台与索引实例；
+  `handleWatchEvent` 是文件变化的纯函数分发（笔记 → `workspace:changed`，
+  待办 → `todo:changed`）。
+- `todoservice.go`：`TodoService`（待办列表/详情/状态/截止/标签/正文/子任务/链接/
+  附件/移动/删除，快速录入预览，原生文件选择与打开文件/链接）。定时器 `now` 与
+  `openFile`/`openURL`/`pickFiles` 可注入，便于单测。
+- `shellservice.go`：`ShellService`（快捷键状态/修改/恢复默认、随手记保存
+  —— 笔记模式 `SaveQuickNote` 与待办模式 `SaveQuickTodo`、窗口控制）。
 - `shell_ui.go`：`shellUI` 的桌面实现（托盘菜单、主窗口显隐、随手记小窗的按需创建与销毁）。
 - `shortcut.go`：快捷键纯函数（`normalizeShortcut`、`shortcutDisplay`、`trayNewNoteLabel`）。
 - `build/tray/tray-template.png`：菜单栏模板图标；`build/tray/gen/main.go` 是带
@@ -43,20 +50,27 @@ Go 侧：
 前端：
 
 - `frontend/src/main.tsx`：按 URL 选择渲染主窗口（`/`）还是随手记小窗（`/?view=quicknote`）。
-- `frontend/src/App.tsx`：布局与状态编排（树、当前笔记、保存状态、外部修改提示、
-  快捷键状态提示、设置面板入口）。
-- `frontend/src/QuickNote.tsx`：随手记小窗（textarea、⌘Enter 保存、Esc 关闭、草稿恢复）。
+- `frontend/src/App.tsx`：布局与状态编排（最左图标栏的笔记/待办视图切换、树、
+  当前笔记、保存状态、外部修改提示、快捷键状态提示、设置面板入口）。
+- `frontend/src/QuickNote.tsx`：随手记小窗（textarea、Tab 切换笔记/待办模式、
+  ⌘Enter 保存、Esc 关闭、草稿与模式恢复）。
+- `frontend/src/components/TodoView.tsx`：待办列表（分组、标签、快速录入与预览、
+  搜索、缩进子任务、完成父任务确认）。
+- `frontend/src/components/TodoDetail.tsx`：待办详情面板（标题、状态、截止、标签、
+  Milkdown 正文、子任务、链接、附件、来源笔记）。
 - `frontend/src/components/Settings.tsx`：设置面板（快捷键录制/保存/恢复默认/错误提示）。
 - `frontend/src/components/Tree.tsx`：可展开的大纲树、右键菜单、行内重命名。
 - `frontend/src/components/Editor.tsx`：Milkdown（Crepe）编辑器封装。
 - `frontend/src/lib/markdown.ts`：`../assets/xxx` ↔ `/workspace-assets/xxx` 的路径改写。
 - `frontend/src/lib/shortcut.ts`：Wails 加速键 ↔ macOS 符号 ↔ `KeyboardEvent` 的纯函数。
+- `frontend/src/lib/todo.ts`：待办视图的纯函数（截止日期展示、状态文案、链接显示、
+  主视图与随手记模式的本地存储、绑定错误整理）。
 
 ## 窗口
 
 | 窗口 | 创建方式 | 关闭行为 |
 | --- | --- | --- |
-| 主窗口「跬步」（1200×780） | 启动时创建，`Name: "main"` | `WindowClosing` 钩子里 `Hide()+Cancel()`，应用继续常驻；`quitting` 为真时放行 |
+| 主窗口「跬步」（1200×780） | 启动时创建，`Name: "main"`，`EnableFileDrop: true` | `WindowClosing` 钩子里 `Hide()+Cancel()`，应用继续常驻；`quitting` 为真时放行 |
 | 随手记小窗（560×300，居中浮动、跨 Space、可盖全屏） | 每次按快捷键 / 托盘「新建随手记」时按需创建，`Name: "quicknote"`，`URL: "/?view=quicknote"` | 真正 `Close()` 销毁（不隐藏常驻），从根本上避开 Wails Dock reopen 会 Show 所有隐藏窗口的默认行为 |
 
 ## 服务与事件
@@ -64,10 +78,17 @@ Go 侧：
 | Service | 主要方法 |
 | --- | --- |
 | `WorkspaceService` | `Current`、`ChooseWorkspace`、`Tree`、`Get`、`Create`、`SaveBody`、`Rename`、`Move`、`Delete` |
-| `ShellService` | `GetShortcutStatus`、`SetQuickNoteShortcut`、`ResetQuickNoteShortcut`、`SaveQuickNote`、`CloseQuickNote`、`OpenMainWindow` |
+| `ShellService` | `GetShortcutStatus`、`SetQuickNoteShortcut`、`ResetQuickNoteShortcut`、`SaveQuickNote`、`SaveQuickTodo`、`CloseQuickNote`、`OpenMainWindow` |
+| `TodoService` | `Preview`、`Create`、`List`、`Tags`、`Get`、`UpdateTitle`、`UpdateDue`、`UpdateTags`、`UpdateBody`、`SetStatus`、`OpenChildrenCount`、`AddLink`、`RemoveLink`、`OpenLink`、`ChooseAndAttach`、`AttachPaths`、`Detach`、`OpenAttachment`、`Move`、`Delete`、`HandleDroppedFiles` |
 
-Go → 前端事件：`workspace:changed`（`{ ids }`）、`quicknote:saved`（`{ id, inboxId, title }`）、
-`shell:open-settings`、`shell:shortcut-changed`（`ShortcutStatus`）、`quicknote:focus`。
+Go → 前端事件：`workspace:changed`（`{ ids }`，笔记）、`todo:changed`（`{ ids }`，待办）、
+`quicknote:saved`（`{ id, inboxId, title }`）、`shell:open-settings`、
+`shell:shortcut-changed`（`ShortcutStatus`）、`quicknote:focus`。
+
+文件拖放：主窗口开了 `EnableFileDrop`，前端在待办详情面板上写
+`data-todo-id`/`data-file-drop-target`；Wails 把 `DropTargetDetails.Attributes`
+原样带回 Go，`main.go` 的 `WindowFilesDropped` 监听器取 `data-todo-id` 交给
+`TodoService.HandleDroppedFiles` 归档到附件。
 
 快捷键配置字段 `quickNoteShortcut` 存在 `~/Library/Application Support/kuibu/config.json`，
 可用 `KUIBU_CONFIG_DIR` 覆盖目录；注册时机、Wails API 细节见 `docs/wails.md`。
@@ -81,6 +102,11 @@ Go → 前端事件：`workspace:changed`（`{ ids }`）、`quicknote:saved`（`
   （`{ ids: string[] }`）通知前端。自己保存也会触发事件，前端比较正文与本地是否一致来忽略。
 - 工作台图片：AssetServer 中间件把 `/workspace-assets/<file>` 映射到 `<工作台>/assets/<file>`，
   只接受不含路径分隔符的普通文件名，防止路径穿越。
+- 待办：读之前先 `idx.Sync`（50ms 内合并），写入后强制同步一次再读回，避免
+  「刚创建就打开」拿不到索引数据。打开附件只允许该待办附件列表里、且落在工作台
+  `assets/` 内的文件，其余一律拒绝。
+- 自己写入同样会触发 `todo:changed`/`workspace:changed`（监听没有「谁写的」概念），
+  前端只在本地没有未保存修改时才采用外部值，避免打断正在编辑的标题与正文。
 
 ## 编辑器选型：Milkdown（Crepe）而不是 TipTap / CodeMirror
 
@@ -101,4 +127,5 @@ Go → 前端事件：`workspace:changed`（`{ ids }`）、`quicknote:saved`（`
 
 拖拽排序（`Move` 方法已暴露）、粘贴图片归档。
 
-里程碑 2 A 线已完成：托盘、关窗不退出、全局快捷键、随手记小窗、设置面板（待办 B/C 线进行中）。
+里程碑 2 已完成：A 线（托盘、关窗不退出、全局快捷键、随手记小窗、设置面板）、
+B 线（待办核心库与 CLI）、C 线（待办界面与随手记接入待办）。

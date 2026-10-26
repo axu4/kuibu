@@ -55,6 +55,15 @@ export function SaveQuickNote(text: string): $CancellablePromise<$models.QuickNo
 }
 
 /**
+ * SaveQuickTodo 把随手记内容按「待办模式」保存：第一行快速录入，其余行作正文。
+ * 
+ * 保存成功后关闭小窗，并发 todo:changed，让主窗口的待办列表刷新。
+ */
+export function SaveQuickTodo(text: string): $CancellablePromise<$models.QuickTodoSaved> {
+    return $Call.ByID(756214545, text);
+}
+
+/**
  * SetQuickNoteShortcut 校验并尝试注册新快捷键，成功后才注销旧的并持久化。
  * 
  * 失败时旧快捷键继续生效，返回中文错误，前端可直接展示。
