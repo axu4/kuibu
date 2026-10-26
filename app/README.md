@@ -60,6 +60,13 @@ Go 侧：
   搜索、缩进子任务、完成父任务确认）。
 - `frontend/src/components/TodoDetail.tsx`：待办详情面板（标题、状态、截止、标签、
   Milkdown 正文、子任务、链接、附件、来源笔记）。
+- `frontend/src/components/ReportView.tsx`：周报收集视图（周切换、框架组长/SE 分段、
+  状态列表与分组、右侧原文详情、粘贴/删除入口）。
+- `frontend/src/components/ReportPaste.tsx`：粘贴周报弹窗（文本框 → 识别 → 预览改人 →
+  确认写入，一次可归档多人）。
+- `frontend/src/components/PeopleManager.tsx`：组员名单弹窗（在职/离职分组，新增、编辑、
+  转组、设为离职/恢复）。
+- `frontend/src/lib/report.ts`：周报视图纯函数（周展示、周报日、状态文案、层级偏好）。
 - `frontend/src/components/Settings.tsx`：设置面板（快捷键录制/保存/恢复默认/错误提示，
   软件更新与 GitHub token）。
 - `frontend/src/components/Tree.tsx`：可展开的大纲树、右键菜单、行内重命名。
@@ -84,8 +91,10 @@ Go 侧：
 | `ShellService` | `GetShortcutStatus`、`SetQuickNoteShortcut`、`ResetQuickNoteShortcut`、`SaveQuickNote`、`SaveQuickTodo`、`CloseQuickNote`、`OpenMainWindow` |
 | `UpdateService` | `Info`、`Check`、`SetAutoCheck`、`SetToken`、`Apply` |
 | `TodoService` | `Preview`、`Create`、`List`、`Tags`、`Get`、`UpdateTitle`、`UpdateDue`、`UpdateTags`、`UpdateBody`、`SetStatus`、`OpenChildrenCount`、`AddLink`、`RemoveLink`、`OpenLink`、`ChooseAndAttach`、`AttachPaths`、`Detach`、`OpenAttachment`、`Move`、`Delete`、`HandleDroppedFiles` |
+| `ReportService` | `Week`、`ShiftWeek`、`Status`、`Get`、`Preview`、`Submit`、`Delete`、`People`、`CreatePerson`、`UpdatePerson`、`MovePerson`、`SetPersonActive`、`Groups`、`ProductLines`、`ReportWeekday`、`SetReportWeekday` |
 
 Go → 前端事件：`workspace:changed`（`{ ids }`，笔记）、`todo:changed`（`{ ids }`，待办）、
+`report:changed`（`{ peopleIds, reportIds }`，组员/周报）、
 `quicknote:saved`（`{ id, inboxId, title }`）、`shell:open-settings`、
 `shell:shortcut-changed`（`ShortcutStatus`）、`quicknote:focus`、
 `update:available`（`CheckResult`，启动自动检查发现新版本）、
@@ -111,6 +120,9 @@ Go → 前端事件：`workspace:changed`（`{ ids }`，笔记）、`todo:change
 - 待办：读之前先 `idx.Sync`（50ms 内合并），写入后强制同步一次再读回，避免
   「刚创建就打开」拿不到索引数据。打开附件只允许该待办附件列表里、且落在工作台
   `assets/` 内的文件，其余一律拒绝。
+- 周报：读写走 `internal/store`（组员名单、原文归档）与 `internal/core`（粘贴识别预览），
+  状态由 `store.ReportStatus` 计算；写入或 CLI 外部改动（watcher 检测到 people/ 与
+  reports/ 变化）都会发 `report:changed`，前端据此整体刷新周报视图。
 - 自己写入同样会触发 `todo:changed`/`workspace:changed`（监听没有「谁写的」概念），
   前端只在本地没有未保存修改时才采用外部值，避免打断正在编辑的标题与正文。
 
