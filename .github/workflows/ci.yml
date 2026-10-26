@@ -1,11 +1,19 @@
 # 跬步（kuibu）CI
 #
-# 说明：核心库（internal/...）与 CLI（cmd/kuibu）必须能在 Linux 上构建和测试，
-# Mac 相关能力用 build tag 隔离，因此这里同时跑 Linux 与 macOS 两个 job。
+# 三个 job，彼此不依赖，并行执行：
+#   - go-linux：根模块（internal/... 与 cmd/kuibu）在 Linux 上跑 gofmt、vet、build、race 测试。
+#     核心库与 CLI 必须能在 Linux 构建，Mac 相关能力用 build tag 隔离。
+#   - go-macos：根模块在 macOS 上跑 vet、build、race 测试。
+#   - app-macos：app/（独立 Go module，Wails v3）在 macOS 上装前端依赖、类型检查、
+#     校验 Go→TS 绑定是否与 Go 代码同步、wails3 package 打出 .app，最后上传 zip 产物，
+#     供真机回归托盘、全局快捷键、关窗不退出。
 #
-# 关于 app/：后续 app/ 目录会是独立的 Go module（app/go.mod），根模块的
-# `./...` 不会包含它，所以本工作流无需为 app/ 做特殊排除处理；App 的构建与
-# wails3 打包留到里程碑 1 完成后在 go-macos job 里追加（见文件末尾注释）。
+# 关于 app/ 与根模块：app/ 是独立 module（app/go.mod），根模块的 `./...` 不包含它。
+# 但 go-linux 的 `gofmt -l .` 是按目录扫描的，会扫到 app/ 下手写的 Go 文件
+# （app/main.go、app/workspaceservice.go、app/build/{ios,android}/*.go），这是期望的：
+# 这些文件也必须是 gofmt 干净的。app/frontend/bindings 只有 .ts/.js，node_modules 在
+# go-linux job 里不会被安装，因此无需排除；如果以后新增了生成出来的 Go 文件
+# （例如 obfuscated bindings），需要在 gofmt 步骤里显式排除。
 #
 # 注意：这里不设置 CGO_ENABLED=0，因为 `go test -race` 需要 cgo。
 # 构建不依赖 cgo 由依赖约束保证（SQLite 使用纯 Go 的 modernc.org/sqlite）。
@@ -25,6 +33,10 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  # Wails CLI 版本，与 app/go.mod 里的 github.com/wailsapp/wails/v3 保持一致。
+  WAILS_VERSION: v3.0.0
 
 jobs:
   go-linux:
@@ -82,8 +94,89 @@ jobs:
       - name: go test
         run: go test -race ./...
 
-      # TODO(里程碑 1)：App（app/ 独立 module）完成后，在此追加：
-      #   1) 前端构建（npm ci && npm run build）
-      #   2) wails3 build 打包 .app
-      #   3) actions/upload-artifact@v4 上传 .app 产物（用于真机回归托盘、
-      #      全局快捷键、关窗不退出）
+  app-macos:
+    name: App (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+          # 根模块与 app/ 是独立 module，两边的 go.sum 都要参与缓存 key。
+          cache-dependency-path: |
+            go.sum
+            app/go.sum
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install wails3
+        shell: bash
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Frontend deps and typecheck
+        working-directory: app/frontend
+        run: |
+          npm ci
+          npm run typecheck
+
+      # 绑定是提交进仓库的生成物。Go 侧 service/结构体改了但忘了重新生成绑定时，
+      # 这里会失败，提示开发者本地跑 `cd app && wails3 generate bindings -ts -i` 后提交。
+      # 注意必须带 -ts -i，与 app/README.md 和 app/build/Taskfile.yml 保持一致；
+      # 不带这两个 flag 会生成 .js 而不是仓库里的 .ts。
+      - name: Check bindings are up to date
+        working-directory: app
+        shell: bash
+        run: |
+          wails3 generate bindings -ts -i
+          failed=0
+          # 已跟踪文件的改动/删除。
+          if ! git diff --exit-code -- frontend/bindings; then
+            failed=1
+          fi
+          # 新生成的未跟踪文件（git diff 看不到）。
+          untracked="$(git ls-files --others --exclude-standard -- frontend/bindings)"
+          if [ -n "$untracked" ]; then
+            echo "以下绑定文件未被提交："
+            echo "$untracked"
+            failed=1
+          fi
+          if [ "$failed" -ne 0 ]; then
+            echo "app/frontend/bindings 与 Go 代码不同步，请在本地重新生成并提交："
+            echo "  cd app && wails3 generate bindings -ts -i"
+            exit 1
+          fi
+          echo "绑定与 Go 代码同步"
+
+      # wails3 package 会构建前端（产物 frontend/dist）再打包 .app，
+      # 所以后面的 go vet 才能满足 main.go 里 go:embed frontend/dist 的要求。
+      - name: Package .app
+        working-directory: app
+        run: wails3 package
+
+      - name: go vet
+        working-directory: app
+        run: go vet ./...
+
+      - name: Verify bundle and create zip
+        shell: bash
+        run: |
+          test -f app/bin/kuibu.app/Contents/MacOS/kuibu
+          ditto -c -k --keepParent app/bin/kuibu.app kuibu-macos-arm64.zip
+          ls -lh kuibu-macos-arm64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kuibu-macos-${{ github.sha }}
+          path: kuibu-macos-arm64.zip
+          retention-days: 14

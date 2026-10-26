@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/axu4/kuibu/internal/config"
 )
 
 // cliResult 是一次 CLI 调用的结果。
@@ -401,7 +403,7 @@ func TestInitDefaultWritesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读取用户配置失败: %v", err)
 	}
-	var cfg userConfig
+	var cfg config.UserConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("解析用户配置失败: %v", err)
 	}

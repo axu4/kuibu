@@ -8,10 +8,6 @@ coverage
 
 # Node / 前端
 node_modules/
-app/frontend/dist/
-
-# Wails 构建产物
-app/build/bin/
 
 # 编辑器目录
 .idea/
@@ -28,3 +24,9 @@ app/build/bin/
 /workbench*/
 *.sqlite
 *.db
+
+# App（Wails）构建产物与本地状态
+app/bin
+app/.task
+app/frontend/dist
+app/frontend/node_modules

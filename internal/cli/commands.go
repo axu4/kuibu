@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/axu4/kuibu/internal/config"
 	"github.com/axu4/kuibu/internal/index"
 	"github.com/axu4/kuibu/internal/store"
 )
@@ -39,7 +40,7 @@ func runInit(args []string, common *commonFlags, stdout, stderr io.Writer, env f
 	}
 
 	if *makeDefault {
-		if err := saveUserConfig(env, userConfig{Workspace: ws.Dir()}); err != nil {
+		if err := config.SaveDefaultWorkspace(env, ws.Dir()); err != nil {
 			return err
 		}
 	}
