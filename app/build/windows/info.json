@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.0.1"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.0.1",
+			"CompanyName": "axu4",
+			"FileDescription": "跬步工作台",
+			"LegalCopyright": "(c) 2025, axu4",
+			"ProductName": "跬步",
+			"Comments": "跬步：Markdown 笔记与工作汇报工作台"
+		}
+	}
+}

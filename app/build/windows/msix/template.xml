@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="kuibu"
+        Arguments=""
+        InstallLocation="C:\Program Files\axu4\跬步">
+    </Installer>
+    <PackageInformation
+        PackageName="跬步"
+        PackageDisplayName="跬步"
+        PublisherName="CN=axu4"
+        PublisherDisplayName="axu4"
+        Version="0.1.0.0"
+        PackageDescription="跬步工作台">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="io.github.axu4.kuibu"
+                Description="跬步工作台"
+                DisplayName="跬步"
+                ExecutableName="kuibu"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>跬步</DisplayName>
+            <PublisherDisplayName>axu4</PublisherDisplayName>
+            <Description>跬步工作台</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="kuibu.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>
