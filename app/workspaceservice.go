@@ -124,6 +124,16 @@ func (s *WorkspaceService) ServiceShutdown() error {
 	return nil
 }
 
+// workspace 返回当前打开的工作台，未打开时为 nil。
+//
+// 仅供同模块的 ShellService（随手记保存）使用，不暴露给前端：
+// 复用同一个工作台实例，不另开工作台、不自己读写文件。
+func (s *WorkspaceService) workspace() *store.Workspace {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ws
+}
+
 // Current 返回当前工作台路径，未打开时为空字符串。
 func (s *WorkspaceService) Current() WorkspaceInfo {
 	s.mu.Lock()
