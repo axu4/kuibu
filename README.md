@@ -97,6 +97,13 @@ cd app && wails3 package        # 打包，产物 app/bin/kuibu.app
 
 App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG_DIR`/config.json）定位工作台，都没有时显示欢迎页。
 
+## 反馈与协作
+
+- 需求和 bug 都记录在 GitHub Issues。
+- 可以直接提 issue（有 Bug / 需求模板）；也可以在聊天里把问题或想法丢给助手，由助手整理成 issue。
+- 标签含义：`bug`、`需求`、`M3 周报收集`、`M4 逐级汇总`；`已评估` = 方案已整理待确认，`已确认` = 可开工。
+- 修复 PR 在描述里写 `Fixes #N` 关联对应 issue，合并后自动关闭。
+
 ## 文档
 
 | 文档 | 内容 |
