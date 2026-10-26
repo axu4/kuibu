@@ -25,7 +25,7 @@
   - 明确退出码：`0` 成功；`7 NOT_FINAL`（引用/导出了未定稿内容）；`8 NEEDS_CONFIRM`（需人工确认）；`9 HUMAN_EDITS_EXIST`（存在人工修改，拒绝覆盖）；`10 NOT_OPEN`（未打开工作台）。其他错误用 `1`。
 - **数据**：工作台文件夹里的 Markdown 文件是唯一事实来源，元数据放 YAML front matter。
 - **索引**：SQLite（`modernc.org/sqlite`，纯 Go，禁止 cgo）只作索引，可随时删除重建；外部改文件时用 `fsnotify` 检测并增量重建。
-- **界面**：Wails v3（beta）+ React/TypeScript，放在 `app/`。Wails v3 GA 后升级，升级先回归托盘、全局快捷键、关窗不退出。
+- **界面**：Wails v3.0.0 GA + React/TypeScript，放在 `app/`。`app/` 是独立 Go module，通过 `replace` 复用根模块；Go service 改动后需重新生成绑定（`cd app && wails3 generate bindings -ts -i`）并提交。
 - 不用 git 备份笔记。
 
 ## 里程碑

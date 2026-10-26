@@ -23,8 +23,19 @@
   - 明确退出码：`0` 成功；`7 NOT_FINAL`、`8 NEEDS_CONFIRM`、`9 HUMAN_EDITS_EXIST`、`10 NOT_OPEN`；其他错误用 `1`。
 - **数据**：工作台文件夹里的 Markdown 文件是唯一事实来源，元数据放 YAML front matter。
 - **索引**：SQLite（modernc.org/sqlite，纯 Go，不用 cgo）只作索引，可随时删除重建；外部改文件时用 `fsnotify` 检测并增量重建。
-- **界面**：Wails v3（beta，GA 后升级）+ React/TypeScript，放在 `app/`。
+- **界面**：Wails v3.0.0 GA + React/TypeScript，放在 `app/`（独立 module）。
 - 不用 git 备份笔记。
+
+## 里程碑 1 已完成
+
+- **核心库**：工作台初始化/定位、Markdown + YAML front matter 读写（未知字段无损保留）、原子写。
+- **树**：`parent` + `order` 平铺存储，移动不改文件名，孤儿/环安全降级为根节点。
+- **索引**：纯 Go SQLite（`modernc.org/sqlite`），FTS5 trigram 检索 + 短查询 LIKE 回退，`user_version` 版本管理，可随时删除重建。
+- **监听**：fsnotify 增量同步，200ms 防抖，事件推给 App 刷新界面。
+- **资源**：sha256 去重归档到 `assets/`，正文用 `../assets/` 相对路径。
+- **CLI**：`init` / `note` / `tree` / `search` / `asset` / `index` / `watch` / `version`，全部支持 `--json` 与约定退出码。
+- **App**：Wails v3 外壳，左侧大纲树 + 右侧 Milkdown（Crepe）编辑器，外部修改自动刷新，`wails3 package` 可打出 macOS `.app`。
+- **CI**：Linux/macOS 上 gofmt + vet + build + race 测试，macOS 上校验绑定并打包上传 artifact。
 
 ## 目录结构
 
@@ -37,21 +48,56 @@
 │   └── kuibu/          # CLI 入口与测试
 ├── internal/
 │   ├── core/           # 领域模型与业务逻辑
-│   ├── store/          # Markdown 文件与 front matter 读写
+│   ├── store/          # 工作台、Markdown 与 front matter 读写、树、资源
 │   ├── index/          # SQLite 索引，可删除重建
+│   ├── config/         # 用户配置与工作台定位
 │   └── cli/            # 命令实现、--json 输出与退出码
-├── app/                # Wails v3 桌面外壳（里程碑 1）
+├── app/                # Wails v3 桌面外壳（独立 module）
 └── docs/               # 设计文档
 ```
 
-## 构建
+## 快速开始
+
+### CLI
 
 ```bash
-go build ./...
-go test ./...
-go vet ./...
-go run ./cmd/kuibu version --json
+# 构建 / 检查
+go build ./... && go vet ./... && go test ./...
+
+# 初始化工作台并设为默认
+go run ./cmd/kuibu init ~/Notes/kuibu --default
+
+# 新建、查看、检索
+echo "今天完成了 CLI 骨架。" | go run ./cmd/kuibu note new --title "今日记录" --tag 工作 --stdin
+go run ./cmd/kuibu tree
+go run ./cmd/kuibu search "CLI 骨架" --json
 ```
+
+### App
+
+需要 Go 1.26.x、Node 22、Wails CLI v3.0.0：
+
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0   # 装到 ~/go/bin
+export PATH="$HOME/go/bin:$PATH"
+
+cd app/frontend && npm ci
+cd app && wails3 dev            # 开发模式
+cd app && wails3 package        # 打包，产物 app/bin/kuibu.app
+```
+
+App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG_DIR`/config.json）定位工作台，都没有时显示欢迎页。
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | 整体架构、数据流、工作台目录、front matter、树存储、索引、资源 |
+| [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
+| [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
+| [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
+| [app/README.md](app/README.md) | 桌面外壳的目录、数据流与编辑器选型 |
+| [AGENTS.md](AGENTS.md) | 开发规范（硬性约束） |
 
 ## CLI 用法
 
@@ -141,7 +187,7 @@ kuibu watch --json
 
 ## 里程碑
 
-1. **骨架**：核心库、CLI、存储、索引、Wails 外壳（树 + 内容区）。
+1. **骨架**（已完成）：核心库、CLI、存储、索引、Wails 外壳（树 + 内容区）。
 2. **随手记与待办**：全局快捷键（默认 ⌃⌥N，可自定义）。
 3. **周报收集**：粘贴归档、提交状态。
 4. **逐级汇总**：组报 / 产品项目报、月报、导出。
