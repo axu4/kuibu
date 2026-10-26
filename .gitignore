@@ -1,0 +1,30 @@
+# Go 构建产物
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage
+
+# Node / 前端
+node_modules/
+app/frontend/dist/
+
+# Wails 构建产物
+app/build/bin/
+
+# 编辑器目录
+.idea/
+.vscode/
+
+# 环境变量与密钥
+.env*
+
+# 系统文件
+.DS_Store
+
+# 工作台测试数据与本地索引
+/testdata/workbench*/
+/workbench*/
+*.sqlite
+*.db
