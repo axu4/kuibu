@@ -102,6 +102,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | 文档 | 内容 |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 整体架构、数据流、工作台目录、front matter、树存储、索引、资源 |
+| [docs/todo.md](docs/todo.md) | 待办 CLI 用法与示例、快速录入规则、KUIBU_NOW、App 接口说明 |
 | [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
 | [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
 | [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
@@ -145,6 +146,9 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | `note edit <id> [--title t] [--tag t ...] [--body <text>\|--file <path>\|--stdin]` | 修改笔记，至少给一个修改项 |
 | `note mv <id> [--parent <id>\|--root] [--pos n]` | 改父节点与位置，`--pos` 缺省为末尾 |
 | `note rm <id> [-r\|--recursive]` | 删除笔记，有子节点时必须递归 |
+| `todo add <文本> [--due <值>]` | 快速录入待办，日期/时间/标签自动解析 |
+| `todo list [--status s] [--due d] [--tree]` | 列出待办，支持状态/到期/标签/检索过滤与树形显示 |
+| `todo show/done/reopen/start/cancel/edit/sub/link/unlink/attach/detach/mv/rm` | 待办详情、状态、子任务、链接、附件、移动与删除 |
 | `tree [--root <id>]` | 缩进大纲打印笔记树，孤儿/环节点带标记 |
 | `search <query> [--limit n]` | 全文检索，输出 id、标题、片段 |
 | `asset add <file>` | 归档资源并打印可直接写入 Markdown 的相对路径 |

@@ -21,7 +21,7 @@ import (
 
 // schemaVersion 是索引数据库结构版本，记录在 PRAGMA user_version 中。
 // 版本不匹配时 Open 会删掉旧表并重建。
-const schemaVersion = 1
+const schemaVersion = 2
 
 // indexFileName 是索引文件名，位于工作台的 .kuibu/ 目录下。
 const indexFileName = "index.db"
@@ -41,6 +41,8 @@ const (
 )
 
 // Stats 是一次重建或增量同步的统计结果。
+//
+// Added/Updated/Removed/Total 只统计笔记；Todo* 字段统计待办，两者互不混入。
 type Stats struct {
 	// Added 是新增的笔记数量。
 	Added int `json:"added"`
@@ -50,6 +52,15 @@ type Stats struct {
 	Removed int `json:"removed"`
 	// Total 是同步完成后索引中的笔记总数。
 	Total int `json:"total"`
+
+	// TodoAdded 是新增的待办数量。
+	TodoAdded int `json:"todoAdded"`
+	// TodoUpdated 是被修改并重新读取的待办数量。
+	TodoUpdated int `json:"todoUpdated"`
+	// TodoRemoved 是从索引中删除的待办数量。
+	TodoRemoved int `json:"todoRemoved"`
+	// TodoTotal 是同步完成后索引中的待办总数。
+	TodoTotal int `json:"todoTotal"`
 }
 
 // Change 是单文件同步的结果。
@@ -140,6 +151,8 @@ func (ix *Index) initSchema() error {
 	for _, stmt := range []string{
 		"DROP TABLE IF EXISTS notes_fts",
 		"DROP TABLE IF EXISTS notes",
+		"DROP TABLE IF EXISTS todos_fts",
+		"DROP TABLE IF EXISTS todos",
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("删除旧索引表失败: %w", err)
@@ -164,6 +177,36 @@ func (ix *Index) initSchema() error {
 		`CREATE INDEX notes_path ON notes(path)`,
 		// trigram 分词器支持中文子串检索；少于 3 个字符的查询走 LIKE 回退。
 		`CREATE VIRTUAL TABLE notes_fts USING fts5(
+			id UNINDEXED,
+			title,
+			body,
+			tokenize='trigram'
+		)`,
+		`CREATE TABLE todos (
+			id          TEXT PRIMARY KEY,
+			title       TEXT NOT NULL DEFAULT '',
+			status      TEXT NOT NULL DEFAULT 'todo',
+			due_date    TEXT NOT NULL DEFAULT '',
+			due_time    TEXT NOT NULL DEFAULT '',
+			due_at      TEXT NOT NULL DEFAULT '',
+			done_at     TEXT NOT NULL DEFAULT '',
+			parent      TEXT NOT NULL DEFAULT '',
+			ord         INTEGER NOT NULL DEFAULT 0,
+			tags        TEXT NOT NULL DEFAULT '[]',
+			links       TEXT NOT NULL DEFAULT '[]',
+			attachments TEXT NOT NULL DEFAULT '[]',
+			source      TEXT NOT NULL DEFAULT '',
+			created     TEXT NOT NULL DEFAULT '',
+			updated     TEXT NOT NULL DEFAULT '',
+			path        TEXT NOT NULL,
+			mtime       INTEGER NOT NULL DEFAULT 0,
+			size        INTEGER NOT NULL DEFAULT 0,
+			extra       TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX todos_parent_ord ON todos(parent, ord, id)`,
+		`CREATE INDEX todos_status_due ON todos(status, due_date)`,
+		`CREATE INDEX todos_path ON todos(path)`,
+		`CREATE VIRTUAL TABLE todos_fts USING fts5(
 			id UNINDEXED,
 			title,
 			body,
@@ -209,7 +252,12 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	for _, stmt := range []string{"DELETE FROM notes_fts", "DELETE FROM notes"} {
+	for _, stmt := range []string{
+		"DELETE FROM notes_fts",
+		"DELETE FROM notes",
+		"DELETE FROM todos_fts",
+		"DELETE FROM todos",
+	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return Stats{}, fmt.Errorf("清空索引失败: %w", err)
 		}
@@ -225,11 +273,20 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 		if err != nil {
 			return Stats{}, err
 		}
+		todoPath := isTodoPath(ix.ws, path)
 		switch change.Kind {
 		case ChangeAdded:
-			stats.Added++
+			if todoPath {
+				stats.TodoAdded++
+			} else {
+				stats.Added++
+			}
 		case ChangeUpdated:
-			stats.Updated++
+			if todoPath {
+				stats.TodoUpdated++
+			} else {
+				stats.Updated++
+			}
 		}
 	}
 
@@ -238,6 +295,11 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.Total = total
+	todoTotal, err := countTodos(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.TodoTotal = todoTotal
 
 	if err := tx.Commit(); err != nil {
 		return Stats{}, fmt.Errorf("提交索引重建失败: %w", err)
@@ -276,10 +338,14 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		if errors.Is(statErr, os.ErrNotExist) {
 			// 枚举后被外部删除，按删除处理。
 			if _, ok := existing[path]; ok {
-				if _, _, err := deleteNote(ctx, tx, path); err != nil {
+				if _, _, err := ix.deleteFile(ctx, tx, path); err != nil {
 					return Stats{}, err
 				}
-				stats.Removed++
+				if isTodoPath(ix.ws, path) {
+					stats.TodoRemoved++
+				} else {
+					stats.Removed++
+				}
 			}
 			continue
 		}
@@ -296,13 +362,26 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		if err != nil {
 			return Stats{}, err
 		}
+		todoPath := isTodoPath(ix.ws, path)
 		switch change.Kind {
 		case ChangeAdded:
-			stats.Added++
+			if todoPath {
+				stats.TodoAdded++
+			} else {
+				stats.Added++
+			}
 		case ChangeUpdated:
-			stats.Updated++
+			if todoPath {
+				stats.TodoUpdated++
+			} else {
+				stats.Updated++
+			}
 		case ChangeRemoved:
-			stats.Removed++
+			if todoPath {
+				stats.TodoRemoved++
+			} else {
+				stats.Removed++
+			}
 		}
 	}
 
@@ -310,10 +389,14 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		if current[path] {
 			continue
 		}
-		if _, _, err := deleteNote(ctx, tx, path); err != nil {
+		if _, _, err := ix.deleteFile(ctx, tx, path); err != nil {
 			return Stats{}, err
 		}
-		stats.Removed++
+		if isTodoPath(ix.ws, path) {
+			stats.TodoRemoved++
+		} else {
+			stats.Removed++
+		}
 	}
 
 	total, err := countNotes(ctx, tx)
@@ -321,6 +404,11 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.Total = total
+	todoTotal, err := countTodos(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.TodoTotal = todoTotal
 
 	if err := tx.Commit(); err != nil {
 		return Stats{}, fmt.Errorf("提交索引同步失败: %w", err)
@@ -365,7 +453,7 @@ func (ix *Index) RemoveFile(path string) (Change, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	id, removed, err := deleteNote(context.Background(), tx, path)
+	id, removed, err := ix.deleteFile(context.Background(), tx, path)
 	if err != nil {
 		return Change{}, err
 	}
@@ -384,25 +472,28 @@ type rowState struct {
 	size  int64
 }
 
-// loadExisting 读取索引中全部 path 及其 mtime/size。
+// loadExisting 读取索引中全部 path 及其 mtime/size，笔记与待办合并返回。
 func loadExisting(ctx context.Context, tx *sql.Tx) (map[string]rowState, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT path, mtime, size FROM notes")
-	if err != nil {
-		return nil, fmt.Errorf("读取索引状态失败: %w", err)
-	}
-	defer rows.Close()
-
 	existing := map[string]rowState{}
-	for rows.Next() {
-		var path string
-		var st rowState
-		if err := rows.Scan(&path, &st.mtime, &st.size); err != nil {
+	for _, table := range []string{"notes", "todos"} {
+		rows, err := tx.QueryContext(ctx, "SELECT path, mtime, size FROM "+table)
+		if err != nil {
 			return nil, fmt.Errorf("读取索引状态失败: %w", err)
 		}
-		existing[path] = st
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("读取索引状态失败: %w", err)
+		for rows.Next() {
+			var path string
+			var st rowState
+			if err := rows.Scan(&path, &st.mtime, &st.size); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("读取索引状态失败: %w", err)
+			}
+			existing[path] = st
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("读取索引状态失败: %w", err)
+		}
+		_ = rows.Close()
 	}
 	return existing, nil
 }
@@ -416,9 +507,26 @@ func countNotes(ctx context.Context, tx *sql.Tx) (int, error) {
 	return total, nil
 }
 
-// upsert 读取 path 并写入索引，返回变化类型。
+// countTodos 返回索引中的待办总数。
+func countTodos(ctx context.Context, tx *sql.Tx) (int, error) {
+	var total int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos").Scan(&total); err != nil {
+		return 0, fmt.Errorf("统计索引待办数失败: %w", err)
+	}
+	return total, nil
+}
+
+// upsert 按路径所在目录分派到笔记或待办索引，返回变化类型。
 // force 为 true 时即使 mtime 与 size 未变也重新读取（供 watcher 使用）。
 func (ix *Index) upsert(ctx context.Context, tx *sql.Tx, path string, force bool) (Change, error) {
+	if isTodoPath(ix.ws, path) {
+		return ix.upsertTodo(ctx, tx, path, force)
+	}
+	return ix.upsertNote(ctx, tx, path, force)
+}
+
+// upsertNote 读取笔记文件并写入笔记索引，返回变化类型。
+func (ix *Index) upsertNote(ctx context.Context, tx *sql.Tx, path string, force bool) (Change, error) {
 	path = filepath.Clean(path)
 
 	info, err := os.Stat(path)
@@ -530,6 +638,141 @@ func (ix *Index) upsert(ctx context.Context, tx *sql.Tx, path string, force bool
 	return Change{ID: note.ID, Kind: ChangeAdded}, nil
 }
 
+// upsertTodo 读取待办文件并写入待办索引，返回变化类型。
+func (ix *Index) upsertTodo(ctx context.Context, tx *sql.Tx, path string, force bool) (Change, error) {
+	path = filepath.Clean(path)
+
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		id, removed, err := deleteTodo(ctx, tx, path)
+		if err != nil {
+			return Change{}, err
+		}
+		if removed {
+			return Change{ID: id, Kind: ChangeRemoved}, nil
+		}
+		return Change{Kind: ChangeUnchanged}, nil
+	}
+	if err != nil {
+		return Change{}, fmt.Errorf("读取待办文件信息失败: %w", err)
+	}
+	if info.IsDir() {
+		return Change{Kind: ChangeUnchanged}, nil
+	}
+
+	todo, err := store.ReadTodoFile(path)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			id, removed, delErr := deleteTodo(ctx, tx, path)
+			if delErr != nil {
+				return Change{}, delErr
+			}
+			if removed {
+				return Change{ID: id, Kind: ChangeRemoved}, nil
+			}
+			return Change{Kind: ChangeUnchanged}, nil
+		}
+		return Change{}, err
+	}
+
+	var (
+		oldMtime int64
+		oldSize  int64
+		exists   bool
+	)
+	err = tx.QueryRowContext(ctx,
+		"SELECT mtime, size FROM todos WHERE path = ?", path).Scan(&oldMtime, &oldSize)
+	switch {
+	case err == nil:
+		exists = true
+	case errors.Is(err, sql.ErrNoRows):
+		err = tx.QueryRowContext(ctx,
+			"SELECT mtime, size FROM todos WHERE id = ?", todo.ID).Scan(&oldMtime, &oldSize)
+		switch {
+		case err == nil:
+			exists = true
+		case errors.Is(err, sql.ErrNoRows):
+			// 新待办。
+		default:
+			return Change{}, fmt.Errorf("查询待办索引项失败: %w", err)
+		}
+	default:
+		return Change{}, fmt.Errorf("查询待办索引项失败: %w", err)
+	}
+
+	if exists && !force && oldMtime == info.ModTime().UnixNano() && oldSize == info.Size() {
+		return Change{ID: todo.ID, Kind: ChangeUnchanged}, nil
+	}
+
+	// 同一待办可能因改名导致旧 path 或旧 id 残留，一并清理后再写入。
+	for _, stmt := range []string{
+		"DELETE FROM todos_fts WHERE id = ?",
+		"DELETE FROM todos WHERE path = ? OR id = ?",
+	} {
+		args := []any{todo.ID}
+		if strings.HasPrefix(stmt, "DELETE FROM todos WHERE") {
+			args = []any{path, todo.ID}
+		}
+		if _, err := tx.ExecContext(ctx, stmt, args...); err != nil {
+			return Change{}, fmt.Errorf("清理旧待办索引项失败: %w", err)
+		}
+	}
+
+	tags, err := json.Marshal(tagsOfTodo(todo))
+	if err != nil {
+		tags = []byte("[]")
+	}
+	links, err := json.Marshal(linksOfTodo(todo))
+	if err != nil {
+		links = []byte("[]")
+	}
+	attachments, err := json.Marshal(attachmentsOfTodo(todo))
+	if err != nil {
+		attachments = []byte("[]")
+	}
+	extra := []byte("{}")
+	if len(todo.Extra) > 0 {
+		if data, err := json.Marshal(todo.Extra); err == nil {
+			extra = data
+		}
+	}
+
+	dueDate, dueTime, dueAt := "", "", ""
+	if todo.Due != nil {
+		dueDate = todo.Due.Date
+		dueTime = todo.Due.Time
+		if at := todo.Due.At(store.TodoLocation()); !at.IsZero() {
+			dueAt = at.Format(time.RFC3339)
+		}
+	}
+	doneAt := ""
+	if todo.DoneAt != nil && !todo.DoneAt.IsZero() {
+		doneAt = todo.DoneAt.Format(time.RFC3339)
+	}
+
+	_, err = tx.ExecContext(ctx, `INSERT INTO todos
+		(id, title, status, due_date, due_time, due_at, done_at, parent, ord,
+		 tags, links, attachments, source, created, updated, path, mtime, size, extra)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		todo.ID, todo.Title, todo.Status, dueDate, dueTime, dueAt, doneAt,
+		todo.Parent, todo.Order, string(tags), string(links), string(attachments),
+		todo.Source, formatTime(todo.Created), formatTime(todo.Updated),
+		path, info.ModTime().UnixNano(), info.Size(), string(extra))
+	if err != nil {
+		return Change{}, fmt.Errorf("写入待办索引项失败: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		"INSERT INTO todos_fts (id, title, body) VALUES (?, ?, ?)",
+		todo.ID, todo.Title, todo.Body); err != nil {
+		return Change{}, fmt.Errorf("写入待办全文索引失败: %w", err)
+	}
+
+	if exists {
+		return Change{ID: todo.ID, Kind: ChangeUpdated}, nil
+	}
+	return Change{ID: todo.ID, Kind: ChangeAdded}, nil
+}
+
 // deleteNote 按路径删除索引项，返回被删除的笔记 ID 与是否真的删除。
 func deleteNote(ctx context.Context, tx *sql.Tx, path string) (string, bool, error) {
 	path = filepath.Clean(path)
@@ -550,10 +793,46 @@ func deleteNote(ctx context.Context, tx *sql.Tx, path string) (string, bool, err
 	return id, true, nil
 }
 
-// listFiles 返回笔记目录下需要索引的 .md 文件绝对路径。
+// deleteTodo 按路径删除待办索引项，返回被删除的待办 ID 与是否真的删除。
+func deleteTodo(ctx context.Context, tx *sql.Tx, path string) (string, bool, error) {
+	path = filepath.Clean(path)
+	var id string
+	err := tx.QueryRowContext(ctx, "SELECT id FROM todos WHERE path = ?", path).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("查询待删除待办索引项失败: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE id = ?", id); err != nil {
+		return "", false, fmt.Errorf("删除待办全文索引失败: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM todos WHERE id = ?", id); err != nil {
+		return "", false, fmt.Errorf("删除待办索引项失败: %w", err)
+	}
+	return id, true, nil
+}
+
+// deleteFile 按路径所在目录分派删除笔记或待办索引项。
+func (ix *Index) deleteFile(ctx context.Context, tx *sql.Tx, path string) (string, bool, error) {
+	if isTodoPath(ix.ws, path) {
+		return deleteTodo(ctx, tx, path)
+	}
+	return deleteNote(ctx, tx, path)
+}
+
+// listFiles 返回笔记与待办目录下需要索引的 .md 文件绝对路径。
 func (ix *Index) listFiles() ([]string, error) {
 	// 索引与 store 共用同一套文件枚举规则，避免两处不一致。
-	return ix.ws.ListWorkspaceNotes()
+	notes, err := ix.ws.ListWorkspaceNotes()
+	if err != nil {
+		return nil, err
+	}
+	todos, err := ix.ws.ListWorkspaceTodos()
+	if err != nil {
+		return nil, err
+	}
+	return append(notes, todos...), nil
 }
 
 // noteType 返回笔记类型，空值统一为 note。
@@ -570,6 +849,35 @@ func tagsOf(n *store.Note) []string {
 		return []string{}
 	}
 	return n.Tags
+}
+
+// tagsOfTodo 返回非 nil 的待办标签切片。
+func tagsOfTodo(t *store.Todo) []string {
+	if t.Tags == nil {
+		return []string{}
+	}
+	return t.Tags
+}
+
+// linksOfTodo 返回非 nil 的待办链接切片。
+func linksOfTodo(t *store.Todo) []store.TodoLink {
+	if t.Links == nil {
+		return []store.TodoLink{}
+	}
+	return t.Links
+}
+
+// attachmentsOfTodo 返回非 nil 的待办附件切片。
+func attachmentsOfTodo(t *store.Todo) []string {
+	if t.Attachments == nil {
+		return []string{}
+	}
+	return t.Attachments
+}
+
+// isTodoPath 判断路径是否位于待办目录下。
+func isTodoPath(ws *store.Workspace, path string) bool {
+	return filepath.Dir(filepath.Clean(path)) == filepath.Clean(ws.TodosDir())
 }
 
 // formatTime 把时间格式化为 RFC3339；零值输出空字符串。

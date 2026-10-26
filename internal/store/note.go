@@ -446,18 +446,31 @@ func splitFrontMatter(data []byte) (front, body []byte, ok bool) {
 	}
 }
 
+// frontMatterMapping 解析 YAML front matter 并返回根映射节点。
+// empty 表示 front matter 是空文档；ok 表示解析成功且根节点是映射。
+func frontMatterMapping(front []byte) (root *yaml.Node, empty, ok bool) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(front, &doc); err != nil {
+		return nil, false, false
+	}
+	if len(doc.Content) == 0 {
+		return nil, true, false
+	}
+	root = doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil, false, false
+	}
+	return root, false, true
+}
+
 // decodeFrontMatter 解析 front matter。解析失败或不是映射时返回 nil，
 // 调用方据此把整个文件当正文处理（兼容外部编辑器写坏的文件）。
 func decodeFrontMatter(front []byte) *Note {
-	var doc yaml.Node
-	if err := yaml.Unmarshal(front, &doc); err != nil {
-		return nil
-	}
-	if len(doc.Content) == 0 {
-		return &Note{}
-	}
-	root := doc.Content[0]
-	if root.Kind != yaml.MappingNode {
+	root, empty, ok := frontMatterMapping(front)
+	if !ok {
+		if empty {
+			return &Note{}
+		}
 		return nil
 	}
 
@@ -566,10 +579,37 @@ func marshalNote(note *Note) ([]byte, error) {
 		return nil, fmt.Errorf("序列化 order 失败: %w", err)
 	}
 
-	// 未知字段按 key 排序后原样写回。
-	extraKeys := make([]string, 0, len(note.Extra))
-	for k := range note.Extra {
-		if knownFrontMatterKeys[k] {
+	if err := appendExtraFrontMatter(root, note.Extra, note.extraNodes, knownFrontMatterKeys); err != nil {
+		return nil, err
+	}
+	return marshalFrontMatter(root, note.Body)
+}
+
+// appendFrontMatterKey 向映射节点追加一个键值对。
+func appendFrontMatterKey(root *yaml.Node, key string, val *yaml.Node) {
+	root.Content = append(root.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		val,
+	)
+}
+
+// appendFrontMatterValue 把任意值编码为 YAML 节点后追加到映射节点。
+func appendFrontMatterValue(root *yaml.Node, key string, v any) error {
+	node, err := encodeNode(v)
+	if err != nil {
+		return err
+	}
+	appendFrontMatterKey(root, key, node)
+	return nil
+}
+
+// appendExtraFrontMatter 把未知字段按 key 排序后追加到映射节点。
+//
+// 值未修改时复用原始 YAML 节点（保留 flow 风格等排版），修改后按新值重新编码。
+func appendExtraFrontMatter(root *yaml.Node, extra map[string]any, extraNodes map[string]*yaml.Node, known map[string]bool) error {
+	extraKeys := make([]string, 0, len(extra))
+	for k := range extra {
+		if known[k] {
 			continue
 		}
 		extraKeys = append(extraKeys, k)
@@ -579,25 +619,28 @@ func marshalNote(note *Note) ([]byte, error) {
 		// 只有当前值与原始节点解码出的值完全一致时才复用原始节点，
 		// 保持外部编辑器写入的格式（flow 风格、注释外的排版等）；
 		// 值被调用方修改过时按新值重新编码，避免修改丢失。
-		if node, ok := note.extraNodes[k]; ok && extraValueUnchanged(node, note.Extra[k]) {
-			appendKey(k, cloneNode(node))
+		if node, ok := extraNodes[k]; ok && extraValueUnchanged(node, extra[k]) {
+			appendFrontMatterKey(root, k, cloneNode(node))
 			continue
 		}
-		if err := appendValue(k, note.Extra[k]); err != nil {
-			return nil, fmt.Errorf("序列化扩展字段 %s 失败: %w", k, err)
+		if err := appendFrontMatterValue(root, k, extra[k]); err != nil {
+			return fmt.Errorf("序列化扩展字段 %s 失败: %w", k, err)
 		}
 	}
+	return nil
+}
 
+// marshalFrontMatter 把映射节点包装成 front matter 并拼接正文。
+func marshalFrontMatter(root *yaml.Node, body string) ([]byte, error) {
 	front, err := yaml.Marshal(root)
 	if err != nil {
 		return nil, fmt.Errorf("序列化 front matter 失败: %w", err)
 	}
-
 	var buf bytes.Buffer
 	buf.WriteString("---\n")
 	buf.Write(front)
 	buf.WriteString("---\n")
-	buf.WriteString(note.Body)
+	buf.WriteString(body)
 	return buf.Bytes(), nil
 }
 

@@ -31,6 +31,16 @@ const usageText = `用法:
   note edit <id> [--title t] ...         修改笔记
   note mv <id> [--parent <id>|--root]    移动笔记
   note rm <id> [-r|--recursive]          删除笔记
+  todo add <文本> [--due <值>]           快速录入待办
+  todo list [--status s] [--due d]       列出待办
+  todo show <id>                         查看待办详情
+  todo done|reopen|start|cancel <id>     变更待办状态
+  todo edit <id> [--title t] ...         修改待办
+  todo sub <id> <文本>                   新增子待办
+  todo link|unlink <id> <url>            管理待办链接
+  todo attach|detach <id> <file>         管理待办附件
+  todo mv <id> [--parent <id>|--root]    移动待办
+  todo rm <id> [-r|--recursive]          删除待办
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
   asset add <file>                       归档资源并输出相对路径
@@ -126,6 +136,8 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runInit(cmdArgs, &common, stdout, stderr, env)
 	case "note":
 		err = runNote(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "todo":
+		err = runTodo(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "tree":
 		err = runTree(cmdArgs, &common, stdout, stderr, env)
 	case "search":
