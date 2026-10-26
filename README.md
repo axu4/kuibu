@@ -125,6 +125,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | 整体架构、数据流、工作台目录、front matter、树存储、索引、资源 |
 | [docs/todo.md](docs/todo.md) | 待办 CLI 用法与示例、快速录入规则、KUIBU_NOW、App 接口说明、App 待办界面 |
+| [docs/report.md](docs/report.md) | 周报收集：组员与周报目录/字段、识别规则、状态规则、CLI 用法、App 接口说明 |
 | [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
 | [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
 | [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
@@ -171,6 +172,15 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | `todo add <文本> [--due <值>]` | 快速录入待办，日期/时间/标签自动解析 |
 | `todo list [--status s] [--due d] [--tree]` | 列出待办，支持状态/到期/标签/检索过滤与树形显示 |
 | `todo show/done/reopen/start/cancel/edit/sub/link/unlink/attach/detach/mv/rm` | 待办详情、状态、子任务、链接、附件、移动与删除 |
+| `person add <姓名> [--alias a ...] [--group g] [--product p ...] [--role member\|lead]` | 新增组员；姓名/别名在在职人员中唯一 |
+| `person list [--group g] [--role r] [--all]` / `person show <id\|姓名>` | 列出/查看组员 |
+| `person edit <id\|姓名> [--name n] [--alias a ...\|--no-alias] [--product p ...] [--role r] [--active true\|false]` | 修改组员 |
+| `person move <id\|姓名> --group g [--product p ...] [--from YYYY-MM-DD]` | 转组 |
+| `report add [--person p] [--week W] [--level member\|lead] [--dry-run] [--file f \| --stdin]` | 归档周报，支持一次粘贴多人 |
+| `report list [--week W] [--level L] [--group g] [--search 词]` | 列出周报，`--week` 默认本周 |
+| `report show <week> <person> [--level L]` / `report rm <week> <person> [--level L]` | 查看/删除周报 |
+| `report status [--week W] [--level L] [--group g] [--product p]` | 提交状态统计 |
+| `report config [--weekday N]` | 查看/修改周报日（1-7，缺省 4） |
 | `tree [--root <id>]` | 缩进大纲打印笔记树，孤儿/环节点带标记 |
 | `search <query> [--limit n]` | 全文检索，输出 id、标题、片段 |
 | `asset add <file>` | 归档资源并打印可直接写入 Markdown 的相对路径 |
@@ -212,6 +222,11 @@ kuibu search "CLI 骨架" --json
 # 资源归档：输出可直接粘进 Markdown 的相对路径
 kuibu asset add ~/Desktop/截图.png
 # ../assets/20240101-1234567890-截图.png
+
+# 周报收集：粘贴归档与提交状态
+kuibu person add 张三 --group 框架组 --product A
+printf '【周报】张三 2026-10-29\n本周总结' | kuibu report add
+kuibu report status --week 2026-W44 --level member
 
 # 索引与监听
 kuibu index rebuild --json

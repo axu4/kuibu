@@ -21,7 +21,7 @@ import (
 
 // schemaVersion 是索引数据库结构版本，记录在 PRAGMA user_version 中。
 // 版本不匹配时 Open 会删掉旧表并重建。
-const schemaVersion = 2
+const schemaVersion = 3
 
 // indexFileName 是索引文件名，位于工作台的 .kuibu/ 目录下。
 const indexFileName = "index.db"
@@ -61,6 +61,24 @@ type Stats struct {
 	TodoRemoved int `json:"todoRemoved"`
 	// TodoTotal 是同步完成后索引中的待办总数。
 	TodoTotal int `json:"todoTotal"`
+
+	// PeopleAdded 是新增的组员数量。
+	PeopleAdded int `json:"peopleAdded"`
+	// PeopleUpdated 是被修改并重新读取的组员数量。
+	PeopleUpdated int `json:"peopleUpdated"`
+	// PeopleRemoved 是从索引中删除的组员数量。
+	PeopleRemoved int `json:"peopleRemoved"`
+	// PeopleTotal 是同步完成后索引中的组员总数。
+	PeopleTotal int `json:"peopleTotal"`
+
+	// ReportAdded 是新增的周报数量。
+	ReportAdded int `json:"reportAdded"`
+	// ReportUpdated 是被修改并重新读取的周报数量。
+	ReportUpdated int `json:"reportUpdated"`
+	// ReportRemoved 是从索引中删除的周报数量。
+	ReportRemoved int `json:"reportRemoved"`
+	// ReportTotal 是同步完成后索引中的周报总数。
+	ReportTotal int `json:"reportTotal"`
 }
 
 // Change 是单文件同步的结果。
@@ -153,6 +171,10 @@ func (ix *Index) initSchema() error {
 		"DROP TABLE IF EXISTS notes",
 		"DROP TABLE IF EXISTS todos_fts",
 		"DROP TABLE IF EXISTS todos",
+		"DROP TABLE IF EXISTS people_fts",
+		"DROP TABLE IF EXISTS people",
+		"DROP TABLE IF EXISTS reports_fts",
+		"DROP TABLE IF EXISTS reports",
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("删除旧索引表失败: %w", err)
@@ -212,6 +234,53 @@ func (ix *Index) initSchema() error {
 			body,
 			tokenize='trigram'
 		)`,
+		`CREATE TABLE people (
+			id            TEXT PRIMARY KEY,
+			name          TEXT NOT NULL DEFAULT '',
+			aliases       TEXT NOT NULL DEFAULT '[]',
+			grp           TEXT NOT NULL DEFAULT '',
+			product_lines TEXT NOT NULL DEFAULT '[]',
+			role          TEXT NOT NULL DEFAULT 'member',
+			active        INTEGER NOT NULL DEFAULT 1,
+			group_history TEXT NOT NULL DEFAULT '[]',
+			created       TEXT NOT NULL DEFAULT '',
+			updated       TEXT NOT NULL DEFAULT '',
+			path          TEXT NOT NULL,
+			mtime         INTEGER NOT NULL DEFAULT 0,
+			size          INTEGER NOT NULL DEFAULT 0,
+			extra         TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX people_path ON people(path)`,
+		`CREATE VIRTUAL TABLE people_fts USING fts5(
+			id UNINDEXED,
+			name,
+			body,
+			tokenize='trigram'
+		)`,
+		`CREATE TABLE reports (
+			id            TEXT PRIMARY KEY,
+			person        TEXT NOT NULL DEFAULT '',
+			name          TEXT NOT NULL DEFAULT '',
+			week          TEXT NOT NULL DEFAULT '',
+			level         TEXT NOT NULL DEFAULT 'member',
+			grp           TEXT NOT NULL DEFAULT '',
+			product_lines TEXT NOT NULL DEFAULT '[]',
+			source        TEXT NOT NULL DEFAULT '',
+			submitted_at  TEXT NOT NULL DEFAULT '',
+			header_date   TEXT NOT NULL DEFAULT '',
+			path          TEXT NOT NULL,
+			mtime         INTEGER NOT NULL DEFAULT 0,
+			size          INTEGER NOT NULL DEFAULT 0,
+			extra         TEXT NOT NULL DEFAULT '{}'
+		)`,
+		`CREATE INDEX reports_week_level ON reports(week, level)`,
+		`CREATE INDEX reports_path ON reports(path)`,
+		`CREATE VIRTUAL TABLE reports_fts USING fts5(
+			id UNINDEXED,
+			name,
+			body,
+			tokenize='trigram'
+		)`,
 	} {
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("创建索引表失败: %w", err)
@@ -257,6 +326,10 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 		"DELETE FROM notes",
 		"DELETE FROM todos_fts",
 		"DELETE FROM todos",
+		"DELETE FROM people_fts",
+		"DELETE FROM people",
+		"DELETE FROM reports_fts",
+		"DELETE FROM reports",
 	} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return Stats{}, fmt.Errorf("清空索引失败: %w", err)
@@ -273,21 +346,7 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 		if err != nil {
 			return Stats{}, err
 		}
-		todoPath := isTodoPath(ix.ws, path)
-		switch change.Kind {
-		case ChangeAdded:
-			if todoPath {
-				stats.TodoAdded++
-			} else {
-				stats.Added++
-			}
-		case ChangeUpdated:
-			if todoPath {
-				stats.TodoUpdated++
-			} else {
-				stats.Updated++
-			}
-		}
+		bumpStats(fileKind(ix.ws, path), change, &stats)
 	}
 
 	total, err := countNotes(ctx, tx)
@@ -300,6 +359,16 @@ func (ix *Index) Rebuild(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.TodoTotal = todoTotal
+	peopleTotal, err := countPeople(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.PeopleTotal = peopleTotal
+	reportTotal, err := countReports(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.ReportTotal = reportTotal
 
 	if err := tx.Commit(); err != nil {
 		return Stats{}, fmt.Errorf("提交索引重建失败: %w", err)
@@ -338,13 +407,10 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		if errors.Is(statErr, os.ErrNotExist) {
 			// 枚举后被外部删除，按删除处理。
 			if _, ok := existing[path]; ok {
-				if _, _, err := ix.deleteFile(ctx, tx, path); err != nil {
+				if _, removed, err := ix.deleteFile(ctx, tx, path); err != nil {
 					return Stats{}, err
-				}
-				if isTodoPath(ix.ws, path) {
-					stats.TodoRemoved++
-				} else {
-					stats.Removed++
+				} else if removed {
+					bumpStats(fileKind(ix.ws, path), Change{Kind: ChangeRemoved}, &stats)
 				}
 			}
 			continue
@@ -362,40 +428,17 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		if err != nil {
 			return Stats{}, err
 		}
-		todoPath := isTodoPath(ix.ws, path)
-		switch change.Kind {
-		case ChangeAdded:
-			if todoPath {
-				stats.TodoAdded++
-			} else {
-				stats.Added++
-			}
-		case ChangeUpdated:
-			if todoPath {
-				stats.TodoUpdated++
-			} else {
-				stats.Updated++
-			}
-		case ChangeRemoved:
-			if todoPath {
-				stats.TodoRemoved++
-			} else {
-				stats.Removed++
-			}
-		}
+		bumpStats(fileKind(ix.ws, path), change, &stats)
 	}
 
 	for path := range existing {
 		if current[path] {
 			continue
 		}
-		if _, _, err := ix.deleteFile(ctx, tx, path); err != nil {
+		if _, removed, err := ix.deleteFile(ctx, tx, path); err != nil {
 			return Stats{}, err
-		}
-		if isTodoPath(ix.ws, path) {
-			stats.TodoRemoved++
-		} else {
-			stats.Removed++
+		} else if removed {
+			bumpStats(fileKind(ix.ws, path), Change{Kind: ChangeRemoved}, &stats)
 		}
 	}
 
@@ -409,6 +452,16 @@ func (ix *Index) Sync(ctx context.Context) (Stats, error) {
 		return Stats{}, err
 	}
 	stats.TodoTotal = todoTotal
+	peopleTotal, err := countPeople(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.PeopleTotal = peopleTotal
+	reportTotal, err := countReports(ctx, tx)
+	if err != nil {
+		return Stats{}, err
+	}
+	stats.ReportTotal = reportTotal
 
 	if err := tx.Commit(); err != nil {
 		return Stats{}, fmt.Errorf("提交索引同步失败: %w", err)
@@ -475,7 +528,7 @@ type rowState struct {
 // loadExisting 读取索引中全部 path 及其 mtime/size，笔记与待办合并返回。
 func loadExisting(ctx context.Context, tx *sql.Tx) (map[string]rowState, error) {
 	existing := map[string]rowState{}
-	for _, table := range []string{"notes", "todos"} {
+	for _, table := range []string{"notes", "todos", "people", "reports"} {
 		rows, err := tx.QueryContext(ctx, "SELECT path, mtime, size FROM "+table)
 		if err != nil {
 			return nil, fmt.Errorf("读取索引状态失败: %w", err)
@@ -516,13 +569,19 @@ func countTodos(ctx context.Context, tx *sql.Tx) (int, error) {
 	return total, nil
 }
 
-// upsert 按路径所在目录分派到笔记或待办索引，返回变化类型。
+// upsert 按路径所在目录分派到笔记/待办/组员/周报索引，返回变化类型。
 // force 为 true 时即使 mtime 与 size 未变也重新读取（供 watcher 使用）。
 func (ix *Index) upsert(ctx context.Context, tx *sql.Tx, path string, force bool) (Change, error) {
-	if isTodoPath(ix.ws, path) {
+	switch fileKind(ix.ws, path) {
+	case "todo":
 		return ix.upsertTodo(ctx, tx, path, force)
+	case "people":
+		return ix.upsertPerson(ctx, tx, path, force)
+	case "report":
+		return ix.upsertReport(ctx, tx, path, force)
+	default:
+		return ix.upsertNote(ctx, tx, path, force)
 	}
-	return ix.upsertNote(ctx, tx, path, force)
 }
 
 // upsertNote 读取笔记文件并写入笔记索引，返回变化类型。
@@ -813,15 +872,21 @@ func deleteTodo(ctx context.Context, tx *sql.Tx, path string) (string, bool, err
 	return id, true, nil
 }
 
-// deleteFile 按路径所在目录分派删除笔记或待办索引项。
+// deleteFile 按路径所在目录分派删除笔记/待办/组员/周报索引项。
 func (ix *Index) deleteFile(ctx context.Context, tx *sql.Tx, path string) (string, bool, error) {
-	if isTodoPath(ix.ws, path) {
+	switch fileKind(ix.ws, path) {
+	case "todo":
 		return deleteTodo(ctx, tx, path)
+	case "people":
+		return deletePerson(ctx, tx, path)
+	case "report":
+		return deleteReport(ctx, tx, path)
+	default:
+		return deleteNote(ctx, tx, path)
 	}
-	return deleteNote(ctx, tx, path)
 }
 
-// listFiles 返回笔记与待办目录下需要索引的 .md 文件绝对路径。
+// listFiles 返回笔记、待办、组员与周报目录下需要索引的 .md 文件绝对路径。
 func (ix *Index) listFiles() ([]string, error) {
 	// 索引与 store 共用同一套文件枚举规则，避免两处不一致。
 	notes, err := ix.ws.ListWorkspaceNotes()
@@ -832,7 +897,15 @@ func (ix *Index) listFiles() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(notes, todos...), nil
+	people, err := ix.ws.ListWorkspacePeople()
+	if err != nil {
+		return nil, err
+	}
+	reports, err := ix.ws.ListWorkspaceReports()
+	if err != nil {
+		return nil, err
+	}
+	return append(append(append(notes, todos...), people...), reports...), nil
 }
 
 // noteType 返回笔记类型，空值统一为 note。

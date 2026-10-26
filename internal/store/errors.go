@@ -24,6 +24,12 @@ var (
 
 	// ErrInvalid 表示工作台或笔记数据不合法。
 	ErrInvalid = errors.New("数据不合法")
+
+	// ErrConflict 表示姓名/别名与在职人员冲突。
+	ErrConflict = errors.New("姓名或别名冲突")
+
+	// ErrAmbiguousPerson 表示按姓名/别名匹配到多个人员。
+	ErrAmbiguousPerson = errors.New("姓名匹配不唯一")
 )
 
 // todoError 是待办操作专用的私有错误类型：Error() 返回待办文案，Unwrap()
@@ -43,4 +49,22 @@ func (e *todoError) Unwrap() error { return e.err }
 // newTodoError 构造带自定义文案、但保持哨兵可识别的待办错误。
 func newTodoError(sentinel error, format string, args ...any) error {
 	return &todoError{msg: fmt.Sprintf(format, args...), err: sentinel}
+}
+
+// personError 是组员操作专用的私有错误类型：Error() 返回组员文案，Unwrap()
+// 返回哨兵，保证 errors.Is(err, ErrNotFound/ErrConflict/ErrAmbiguousPerson) 成立。
+type personError struct {
+	msg string
+	err error
+}
+
+// Error 实现 error 接口。
+func (e *personError) Error() string { return e.msg }
+
+// Unwrap 返回底层哨兵错误。
+func (e *personError) Unwrap() error { return e.err }
+
+// newPersonError 构造带自定义文案、但保持哨兵可识别的组员错误。
+func newPersonError(sentinel error, format string, args ...any) error {
+	return &personError{msg: fmt.Sprintf(format, args...), err: sentinel}
 }

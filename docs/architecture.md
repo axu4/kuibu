@@ -58,10 +58,16 @@ CLI 是唯一正式读写接口；AI 一律经 CLI 读写数据，不直接改�
 ├── todos/                        # 待办，平铺存放，一条待办一个文件
 │   ├── 20261026-100000-19ae.md
 │   └── ...
+├── people/                       # 组员，平铺存放，一个组员一个文件
+│   └── 20261026-100000-9b3a.md
+├── reports/                      # 周报，按周/层级归档（.history 为覆盖/删除历史）
+│   └── 2026-W44/
+│       ├── member/person.md
+│       └── .history/member/person-20261029-100000.md
 ├── assets/                       # 图片等资源，扁平存放
 │   └── 20240101-1a2b3c4d-截图.png
 └── .kuibu/                       # 元数据（不参与笔记树）
-    ├── config.json               # {"version":1}
+    ├── config.json               # {"version":1,"reportWeekday":4}
     └── index.db                  # SQLite 索引（可删可重建）
 ```
 
@@ -105,6 +111,9 @@ order: 0
 - **未知字段无损保留**，外部编辑器手加的字段、后续待办/周报要加的扩展字段（如 `status`、`due`、`week`）都不会被覆盖丢失，不需要先改 schema。
 - **容错**：front matter 解析失败或不是映射时，整个文件按正文处理，不报错；没有 front matter 的外部 Markdown 也能读入。
 - 标准字段按固定顺序写入，`created`/`updated` 一律双引号字符串，避免 YAML 把时间解析成非字符串类型。
+
+组员（`people/<id>.md`）与周报（`reports/<周>/<层级>/<personId>.md`）的 front matter
+字段表见 [report.md](report.md)。
 
 ## 待办
 
@@ -201,7 +210,43 @@ source: ""
 
 ### watcher 的 TodoIDs 事件
 
-`index.Watch` 同时监听 `notes/` 与 `todos/`。事件 `Event` 中 `Changes/IDs` 只含笔记变化，`TodoChanges/TodoIDs` 只含待办变化，两者互不混入，App 可据此分别刷新笔记树与待办列表。
+`index.Watch` 同时监听 `notes/`、`todos/`、`people/` 与 `reports/`（`.history/` 忽略）。事件 `Event` 中 `Changes/IDs` 只含笔记变化，`TodoChanges/TodoIDs` 只含待办变化，`PeopleChanges/PeopleIDs` 只含组员变化，`ReportChanges/ReportIDs` 只含周报变化，互不混入，App 可据此分别刷新。
+
+## 组员
+
+组员平铺放在 `people/` 目录，一个组员一个文件，文件名为 `<id>.md`。front matter：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 姓名 |
+| `aliases` | string[] | 别名列表，用于粘贴识别 |
+| `group` | string | 当前所属组 |
+| `productLines` | string[] | 产品线，可多个 |
+| `role` | string | `member` 组员 / `lead` 组长 |
+| `active` | bool | 在职，缺省 true |
+| `groupHistory` | object[] | 转组记录 `{group, productLines, from: YYYY-MM-DD}`，第一条是加入时 |
+| `created` / `updated` | RFC3339 string | 创建/更新时间 |
+| 其他任意字段 | 任意 YAML | 进 `Person.Extra`，无损保留 |
+
+姓名与别名在在职人员中唯一（大小写不敏感、去首尾空格），冲突返回 `CONFLICT`。
+
+## 周报
+
+周报原文归档在 `reports/<周>/<层级>/<personId>.md`，层级 `member`（组员交给组长）与 `lead`（组长交给 SE）。front matter：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `person` | string | 提交人组员 ID |
+| `name` | string | 提交时姓名快照 |
+| `week` | string | ISO 周编号，如 `2026-W44` |
+| `level` | string | `member` / `lead` |
+| `group` | string | 按该周周一时所属组的快照 |
+| `productLines` | string[] | 按该周周一时产品线快照 |
+| `source` | string | `paste` / `cli` |
+| `submittedAt` | RFC3339 string | 提交时间 |
+| `headerDate` | string | 原文头里的日期，可空 |
+
+正文为原文原样保存（只去首尾空行）。同一人同周同层级再次提交时，旧文件先移入 `reports/<周>/.history/<层级>/<personId>-<旧 submittedAt 紧凑格式>.md`。周报日存 `.kuibu/config.json` 的 `reportWeekday`（1-7，缺省 4），迟交 = `submittedAt` 晚于周报日当天 24:00。
 
 ## 树存储方案
 
@@ -232,9 +277,13 @@ source: ""
   - `notes_fts`：FTS5 虚表 `(id UNINDEXED, title, body)`，`tokenize='trigram'`。
   - `todos(id PK, title, status, due_date, due_time, due_at, done_at, parent, ord, tags JSON, links JSON, attachments JSON, source, created, updated, path, mtime, size, extra JSON)`，索引 `(parent, ord, id)`、`(status, due_date)` 与 `path`。
   - `todos_fts`：FTS5 虚表 `(id UNINDEXED, title, body)`，`tokenize='trigram'`。
+  - `people(id PK, name, aliases JSON, grp, product_lines JSON, role, active, group_history JSON, created, updated, path, mtime, size, extra JSON)`，索引 `path`。
+  - `people_fts`：FTS5 虚表 `(id UNINDEXED, name, body)`，`tokenize='trigram'`。
+  - `reports(id PK = week/level/person, person, name, week, level, grp, product_lines JSON, source, submitted_at, header_date, path, mtime, size, extra JSON)`，索引 `(week, level)` 与 `path`。
+  - `reports_fts`：FTS5 虚表 `(id UNINDEXED, name, body)`，`tokenize='trigram'`。
 - **检索**：查询 ≥ 3 个字符时用 FTS5 trigram（trigram 支持中文子串），按 `bm25` + `updated` 倒序，命中词用 `[]` 包裹成片段；**少于 3 个字符时 trigram 无法匹配，回退为 `title`/`body` 的 LIKE 检索**（通配符转义）。FTS 查询被当作整体短语加引号，避免 `- : *` 被解释成查询语法；FTS 报错时也退回 LIKE。
 - **增量同步**：`Sync` 按 `path + mtime + size` 判断变化，新增/改动重读，消失的删除；`UpsertFile`/`RemoveFile` 供 watcher 用，`UpsertFile` 即使 mtime/size 未变也重读（防同秒小改动漏掉）。文件改名时按 `id` 兜底匹配并清理旧行。
-- **版本**：结构版本写在 `PRAGMA user_version`（当前 `2`）。版本不匹配时直接 `DROP` 旧表并按最新结构重建——索引是缓存，丢弃没有代价。
+- **版本**：结构版本写在 `PRAGMA user_version`（当前 `3`）。版本不匹配时直接 `DROP` 旧表并按最新结构重建——索引是缓存，丢弃没有代价。
 - **可删可重建**：`index rebuild` 清空后从全部 Markdown 重建；watcher 收到 `fsnotify.ErrEventOverflow` 时做一次全量 `Sync` 兜底。
 
 ## 资源存储
