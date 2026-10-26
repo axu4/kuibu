@@ -51,7 +51,7 @@ func newTestUpdate(t *testing.T) (*UpdateService, *fakeUpdateUI) {
 	s.lookPath = func(string) (string, error) { return "", errors.New("no gh") }
 	s.run = func(string, ...string) ([]byte, error) { return nil, errors.New("no gh") }
 	s.now = func() time.Time {
-		return time.Date(2026, 3, 4, 9, 30, 0, 0, time.Local)
+		return time.Date(2026, 3, 4, 9, 30, 0, 0, time.FixedZone("CST", 8*3600))
 	}
 
 	ui := &fakeUpdateUI{}
@@ -179,7 +179,7 @@ func TestCheckSuccess(t *testing.T) {
 	if result.Current != "0.1.0" || result.Latest != "0.2.0" || !result.HasUpdate {
 		t.Errorf("CheckResult = %+v", result)
 	}
-	if result.Notes != "更新内容" || result.HTMLURL == "" || result.CheckedAt != "2026-03-04T09:30:00+08:00" {
+	if result.Notes != "更新内容" || result.HTMLURL == "" || !sameInstant(result.CheckedAt, "2026-03-04T09:30:00+08:00") {
 		t.Errorf("CheckResult 字段不符: %+v", result)
 	}
 }
@@ -401,4 +401,11 @@ func containsString(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// sameInstant 比较两个 RFC3339 时间是否为同一时刻（与机器时区无关）。
+func sameInstant(a, b string) bool {
+	ta, errA := time.Parse(time.RFC3339, a)
+	tb, errB := time.Parse(time.RFC3339, b)
+	return errA == nil && errB == nil && ta.Equal(tb)
 }

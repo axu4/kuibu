@@ -8,8 +8,8 @@
 #
 # 流程（macos-latest = arm64）：
 #   1. 从 tag 计算 VERSION（去掉 v 前缀）并校验格式 MAJOR.MINOR.PATCH[-prerelease]。
-#   2. 构建 App（wails3 package），通过环境变量 EXTRA_LDFLAGS 把版本号注入
-#      internal/version.Version（Taskfile 的 EXTRA_LDFLAGS 会读环境变量并拼进 -ldflags）。
+#   2. 构建 App（wails3 package），通过环境变量 KUIBU_LDFLAGS 把版本号注入
+#      internal/version.Version（Taskfile 的 EXTRA_LDFLAGS 变量读取它并拼进 -ldflags）。
 #   3. 用 PlistBuddy 把 Info.plist 的 CFBundleShortVersionString/CFBundleVersion 改成
 #      VERSION，再重新 ad-hoc 签名并校验。
 #   4. 把 .app 改名为「跬步.app」，打成 zip（ditto）与 dmg（hdiutil）。
@@ -113,8 +113,8 @@ jobs:
         working-directory: app
         shell: bash
         run: |
-          # wails3 package 走 Taskfile；build:native 会把 EXTRA_LDFLAGS 拼进 -ldflags。
-          export EXTRA_LDFLAGS="-X github.com/axu4/kuibu/internal/version.Version=${{ steps.version.outputs.VERSION }}"
+          # wails3 package 走 Taskfile；build:native 会读环境变量 KUIBU_LDFLAGS 拼进 -ldflags。
+          export KUIBU_LDFLAGS="-X github.com/axu4/kuibu/internal/version.Version=${{ steps.version.outputs.VERSION }}"
           wails3 package
 
       - name: 修改 Info.plist 版本并重新签名
@@ -164,6 +164,7 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           ./kuibu-darwin-arm64 version | grep -F "$VERSION"
           # App 二进制的构建信息里应带上注入的版本号（确认 EXTRA_LDFLAGS 生效）。
+          go version -m "dist/跬步.app/Contents/MacOS/kuibu" | grep -- -ldflags || true
           go version -m "dist/跬步.app/Contents/MacOS/kuibu" | grep -F "internal/version.Version=$VERSION"
           # zip 解压后应是 跬步.app 结构。
           rm -rf /tmp/zipcheck && mkdir -p /tmp/zipcheck

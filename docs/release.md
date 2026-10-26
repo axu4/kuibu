@@ -27,7 +27,7 @@ git push origin v0.2.0
 ## workflow 做了什么
 
 1. **计算版本**：从 tag 去掉 `v` 前缀得到 `VERSION`，并校验 `MAJOR.MINOR.PATCH[-prerelease]` 格式。
-2. **构建 App**：`wails3 package` 打包 `.app`。版本号通过环境变量 `EXTRA_LDFLAGS` 注入——`app/build/darwin/Taskfile.yml` 的 `EXTRA_LDFLAGS` 变量从环境变量读取并拼进生产构建的 `-ldflags`，最终等价于 `-ldflags "-w -s -X github.com/axu4/kuibu/internal/version.Version=$VERSION"`。
+2. **构建 App**：`wails3 package` 打包 `.app`。版本号通过环境变量 `KUIBU_LDFLAGS` 注入——`app/build/darwin/Taskfile.yml` 的 `EXTRA_LDFLAGS` 变量（`sh:` 动态变量）读取它并拼进生产构建的 `-ldflags`，最终等价于 `-ldflags "-w -s -X github.com/axu4/kuibu/internal/version.Version=$VERSION"`。
 3. **改 Info.plist**：用 `PlistBuddy` 把 `CFBundleShortVersionString` / `CFBundleVersion` 改成 `$VERSION`，再 `codesign --force --deep -s -` 重签并 `codesign --verify --deep --strict` 校验。
 4. **打包**：
    - 把 `.app` 改名为 `跬步.app`（CFBundleName 已经是「跬步」）。

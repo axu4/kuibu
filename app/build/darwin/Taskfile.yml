@@ -6,9 +6,10 @@ includes:
 vars:
   # Docker image for cross-compilation (used when building on non-macOS)
   CROSS_IMAGE: wails-cross
-  # 生产构建额外注入的 -ldflags 内容（从环境变量 EXTRA_LDFLAGS 读取）。
-  # 发布 workflow 用 export EXTRA_LDFLAGS="-X ..." 注入版本号。
-  EXTRA_LDFLAGS: '{{.EXTRA_LDFLAGS | default ""}}'
+  # 生产构建额外注入的 -ldflags 内容（从环境变量 KUIBU_LDFLAGS 读取）。
+  # 发布 workflow 用 export KUIBU_LDFLAGS="-X ..." 注入版本号。
+  EXTRA_LDFLAGS:
+    sh: 'echo "${KUIBU_LDFLAGS:-}"'
 
 tasks:
   build:
