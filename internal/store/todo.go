@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -62,6 +63,38 @@ func (d *Due) String() string {
 		return d.Date
 	}
 	return d.Date + " " + d.Time
+}
+
+// MarshalJSON 把 Due 序列化为 JSON 字符串：只有日期写 "2026-10-30"，
+// 有时间写 "2026-10-30 15:00"；nil 或空日期输出 null。
+func (d *Due) MarshalJSON() ([]byte, error) {
+	if d == nil || d.Date == "" {
+		return []byte("null"), nil
+	}
+	return json.Marshal(d.String())
+}
+
+// UnmarshalJSON 从 JSON 字符串反序列化 Due，兼容 null 与空字符串。
+func (d *Due) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "null" {
+		*d = Due{}
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+	parsed, err := ParseDue(str)
+	if err != nil {
+		return err
+	}
+	if parsed == nil {
+		*d = Due{}
+		return nil
+	}
+	*d = *parsed
+	return nil
 }
 
 // ParseDue 解析截止日期字符串。
@@ -212,6 +245,9 @@ func (w *Workspace) CreateTodo(in NewTodo) (*Todo, error) {
 	}
 	if in.Parent != "" {
 		if _, err := w.GetTodo(in.Parent); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil, newTodoError(ErrNotFound, "父待办不存在: %s", in.Parent)
+			}
 			return nil, err
 		}
 	}
@@ -284,7 +320,7 @@ func (w *Workspace) CreateTodo(in NewTodo) (*Todo, error) {
 // GetTodo 按 ID 读取一条待办（含正文）。
 func (w *Workspace) GetTodo(id string) (*Todo, error) {
 	if id == "" || strings.ContainsAny(id, `/\`) {
-		return nil, fmt.Errorf("%w: 非法待办 ID %q", ErrNotFound, id)
+		return nil, newTodoError(ErrNotFound, "非法待办 ID %q", id)
 	}
 	return readTodoFile(w.todoPath(id))
 }
@@ -377,15 +413,15 @@ func (w *Workspace) MoveTodo(id, newParent string, position int) error {
 
 	moving, ok := byID[id]
 	if !ok {
-		return fmt.Errorf("%w: %s", ErrNotFound, id)
+		return newTodoError(ErrNotFound, "待办不存在: %s", id)
 	}
 	if newParent != "" {
 		if _, ok := byID[newParent]; !ok {
-			return fmt.Errorf("%w: 父待办 %s", ErrNotFound, newParent)
+			return newTodoError(ErrNotFound, "父待办不存在: %s", newParent)
 		}
 	}
 	if newParent == id || w.todoIsDescendant(byID, newParent, id) {
-		return fmt.Errorf("%w: 不能移动到 %q 下", ErrCycle, newParent)
+		return newTodoError(ErrCycle, "移动会导致待办父子关系成环: %s", id)
 	}
 
 	oldParent := moving.Parent
@@ -444,12 +480,12 @@ func (w *Workspace) DeleteTodo(id string, recursive bool) error {
 		byID[m.ID] = m
 	}
 	if _, ok := byID[id]; !ok {
-		return fmt.Errorf("%w: %s", ErrNotFound, id)
+		return newTodoError(ErrNotFound, "待办不存在: %s", id)
 	}
 
 	children := todoChildrenOf(metas, id)
 	if len(children) > 0 && !recursive {
-		return fmt.Errorf("%w: %s", ErrHasChildren, id)
+		return newTodoError(ErrHasChildren, "待办仍有子任务: %s（如需连同子任务删除请加 -r）", id)
 	}
 
 	targets := []string{id}
@@ -556,10 +592,11 @@ func (w *Workspace) TodoChildren(id string) ([]*Todo, error) {
 
 // readTodoFile 读取并解析待办文件。
 func readTodoFile(path string) (*Todo, error) {
+	id := IDFromPath(path)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("%w: %s", ErrNotFound, path)
+			return nil, newTodoError(ErrNotFound, "待办不存在: %s", id)
 		}
 		return nil, fmt.Errorf("读取待办失败: %w", err)
 	}
@@ -568,7 +605,6 @@ func readTodoFile(path string) (*Todo, error) {
 		return nil, fmt.Errorf("读取待办信息失败: %w", err)
 	}
 
-	id := IDFromPath(path)
 	todo := &Todo{
 		ID:      id,
 		Status:  StatusTodo,

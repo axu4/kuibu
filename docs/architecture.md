@@ -55,6 +55,9 @@ CLI 是唯一正式读写接口；AI 一律经 CLI 读写数据，不直接改�
 ├── notes/                        # 笔记，平铺存放，一条笔记一个文件
 │   ├── 20240101-120000-abcd.md
 │   └── ...
+├── todos/                        # 待办，平铺存放，一条待办一个文件
+│   ├── 20261026-100000-19ae.md
+│   └── ...
 ├── assets/                       # 图片等资源，扁平存放
 │   └── 20240101-1a2b3c4d-截图.png
 └── .kuibu/                       # 元数据（不参与笔记树）
@@ -103,6 +106,103 @@ order: 0
 - **容错**：front matter 解析失败或不是映射时，整个文件按正文处理，不报错；没有 front matter 的外部 Markdown 也能读入。
 - 标准字段按固定顺序写入，`created`/`updated` 一律双引号字符串，避免 YAML 把时间解析成非字符串类型。
 
+## 待办
+
+待办与笔记一样是工作台里的 Markdown 文件，平铺放在 `todos/` 目录，一条待办一个文件，文件名为 `<id>.md`。待办之间也通过 `parent` + `order` 形成父子层级（子任务），不单独建表。
+
+### 文件格式
+
+完整示例：
+
+```markdown
+---
+id: "20261026-100000-19ae"
+title: "交周报"
+type: "todo"
+status: "doing"
+due: "2026-10-30 15:00"
+created: "2026-10-26T10:00:00+08:00"
+updated: "2026-10-26T11:00:00+08:00"
+done_at: ""
+tags:
+  - 工作
+  - 周报
+parent: ""
+order: 0
+links:
+  - url: "https://example.com"
+    title: "示例"
+attachments:
+  - ../assets/20261026-abcdef12-截图.png
+source: ""
+---
+详情正文……
+```
+
+字段表：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 待办标识，等于文件名去掉 `.md`；写回时以文件名为准 |
+| `title` | string | 标题，去空白后不能为空 |
+| `type` | string | 固定 `todo` |
+| `status` | string | `todo` / `doing` / `done` / `canceled`，非法值读入时按 `todo` 处理 |
+| `due` | string | 截止，格式 `YYYY-MM-DD` 或 `YYYY-MM-DD HH:MM`，空字符串表示无截止 |
+| `created` | RFC3339 string | 创建时间 |
+| `updated` | RFC3339 string | 最后更新时间，store 每次写回时刷新 |
+| `done_at` | RFC3339 string | 完成时间，仅 `done` 时有值，其余状态为空字符串 |
+| `tags` | string[] | 标签列表，空时写 `[]` |
+| `parent` | string | 父待办 ID，空字符串表示顶层 |
+| `order` | int | 同级排序序号，从 0 开始 |
+| `links` | object[] | 链接列表，每项 `{url, title}`，`title` 可空 |
+| `attachments` | string[] | 附件相对路径，形如 `../assets/<文件名>` |
+| `source` | string | 来源笔记 ID，可空 |
+| 其他任意字段 | 任意 YAML | 未知字段进 `Todo.Extra`，无损保留（规则同笔记） |
+
+### 状态与 done_at
+
+- 四种状态：`todo`（未开始）、`doing`（进行中）、`done`（已完成）、`canceled`（已取消）。
+- `done_at` 只在 `done` 时有值：首次从非 `done` 转为 `done` 时设置为当前时间；再次设为 `done` 不覆盖已有完成时间；转成非 `done` 时清空。
+- `store.UpdateTodo` 统一维护 `updated` 与 `done_at`，业务代码不要直接写这两个字段。
+
+### due 格式与时区
+
+- `due` 的日期部分必填，时间部分可空；无时间时截止时刻取当天 `23:59:59`。
+- 日期语义一律使用 `store.TodoLocation()`（Asia/Shanghai），系统缺时区数据时回退固定偏移 CST（UTC+8）。
+- `store.ParseDue` 接受 `YYYY-MM-DD`、`YYYY-MM-DD HH:MM`、`YYYY-MM-DDTHH:MM` 与 RFC3339；RFC3339 先转上海时区再取日期与时间。
+- 索引里 `due_at` 是解析后的截止时刻（RFC3339），`--due overdue` 用它比较。
+
+### 子任务 = parent
+
+- 子任务就是把 `parent` 指向另一条待办的 ID，与笔记树共用同一套 `parent` + `order` 方案。
+- 移动到自身或后代返回 `CYCLE`；删除有子任务的待办需要 `-r/--recursive`，否则返回 `HAS_CHILDREN`。
+- 待办错误使用专用文案：`待办不存在: <id>`、`父待办不存在: <id>`、`待办仍有子任务: <id>（如需连同子任务删除请加 -r）`、`移动会导致待办父子关系成环: <id>`。它们由 `store` 内的私有包装错误返回，`Unwrap` 仍指向 `ErrNotFound/ErrHasChildren/ErrCycle` 等哨兵，因此 `errors.Is` 与 CLI 错误码分类（`NOT_FOUND/HAS_CHILDREN/CYCLE`）不变。
+- `todo list --tree` 的根节点按 `index.ListTodos` 的默认排序（未完成在前、逾期按截止升序等），子任务在父下按 `order,id` 排序。
+
+### 链接与附件
+
+- 链接必须含 scheme（http/https/mailto 等），同 URL 只更新标题不重复添加。
+- 附件经 `store.AddAsset` 去重复制进 `assets/`，列表存相对待办文件的 `../assets/<文件名>`；移除附件只改列表，不删资源文件。
+
+### source
+
+`source` 保存来源笔记 ID，用于「从笔记创建待办」等场景；普通手工录入为空字符串。
+
+### 索引表与过滤
+
+待办索引表 `todos` 在 `notes` 之外单独维护，含 `status/due_date/due_time/due_at/done_at/parent/ord/tags/links/attachments/source` 等列，另有 `todos_fts`（FTS5 trigram）。`index.ListTodos(TodoFilter)` 支持：
+
+- `Statuses`：状态白名单；
+- `Tags`：全部包含；
+- `Parent`：父待办过滤（`""` 表示顶层）；
+- `DueFrom/DueTo`：截止日期闭区间；
+- `OverdueAt`：未完成且截止时刻早于该时刻；
+- `Query`：标题与正文检索（≥3 字走 FTS，否则 LIKE 回退）。
+
+### watcher 的 TodoIDs 事件
+
+`index.Watch` 同时监听 `notes/` 与 `todos/`。事件 `Event` 中 `Changes/IDs` 只含笔记变化，`TodoChanges/TodoIDs` 只含待办变化，两者互不混入，App 可据此分别刷新笔记树与待办列表。
+
 ## 树存储方案
 
 树不存在单独的文件里，而是完全由每条笔记 front matter 的 `parent` + `order` 推导：
@@ -130,9 +230,11 @@ order: 0
 - 表：
   - `notes(id PK, title, type, parent, ord, tags JSON, created, updated, path, mtime, size, extra JSON)`，索引 `(parent, ord, id)` 与 `path`。
   - `notes_fts`：FTS5 虚表 `(id UNINDEXED, title, body)`，`tokenize='trigram'`。
+  - `todos(id PK, title, status, due_date, due_time, due_at, done_at, parent, ord, tags JSON, links JSON, attachments JSON, source, created, updated, path, mtime, size, extra JSON)`，索引 `(parent, ord, id)`、`(status, due_date)` 与 `path`。
+  - `todos_fts`：FTS5 虚表 `(id UNINDEXED, title, body)`，`tokenize='trigram'`。
 - **检索**：查询 ≥ 3 个字符时用 FTS5 trigram（trigram 支持中文子串），按 `bm25` + `updated` 倒序，命中词用 `[]` 包裹成片段；**少于 3 个字符时 trigram 无法匹配，回退为 `title`/`body` 的 LIKE 检索**（通配符转义）。FTS 查询被当作整体短语加引号，避免 `- : *` 被解释成查询语法；FTS 报错时也退回 LIKE。
 - **增量同步**：`Sync` 按 `path + mtime + size` 判断变化，新增/改动重读，消失的删除；`UpsertFile`/`RemoveFile` 供 watcher 用，`UpsertFile` 即使 mtime/size 未变也重读（防同秒小改动漏掉）。文件改名时按 `id` 兜底匹配并清理旧行。
-- **版本**：结构版本写在 `PRAGMA user_version`（当前 `1`）。版本不匹配时直接 `DROP` 旧表并按最新结构重建——索引是缓存，丢弃没有代价。
+- **版本**：结构版本写在 `PRAGMA user_version`（当前 `2`）。版本不匹配时直接 `DROP` 旧表并按最新结构重建——索引是缓存，丢弃没有代价。
 - **可删可重建**：`index rebuild` 清空后从全部 Markdown 重建；watcher 收到 `fsnotify.ErrEventOverflow` 时做一次全量 `Sync` 兜底。
 
 ## 资源存储

@@ -167,3 +167,121 @@ func TestBinaryInitAndNote(t *testing.T) {
 		t.Errorf("未打开工作台退出码 = %d，期望 10；stderr=%s", code, stderr)
 	}
 }
+
+func TestBinaryTodoAddAndList(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式跳过真实进程测试")
+	}
+
+	bin := filepath.Join(t.TempDir(), "kuibu")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("编译 kuibu 失败: %v\n%s", err, out)
+	}
+
+	configDir := t.TempDir()
+	wsDir := filepath.Join(t.TempDir(), "ws")
+	runBinary := func(args ...string) (string, string, int) {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "KUIBU_CONFIG_DIR="+configDir, "KUIBU_NOW=2026-10-26T10:00:00+08:00")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		code := 0
+		if err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("执行 %v 失败: %v", args, err)
+			}
+			code = exitErr.ExitCode()
+		}
+		return stdout.String(), stderr.String(), code
+	}
+
+	stdout, stderr, code := runBinary("init", wsDir, "--json")
+	if code != 0 {
+		t.Fatalf("init 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	_ = stdout
+
+	stdout, stderr, code = runBinary("todo", "add", "--workspace", wsDir, "明天 15:00 交周报", "#工作", "--json")
+	if code != 0 {
+		t.Fatalf("todo add 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var addOut struct {
+		Todo struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			Due   string `json:"due"`
+		} `json:"todo"`
+		Parsed struct {
+			Due string `json:"due"`
+		} `json:"parsed"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &addOut); err != nil {
+		t.Fatalf("todo add 输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+	if addOut.Todo.ID == "" || addOut.Todo.Title != "交周报" || addOut.Todo.Due != "2026-10-27 15:00" {
+		t.Errorf("todo add 输出 = %+v", addOut)
+	}
+	if addOut.Parsed.Due != "2026-10-27 15:00" {
+		t.Errorf("parsed due = %q", addOut.Parsed.Due)
+	}
+
+	stdout, stderr, code = runBinary("todo", "list", "--workspace", wsDir, "--json")
+	if code != 0 {
+		t.Fatalf("todo list 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var listOut []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &listOut); err != nil {
+		t.Fatalf("todo list 输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+	if len(listOut) != 1 || listOut[0]["id"] != addOut.Todo.ID {
+		t.Errorf("todo list 输出 = %v", listOut)
+	}
+
+	// 再建一条并完成，验证 --status done 只返回 done。
+	stdout, stderr, code = runBinary("todo", "add", "--workspace", wsDir, "第二条", "--json")
+	if code != 0 {
+		t.Fatalf("todo add 第二条退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var secondAdd struct {
+		Todo struct {
+			ID string `json:"id"`
+		} `json:"todo"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &secondAdd); err != nil {
+		t.Fatalf("todo add 第二条输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+	if secondAdd.Todo.ID == "" {
+		t.Fatalf("第二条 todo id 为空")
+	}
+
+	stdout, stderr, code = runBinary("todo", "done", secondAdd.Todo.ID, "--workspace", wsDir)
+	if code != 0 {
+		t.Fatalf("todo done 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+
+	stdout, stderr, code = runBinary("todo", "list", "--workspace", wsDir, "--status", "done", "--json")
+	if code != 0 {
+		t.Fatalf("todo list --status done 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var doneOut []map[string]any
+	if err := json.Unmarshal([]byte(stdout), &doneOut); err != nil {
+		t.Fatalf("todo list --status done 输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+	if len(doneOut) != 1 || doneOut[0]["id"] != secondAdd.Todo.ID {
+		t.Errorf("todo list --status done 输出 = %v，期望只含 %s", doneOut, secondAdd.Todo.ID)
+	}
+
+	// 不存在的待办返回待办专用文案，不带绝对路径。
+	_, stderr, code = runBinary("todo", "show", "nope", "--workspace", wsDir)
+	if code != 1 {
+		t.Errorf("todo show nope 退出码 = %d，期望 1；stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stderr, "待办不存在: nope") || strings.Contains(stderr, "todos") {
+		t.Errorf("todo show nope stderr = %q", stderr)
+	}
+}
