@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/axu4/kuibu/internal/store"
 )
@@ -15,7 +16,13 @@ import (
 type UserConfig struct {
 	// Workspace 是默认工作台目录的绝对路径。
 	Workspace string `json:"workspace"`
+	// QuickNoteShortcut 是随手记全局快捷键（Wails v3 加速键语法），空表示用默认值。
+	QuickNoteShortcut string `json:"quickNoteShortcut,omitempty"`
 }
+
+// DefaultQuickNoteShortcut 是随手记全局快捷键的默认值。
+// Wails v3 加速键语法，macOS 上即 ⌃⌥N。
+const DefaultQuickNoteShortcut = "Ctrl+Alt+N"
 
 // Path 返回用户配置文件路径。
 //
@@ -51,7 +58,7 @@ func Load(env func(string) string) (UserConfig, error) {
 	return cfg, nil
 }
 
-// Save 写入用户配置。
+// Save 原子地写入用户配置（同目录临时文件 + rename），避免并发写坏。
 func Save(env func(string) string, cfg UserConfig) error {
 	path, err := Path(env)
 	if err != nil {
@@ -65,8 +72,45 @@ func Save(env func(string) string, cfg UserConfig) error {
 		return fmt.Errorf("序列化用户配置失败: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := writeFileAtomic(path, data); err != nil {
 		return fmt.Errorf("写入用户配置失败: %w", err)
+	}
+	return nil
+}
+
+// writeFileAtomic 以「同目录临时文件 + rename」的方式原子写入文件。
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpName := tmp.Name()
+
+	cleanup := func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+	}
+
+	if _, err := tmp.Write(data); err != nil {
+		cleanup()
+		return fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		cleanup()
+		return fmt.Errorf("同步临时文件失败: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("关闭临时文件失败: %w", err)
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("设置文件权限失败: %w", err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return fmt.Errorf("替换目标文件失败: %w", err)
 	}
 	return nil
 }
@@ -78,6 +122,29 @@ func SaveDefaultWorkspace(env func(string) string, dir string) error {
 		return err
 	}
 	cfg.Workspace = dir
+	return Save(env, cfg)
+}
+
+// QuickNoteShortcut 返回随手记全局快捷键，未配置时返回默认值。
+func QuickNoteShortcut(env func(string) string) (string, error) {
+	cfg, err := Load(env)
+	if err != nil {
+		return "", err
+	}
+	if cfg.QuickNoteShortcut == "" {
+		return DefaultQuickNoteShortcut, nil
+	}
+	return cfg.QuickNoteShortcut, nil
+}
+
+// SaveQuickNoteShortcut 读-改-写随手记全局快捷键，保留工作台等其他字段。
+// accel 去空白后为空表示恢复默认（写空字符串即省略该字段）。
+func SaveQuickNoteShortcut(env func(string) string, accel string) error {
+	cfg, err := Load(env)
+	if err != nil {
+		return err
+	}
+	cfg.QuickNoteShortcut = strings.TrimSpace(accel)
 	return Save(env, cfg)
 }
 

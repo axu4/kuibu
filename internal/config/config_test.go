@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -96,5 +97,144 @@ func TestSaveDefaultWorkspaceCreatesConfigDir(t *testing.T) {
 	}
 	if want := "/tmp/ws2"; got != want {
 		t.Errorf("DefaultWorkspace = %q，期望 %q", got, want)
+	}
+}
+
+func TestQuickNoteShortcutDefaults(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+
+	got, err := QuickNoteShortcut(testEnv(vars))
+	if err != nil {
+		t.Fatalf("QuickNoteShortcut 返回错误: %v", err)
+	}
+	if want := DefaultQuickNoteShortcut; got != want {
+		t.Errorf("QuickNoteShortcut = %q，期望 %q", got, want)
+	}
+}
+
+func TestQuickNoteShortcutSaveAndRead(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+
+	if err := SaveQuickNoteShortcut(testEnv(vars), "  Ctrl+Shift+K  "); err != nil {
+		t.Fatalf("SaveQuickNoteShortcut 返回错误: %v", err)
+	}
+	got, err := QuickNoteShortcut(testEnv(vars))
+	if err != nil {
+		t.Fatalf("QuickNoteShortcut 返回错误: %v", err)
+	}
+	if want := "Ctrl+Shift+K"; got != want {
+		t.Errorf("QuickNoteShortcut = %q，期望 %q", got, want)
+	}
+}
+
+func TestSaveQuickNoteShortcutKeepsWorkspace(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+
+	if err := SaveDefaultWorkspace(testEnv(vars), "/tmp/ws"); err != nil {
+		t.Fatalf("写入默认工作台失败: %v", err)
+	}
+	if err := SaveQuickNoteShortcut(testEnv(vars), "Ctrl+Alt+Q"); err != nil {
+		t.Fatalf("保存快捷键失败: %v", err)
+	}
+
+	cfg, err := Load(testEnv(vars))
+	if err != nil {
+		t.Fatalf("Load 返回错误: %v", err)
+	}
+	if want := "/tmp/ws"; cfg.Workspace != want {
+		t.Errorf("Workspace = %q，期望 %q", cfg.Workspace, want)
+	}
+	if want := "Ctrl+Alt+Q"; cfg.QuickNoteShortcut != want {
+		t.Errorf("QuickNoteShortcut = %q，期望 %q", cfg.QuickNoteShortcut, want)
+	}
+}
+
+func TestSaveDefaultWorkspaceKeepsQuickNoteShortcut(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+
+	if err := SaveQuickNoteShortcut(testEnv(vars), "Ctrl+Alt+Q"); err != nil {
+		t.Fatalf("保存快捷键失败: %v", err)
+	}
+	if err := SaveDefaultWorkspace(testEnv(vars), "/tmp/ws2"); err != nil {
+		t.Fatalf("写入默认工作台失败: %v", err)
+	}
+
+	cfg, err := Load(testEnv(vars))
+	if err != nil {
+		t.Fatalf("Load 返回错误: %v", err)
+	}
+	if want := "/tmp/ws2"; cfg.Workspace != want {
+		t.Errorf("Workspace = %q，期望 %q", cfg.Workspace, want)
+	}
+	if want := "Ctrl+Alt+Q"; cfg.QuickNoteShortcut != want {
+		t.Errorf("QuickNoteShortcut = %q，期望 %q", cfg.QuickNoteShortcut, want)
+	}
+}
+
+func TestSaveQuickNoteShortcutRestoresDefault(t *testing.T) {
+	vars := map[string]string{}
+	dir := newConfigDir(t, vars)
+
+	if err := SaveDefaultWorkspace(testEnv(vars), "/tmp/ws"); err != nil {
+		t.Fatalf("写入默认工作台失败: %v", err)
+	}
+	if err := SaveQuickNoteShortcut(testEnv(vars), "Ctrl+Alt+Q"); err != nil {
+		t.Fatalf("保存快捷键失败: %v", err)
+	}
+	// 空白表示恢复默认。
+	if err := SaveQuickNoteShortcut(testEnv(vars), "   "); err != nil {
+		t.Fatalf("恢复默认失败: %v", err)
+	}
+
+	got, err := QuickNoteShortcut(testEnv(vars))
+	if err != nil {
+		t.Fatalf("QuickNoteShortcut 返回错误: %v", err)
+	}
+	if want := DefaultQuickNoteShortcut; got != want {
+		t.Errorf("QuickNoteShortcut = %q，期望默认值 %q", got, want)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	if err != nil {
+		t.Fatalf("读取配置文件失败: %v", err)
+	}
+	if strings.Contains(string(data), "quickNoteShortcut") {
+		t.Errorf("恢复默认后不应写入 quickNoteShortcut 字段：%s", data)
+	}
+	if !strings.Contains(string(data), `"workspace":"/tmp/ws"`) {
+		t.Errorf("恢复默认后 workspace 丢失：%s", data)
+	}
+}
+
+func TestLoadOldConfigWithoutQuickNoteShortcut(t *testing.T) {
+	vars := map[string]string{}
+	dir := newConfigDir(t, vars)
+
+	old := []byte("{\n  \"workspace\": \"/tmp/legacy\"\n}\n")
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), old, 0o644); err != nil {
+		t.Fatalf("写入老配置失败: %v", err)
+	}
+
+	cfg, err := Load(testEnv(vars))
+	if err != nil {
+		t.Fatalf("Load 返回错误: %v", err)
+	}
+	if want := "/tmp/legacy"; cfg.Workspace != want {
+		t.Errorf("Workspace = %q，期望 %q", cfg.Workspace, want)
+	}
+	if cfg.QuickNoteShortcut != "" {
+		t.Errorf("QuickNoteShortcut = %q，期望空字符串", cfg.QuickNoteShortcut)
+	}
+
+	got, err := QuickNoteShortcut(testEnv(vars))
+	if err != nil {
+		t.Fatalf("QuickNoteShortcut 返回错误: %v", err)
+	}
+	if want := DefaultQuickNoteShortcut; got != want {
+		t.Errorf("QuickNoteShortcut = %q，期望默认值 %q", got, want)
 	}
 }
