@@ -3,6 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -93,5 +97,73 @@ func TestRunVersionUnknownFlag(t *testing.T) {
 	}
 	if stdout.Len() != 0 {
 		t.Errorf("stdout 应为空，实际 = %q", stdout.String())
+	}
+}
+
+func TestBinaryInitAndNote(t *testing.T) {
+	if testing.Short() {
+		t.Skip("短模式跳过真实进程测试")
+	}
+
+	bin := filepath.Join(t.TempDir(), "kuibu")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("编译 kuibu 失败: %v\n%s", err, out)
+	}
+
+	configDir := t.TempDir()
+	wsDir := filepath.Join(t.TempDir(), "ws")
+	runBinary := func(args ...string) (string, string, int) {
+		t.Helper()
+		cmd := exec.Command(bin, args...)
+		cmd.Env = append(os.Environ(), "KUIBU_CONFIG_DIR="+configDir)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		code := 0
+		if err != nil {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) {
+				t.Fatalf("执行 %v 失败: %v", args, err)
+			}
+			code = exitErr.ExitCode()
+		}
+		return stdout.String(), stderr.String(), code
+	}
+
+	stdout, stderr, code := runBinary("init", wsDir, "--json")
+	if code != 0 {
+		t.Fatalf("init 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var initOut struct {
+		Workspace string `json:"workspace"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &initOut); err != nil {
+		t.Fatalf("init 输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+
+	stdout, stderr, code = runBinary("note", "new", "--workspace", wsDir, "--title", "真实进程笔记", "--json")
+	if code != 0 {
+		t.Fatalf("note new 退出码 = %d，期望 0；stderr=%s", code, stderr)
+	}
+	var note struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &note); err != nil {
+		t.Fatalf("note new 输出不是 JSON: %v；输出=%q", err, stdout)
+	}
+	if note.ID == "" || note.Title != "真实进程笔记" {
+		t.Errorf("note new 输出 = %+v", note)
+	}
+	if _, err := os.Stat(filepath.Join(wsDir, "notes", note.ID+".md")); err != nil {
+		t.Errorf("真实进程未写入笔记文件: %v", err)
+	}
+
+	// 工作台不存在时返回 10。
+	_, stderr, code = runBinary("note", "list", "--workspace", filepath.Join(t.TempDir(), "nope"), "--json")
+	if code != 10 {
+		t.Errorf("未打开工作台退出码 = %d，期望 10；stderr=%s", code, stderr)
 	}
 }
