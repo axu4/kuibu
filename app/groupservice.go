@@ -225,7 +225,9 @@ func toGroupData(ws *store.Workspace, d *store.Draft, lead *store.Person) GroupD
 	if !d.FinalizedAt.IsZero() {
 		out.FinalizedAt = formatTime(d.FinalizedAt)
 	}
-	if r, err := ws.ReadReport(d.Week, store.ReportLevelLead, d.Person); err == nil && r.Source == store.ReportSourceGroup {
+	if d.Kind == store.ProductDirName {
+		out.LeadName = "产品报"
+	} else if r, err := ws.ReadReport(d.Week, store.ReportLevelLead, d.Person); err == nil && r.Source == store.ReportSourceGroup {
 		out.Submitted = true
 	}
 	return out
@@ -237,4 +239,105 @@ func nonNilStrings(list []string) []string {
 		return []string{}
 	}
 	return list
+}
+
+// ProductReport 返回本周 SE 产品报；还没生成时 Exists 为 false。
+func (s *ReportService) ProductReport(week string) (GroupData, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return GroupData{}, err
+	}
+	d, err := ws.ReadDraftKind(store.ProductDirName, week, store.ProductReportID)
+	if errors.Is(err, store.ErrNotFound) {
+		return GroupData{Week: week, Status: "none", LeadName: "产品报", Missing: []string{}}, nil
+	}
+	if err != nil {
+		return GroupData{}, err
+	}
+	return toGroupData(ws, d, nil), nil
+}
+
+// PrepareProduct 生成产品报外发预览，不发请求。有组长未定稿且 allowMissing 为 false 时返回 NOT_FINAL。
+func (s *ReportService) PrepareProduct(week string, allowMissing, force bool) (GroupPlanData, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return GroupPlanData{}, err
+	}
+	plan, err := core.PlanProduct(ws, week, "product", allowMissing)
+	if err != nil {
+		return GroupPlanData{}, err
+	}
+	if err := ws.CheckRegenerateKind(store.ProductDirName, week, store.ProductReportID, force); err != nil {
+		return GroupPlanData{}, err
+	}
+	out := &llm.Outbound{Env: s.llmEnv()}
+	preview, _, err := out.Prepare("", core.GroupRequest(plan))
+	if err != nil {
+		return GroupPlanData{}, err
+	}
+	return GroupPlanData{Preview: preview, Missing: nonNilStrings(plan.Missing)}, nil
+}
+
+// GenerateProduct 发送并保存产品报草稿。只能由外发确认弹窗的「确认发送」调用。
+func (s *ReportService) GenerateProduct(week string, allowMissing, force bool) (GroupData, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return GroupData{}, err
+	}
+	plan, err := core.PlanProduct(ws, week, "product", allowMissing)
+	if err != nil {
+		return GroupData{}, err
+	}
+	if err := ws.CheckRegenerateKind(store.ProductDirName, week, store.ProductReportID, force); err != nil {
+		return GroupData{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	out := &llm.Outbound{Env: s.llmEnv()}
+	preview, resp, err := out.Send(ctx, "", core.GroupRequest(plan), true)
+	if err != nil {
+		return GroupData{}, err
+	}
+	d, warning, err := core.SaveProductReport(ws, plan, preview.ModelName, resp.Text, force, s.clock())
+	if err != nil {
+		return GroupData{}, err
+	}
+	s.emitReport(nil, []string{week + "/" + store.ProductDirName + "/" + store.ProductReportID})
+	data := toGroupData(ws, d, nil)
+	data.Warning = warning
+	return data, nil
+}
+
+// SaveProduct 保存产品报人工修改。
+func (s *ReportService) SaveProduct(week, body string) (GroupData, error) {
+	return s.changeProduct(week, func(ws *store.Workspace) (*store.Draft, error) {
+		return ws.EditDraftKind(store.ProductDirName, week, store.ProductReportID, body, s.clock())
+	})
+}
+
+// FinalizeProduct 产品报定稿。
+func (s *ReportService) FinalizeProduct(week string) (GroupData, error) {
+	return s.changeProduct(week, func(ws *store.Workspace) (*store.Draft, error) {
+		return ws.FinalizeDraftKind(store.ProductDirName, week, store.ProductReportID, s.clock())
+	})
+}
+
+// UnfinalizeProduct 产品报取消定稿。
+func (s *ReportService) UnfinalizeProduct(week string) (GroupData, error) {
+	return s.changeProduct(week, func(ws *store.Workspace) (*store.Draft, error) {
+		return ws.UnfinalizeDraftKind(store.ProductDirName, week, store.ProductReportID)
+	})
+}
+
+func (s *ReportService) changeProduct(week string, fn func(*store.Workspace) (*store.Draft, error)) (GroupData, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return GroupData{}, err
+	}
+	d, err := fn(ws)
+	if err != nil {
+		return GroupData{}, err
+	}
+	s.emitReport(nil, []string{week + "/" + store.ProductDirName + "/" + store.ProductReportID})
+	return toGroupData(ws, d, nil), nil
 }

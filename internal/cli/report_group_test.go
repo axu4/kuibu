@@ -80,7 +80,7 @@ func TestReportGroupGenerateFinalizeSubmit(t *testing.T) {
 	show := e.mustRun("", ws("report", "group", "show", "--week", "2026-W44", "--json")...).jsonOut(t)
 	body, _ := show["body"].(string)
 	for _, want := range []string{
-		"> 未纳入（归一稿未定稿）：王五",
+		"> 未纳入（未定稿）：王五",
 		"## 本周完成\n\n### 产品线A\n#### 功能开发\n- 完成接口联调（张三）",
 		"### 产品线B\n#### 客户支持\n- 处理客户工单（李四）（待确认）",
 		"### 其他\n#### 未分类\n- 未知归类（李四）",

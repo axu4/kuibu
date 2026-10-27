@@ -43,13 +43,13 @@ func TestReportDraftFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	d, err := reports.GetDraft("2026-W44", zhang.ID)
+	d, err := reports.GetDraft("2026-W44", zhang.ID, "")
 	if err != nil || d.Exists {
 		t.Fatalf("未生成时 = %+v, %v", d, err)
 	}
 
 	// 预览不发请求。
-	plan, err := reports.PrepareNormalize("2026-W44", nil, "", false)
+	plan, err := reports.PrepareNormalize("2026-W44", "", nil, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestReportDraftFlow(t *testing.T) {
 	}
 
 	events.reset()
-	res, err := reports.Normalize("2026-W44", plan.Persons, "", false)
+	res, err := reports.Normalize("2026-W44", "", plan.Persons, "", false)
 	if err != nil || len(res) != 1 || res[0].Error != "" {
 		t.Fatalf("Normalize = %+v, %v", res, err)
 	}
@@ -66,14 +66,14 @@ func TestReportDraftFlow(t *testing.T) {
 		t.Fatal("生成后应发 report:changed")
 	}
 
-	if _, err := reports.SaveDraft("2026-W44", zhang.ID, "## 本周完成\n- 【Kuibu】完成核心库（已改）"); err != nil {
+	if _, err := reports.SaveDraft("2026-W44", zhang.ID, "", "## 本周完成\n- 【Kuibu】完成核心库（已改）"); err != nil {
 		t.Fatal(err)
 	}
-	d, err = reports.FinalizeDraft("2026-W44", zhang.ID)
+	d, err = reports.FinalizeDraft("2026-W44", zhang.ID, "")
 	if err != nil || d.Status != "final" || !d.HumanEdited {
 		t.Fatalf("定稿 = %+v, %v", d, err)
 	}
-	if _, err := reports.SaveDraft("2026-W44", zhang.ID, "再改"); err == nil {
+	if _, err := reports.SaveDraft("2026-W44", zhang.ID, "", "再改"); err == nil {
 		t.Fatal("定稿后直接修改应失败")
 	}
 
@@ -83,7 +83,7 @@ func TestReportDraftFlow(t *testing.T) {
 	}
 
 	// 定稿后批量预览会跳过他。
-	plan, err = reports.PrepareNormalize("2026-W44", nil, "", false)
+	plan, err = reports.PrepareNormalize("2026-W44", "", nil, "", false)
 	if err != nil || len(plan.Persons) != 0 || len(plan.Skipped) != 1 {
 		t.Fatalf("应跳过已定稿: %+v, %v", plan, err)
 	}
@@ -111,7 +111,7 @@ func TestReportReviewService(t *testing.T) {
 	if _, err := reports.Review("2026-W44", zhang.ID); !errors.Is(err, store.ErrNotFinal) {
 		t.Fatalf("上周未定稿应 NotFinal, got %v", err)
 	}
-	if _, err := reports.FinalizeDraft("2026-W43", zhang.ID); err != nil {
+	if _, err := reports.FinalizeDraft("2026-W43", zhang.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	res, err := reports.Review("2026-W44", zhang.ID)

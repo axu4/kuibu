@@ -76,6 +76,18 @@ type GroupPlan struct {
 	Included     []GroupMember
 	// Missing 是没有定稿归一稿的组员姓名。
 	Missing []string
+	// ProductFirst 为 true 时按 产品线 → 栏目 → 类别 渲染（产品报），否则 栏目 → 产品线 → 类别（组报）。
+	ProductFirst bool
+	// SourceNoun 是来源的称呼：组员（组报、组长归一）或 组（产品报）。
+	SourceNoun string
+}
+
+// sourceNoun 返回来源称呼，默认「组员」。
+func (p *GroupPlan) sourceNoun() string {
+	if p.SourceNoun == "" {
+		return "组员"
+	}
+	return p.SourceNoun
 }
 
 // ResolveLead 找到组长：group 为空时取唯一有组长的组。
@@ -203,9 +215,10 @@ func (p *GroupPlan) SourceIDs() []string {
 // GroupRequest 构造组报请求：AI 只负责归类与提炼措辞，返回 JSON，结构由代码渲染。
 func GroupRequest(p *GroupPlan) llm.Request {
 	var sys strings.Builder
-	sys.WriteString("你是研发小组长的组报整理助手。把下面各组员的定稿周报合并成组报条目。\n")
+	noun := p.sourceNoun()
+	fmt.Fprintf(&sys, "你是研发周报的组报整理助手。把下面各%s的周报合并成报告条目。\n", noun)
 	sys.WriteString("只输出 JSON 数组，不要任何解释或代码围栏，每个元素：\n")
-	sys.WriteString(`{"section": "栏目名", "productLine": "产品线", "category": "类别", "text": "事项", "sources": ["组员姓名"], "pending": false}` + "\n\n")
+	fmt.Fprintf(&sys, `{"section": "栏目名", "productLine": "产品线", "category": "类别", "text": "事项", "sources": ["%s名称"], "pending": false}`+"\n\n", noun)
 	sys.WriteString("栏目（section 只能取这些，原样照抄）：\n")
 	for _, s := range p.Sections {
 		kind := "平铺，productLine 和 category 留空"
@@ -221,11 +234,11 @@ func GroupRequest(p *GroupPlan) llm.Request {
 	lines := append(append([]string{}, p.ProductLines...), OtherProductLine)
 	fmt.Fprintf(&sys, "\n产品线只能取：%s。\n", strings.Join(lines, "、"))
 	fmt.Fprintf(&sys, "类别只能取：%s。\n", strings.Join(GroupCategories, "、"))
-	sys.WriteString(`规则：
-1. 同一事项在多位组员里出现时合并成一条，sources 列出所有相关组员。
-2. 优先按事项的【领域】前缀判断产品线；判断不了时按组员所属产品线推断，并把 pending 设为 true。
+	fmt.Fprintf(&sys, `规则：
+1. 同一事项在多个%[1]s里出现时合并成一条，sources 列出所有相关%[1]s（用〔〕里的名称）。
+2. 优先按事项的【领域】前缀或所在产品线小节判断产品线；判断不了时按%[1]s所属产品线推断，并把 pending 设为 true。
 3. 措辞简洁，保留进度、数字、链接、编号，不编造原文没有的内容。
-4. text 不要再带【领域】前缀。`)
+4. text 不要再带【领域】前缀。`, noun)
 
 	var user strings.Builder
 	for i, m := range p.Included {
@@ -280,7 +293,39 @@ func RenderGroupReport(p *GroupPlan, text string) (body string, ok bool) {
 
 	var b strings.Builder
 	if len(p.Missing) > 0 {
-		fmt.Fprintf(&b, "> 未纳入（归一稿未定稿）：%s\n\n", strings.Join(p.Missing, "、"))
+		fmt.Fprintf(&b, "> 未纳入（未定稿）：%s\n\n", strings.Join(p.Missing, "、"))
+	}
+	lineOf := func(it GroupItem) string {
+		if knownLine[it.ProductLine] {
+			return it.ProductLine
+		}
+		return OtherProductLine
+	}
+	writeCats := func(list []GroupItem, heading string) {
+		cats := append(append([]string{}, GroupCategories...), "未分类")
+		for _, cat := range cats {
+			var inCat []GroupItem
+			for _, it := range list {
+				c := it.Category
+				if !knownCat[c] {
+					c = "未分类"
+				}
+				if c == cat {
+					inCat = append(inCat, it)
+				}
+			}
+			if len(inCat) == 0 {
+				continue
+			}
+			b.WriteString(heading + " " + cat + "\n")
+			for _, it := range inCat {
+				b.WriteString(itemLine(it))
+			}
+		}
+	}
+	if p.ProductFirst {
+		renderProductFirst(&b, p, lines, bySection, lineOf, writeCats)
+		return strings.TrimRight(b.String(), "\n"), true
 	}
 	for i, sec := range p.Sections {
 		if i > 0 {
@@ -301,11 +346,7 @@ func RenderGroupReport(p *GroupPlan, text string) (body string, ok bool) {
 		for _, line := range lines {
 			var inLine []GroupItem
 			for _, it := range list {
-				pl := it.ProductLine
-				if !knownLine[pl] {
-					pl = OtherProductLine
-				}
-				if pl == line {
+				if lineOf(it) == line {
 					inLine = append(inLine, it)
 				}
 			}
@@ -313,29 +354,66 @@ func RenderGroupReport(p *GroupPlan, text string) (body string, ok bool) {
 				continue
 			}
 			b.WriteString("\n### " + line + "\n")
-			cats := append(append([]string{}, GroupCategories...), "未分类")
-			for _, cat := range cats {
-				var inCat []GroupItem
-				for _, it := range inLine {
-					c := it.Category
-					if !knownCat[c] {
-						c = "未分类"
-					}
-					if c == cat {
-						inCat = append(inCat, it)
-					}
-				}
-				if len(inCat) == 0 {
-					continue
-				}
-				b.WriteString("#### " + cat + "\n")
-				for _, it := range inCat {
-					b.WriteString(itemLine(it))
-				}
-			}
+			writeCats(inLine, "####")
 		}
 	}
 	return strings.TrimRight(b.String(), "\n"), true
+}
+
+// renderProductFirst 产品报布局：## 产品线 → ### 栏目 → #### 类别；不分产品线的栏目在最后单独成章。
+func renderProductFirst(b *strings.Builder, p *GroupPlan, lines []string, bySection map[string][]GroupItem,
+	lineOf func(GroupItem) string, writeCats func([]GroupItem, string)) {
+	first := true
+	for _, line := range lines {
+		var secs []TemplateSection
+		for _, sec := range p.Sections {
+			if !sec.Structured {
+				continue
+			}
+			for _, it := range bySection[sec.Title] {
+				if lineOf(it) == line {
+					secs = append(secs, sec)
+					break
+				}
+			}
+		}
+		if len(secs) == 0 {
+			continue
+		}
+		if !first {
+			b.WriteString("\n")
+		}
+		first = false
+		b.WriteString("## " + line + "\n")
+		for _, sec := range secs {
+			var inLine []GroupItem
+			for _, it := range bySection[sec.Title] {
+				if lineOf(it) == line {
+					inLine = append(inLine, it)
+				}
+			}
+			b.WriteString("\n### " + sec.Title + "\n")
+			writeCats(inLine, "####")
+		}
+	}
+	for _, sec := range p.Sections {
+		if sec.Structured {
+			continue
+		}
+		if !first {
+			b.WriteString("\n")
+		}
+		first = false
+		b.WriteString("## " + sec.Title + "\n")
+		list := bySection[sec.Title]
+		if len(list) == 0 {
+			b.WriteString("- 无\n")
+			continue
+		}
+		for _, it := range list {
+			b.WriteString(itemLine(it))
+		}
+	}
 }
 
 // itemLine 渲染一条：- 事项（来源）（待确认）。
@@ -350,20 +428,23 @@ func itemLine(it GroupItem) string {
 	return line + "\n"
 }
 
-// GroupSourceChanged 判断组报生成后，纳入组员的定稿内容是否又变了。
+// GroupSourceChanged 判断组报 / 产品报生成后，纳入来源的定稿内容是否又变了。
 func GroupSourceChanged(ws *store.Workspace, d *store.Draft) bool {
 	if d.SourceHash == "" || len(d.Sources) == 0 {
 		return false
 	}
-	h := sha256.New()
-	for _, id := range d.Sources {
+	body := func(id string) (string, error) {
 		fd, err := ws.FinalDraft(d.Week, id)
 		if err != nil {
-			return true
+			return "", err
 		}
-		h.Write([]byte(id + "\n" + fd.Body + "\n\x00"))
+		return fd.Body, nil
 	}
-	return hex.EncodeToString(h.Sum(nil)) != d.SourceHash
+	if d.Kind == store.ProductDirName {
+		body = func(id string) (string, error) { return leadFinalBody(ws, d.Week, id) }
+	}
+	h, ok := sourcesHash(d.Sources, body)
+	return !ok || h != d.SourceHash
 }
 
 // SaveGroupReport 渲染模型输出并保存为组报草稿。warning 非空表示结构解析失败、整段保存。

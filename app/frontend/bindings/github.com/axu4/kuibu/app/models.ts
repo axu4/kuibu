@@ -496,6 +496,11 @@ export interface ReportPerson {
     "sourceChanged": boolean;
 
     /**
+     * FromGroup 表示组长周报由定稿组报带入，本身就是定稿。
+     */
+    "fromGroup": boolean;
+
+    /**
      * Alignment 是对照上周计划的对齐率 0~1，没有可对照数据时为 null。
      */
     "alignment": number | null;

@@ -9,7 +9,53 @@ import { readableError } from "../lib/todo";
 
 const SAVE_DEBOUNCE_MS = 800;
 
+/** 组报 / 产品报的服务调用，面板本身两者共用。 */
+interface ReportApi {
+  noun: string;
+  template: string;
+  intro: string;
+  get: () => Promise<GroupData>;
+  save: (body: string) => Promise<GroupData>;
+  prepare: (allowMissing: boolean, force: boolean) => ReturnType<typeof ReportService.PrepareGroup>;
+  generate: (allowMissing: boolean, force: boolean) => Promise<GroupData>;
+  finalize: () => Promise<GroupData>;
+  unfinalize: () => Promise<GroupData>;
+  submit?: () => Promise<unknown>;
+}
+
+function reportApi(kind: "group" | "product", week: string): ReportApi {
+  if (kind === "product") {
+    return {
+      noun: "产品报",
+      template: "product",
+      intro:
+        "合并各组长已定稿的周报（含经组报带入的），按「产品线 → 栏目 → 类别」整理成产品 / 项目周报，发送前先给你预览。",
+      get: () => ReportService.ProductReport(week),
+      save: (body) => ReportService.SaveProduct(week, body),
+      prepare: (a, f) => ReportService.PrepareProduct(week, a, f),
+      generate: (a, f) => ReportService.GenerateProduct(week, a, f),
+      finalize: () => ReportService.FinalizeProduct(week),
+      unfinalize: () => ReportService.UnfinalizeProduct(week),
+    };
+  }
+  return {
+    noun: "组报",
+    template: "group",
+    intro:
+      "合并本组所有组员已定稿的归一稿，按「产品线 → 类别」整理成组报。发送前先给你预览，定稿后可一键带入 SE tab。",
+    get: () => ReportService.GroupReport(week, ""),
+    save: (body) => ReportService.SaveGroup(week, "", body),
+    prepare: (a, f) => ReportService.PrepareGroup(week, "", a, f),
+    generate: (a, f) => ReportService.GenerateGroup(week, "", a, f),
+    finalize: () => ReportService.FinalizeGroup(week, ""),
+    unfinalize: () => ReportService.UnfinalizeGroup(week, ""),
+    submit: () => ReportService.SubmitGroup(week, ""),
+  };
+}
+
 interface GroupReportProps {
+  /** group = 框架组长的组报；product = SE 的产品报。 */
+  kind?: "group" | "product";
   week: string;
   refreshTick: number;
   onClose: () => void;
@@ -20,7 +66,14 @@ interface GroupReportProps {
  * 组报面板（框架组长 tab）：合并组员定稿归一稿 → AI 草稿（先预览确认）→
  * 人工修改 → 定稿 → 一键带入 SE。结构（产品线 × 类别）由核心库渲染。
  */
-export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReportProps) {
+export function GroupReport({
+  kind = "group",
+  week,
+  refreshTick,
+  onClose,
+  onToast,
+}: GroupReportProps) {
+  const api = reportApi(kind, week);
   const [data, setData] = useState<GroupData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,12 +103,13 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
 
   const load = useCallback(async () => {
     try {
-      accept(await ReportService.GroupReport(week, ""), false);
+      accept(await api.get(), false);
       setError(null);
     } catch (err) {
       setError(readableError(err));
     }
-  }, [week, accept]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, kind, accept]);
 
   useEffect(() => {
     void load();
@@ -70,16 +124,17 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
     if (body === null) return;
     setSaving("saving");
     try {
-      const d = await ReportService.SaveGroup(week, "", body);
+      const d = await api.save(body);
       knownBodyRef.current = d.body;
       if (pendingRef.current === body) pendingRef.current = null;
       setData(d);
       setSaving(pendingRef.current === null ? "saved" : "dirty");
     } catch (err) {
       setSaving("dirty");
-      onToast(`保存组报失败：${readableError(err)}`);
+      onToast(`保存${api.noun}失败：${readableError(err)}`);
     }
-  }, [week, onToast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [week, kind, onToast]);
 
   useEffect(() => () => void flush(), [flush]);
 
@@ -99,7 +154,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
     setAsk(null);
     try {
       await flush();
-      const p = await ReportService.PrepareGroup(week, "", allowMissing, force);
+      const p = await api.prepare(allowMissing, force);
       setPlan({ preview: p.preview, allowMissing, force });
     } catch (err) {
       const msg = readableError(err);
@@ -108,7 +163,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
       } else if (!force && msg.includes("--force")) {
         setAsk({ text: msg.replace(/；?确认要覆盖请加 --force/, ""), allowMissing, force: true });
       } else {
-        onToast(`准备组报失败：${msg}`);
+        onToast(`准备${api.noun}失败：${msg}`);
       }
     } finally {
       setBusy(false);
@@ -118,13 +173,13 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
   const generate = async () => {
     if (!plan) return;
     try {
-      const d = await ReportService.GenerateGroup(week, "", plan.allowMissing, plan.force);
+      const d = await api.generate(plan.allowMissing, plan.force);
       pendingRef.current = null;
       accept(d, true);
       setPlan(null);
       if (d.warning) onToast(d.warning);
     } catch (err) {
-      onToast(`生成组报失败：${readableError(err)}`);
+      onToast(`生成${api.noun}失败：${readableError(err)}`);
     }
   };
 
@@ -143,7 +198,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
   const submit = async () => {
     setBusy(true);
     try {
-      await ReportService.SubmitGroup(week, "");
+      await api.submit?.();
       await load();
       onToast("已带入 SE tab，组长名下显示「已交」");
     } catch (err) {
@@ -159,7 +214,9 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
     <section className="report-detail is-wide">
       <div className="report-detail-head">
         <div className="report-detail-head-main">
-          <div className="report-detail-title">{data?.group ? `${data.group} 组报` : "组报"}</div>
+          <div className="report-detail-title">
+            {data?.group ? `${data.group} ${api.noun}` : api.noun}
+          </div>
           <div className="report-detail-meta">
             <span>{week}</span>
             {data?.leadName && <span>{data.leadName}</span>}
@@ -176,7 +233,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
             <p>{error}</p>
           </div>
         ) : !data ? (
-          <div className="report-empty">正在读取组报…</div>
+          <div className="report-empty">正在读取{api.noun}…</div>
         ) : (
           <div className="report-draft">
             <div className="report-draft-bar">
@@ -210,25 +267,27 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
                       type="button"
                       className="btn"
                       disabled={busy}
-                      onClick={() => void act(() => ReportService.UnfinalizeGroup(week, ""), true)}
+                      onClick={() => void act(api.unfinalize, true)}
                     >
                       取消定稿
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary"
-                      disabled={busy}
-                      onClick={() => void submit()}
-                    >
-                      带入 SE
-                    </button>
+                    {api.submit && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={busy}
+                        onClick={() => void submit()}
+                      >
+                        带入 SE
+                      </button>
+                    )}
                   </>
                 ) : (
                   <button
                     type="button"
                     className="btn btn-primary"
                     disabled={busy}
-                    onClick={() => void act(() => ReportService.FinalizeGroup(week, ""))}
+                    onClick={() => void act(api.finalize)}
                   >
                     <Icon name="check" size={14} />
                     定稿
@@ -257,10 +316,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
 
             {!data.exists ? (
               <div className="report-empty">
-                <p>
-                  合并本组所有组员已定稿的归一稿，按「产品线 → 类别」整理成组报。发送前先给你预览，定稿后可一键带入
-                  SE tab。
-                </p>
+                <p>{api.intro}</p>
               </div>
             ) : final ? (
               <>
@@ -274,7 +330,7 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
                   noteId={`group/${week}/${revision}`}
                   initialBody={data.body}
                   onChange={onChange}
-                  placeholder="组报正文"
+                  placeholder={`${api.noun}正文`}
                 />
               </div>
             )}
@@ -284,38 +340,55 @@ export function GroupReport({ week, refreshTick, onClose, onToast }: GroupReport
 
       {plan && (
         <SendPreview
-          title="发送给 AI 生成组报"
+          title={`发送给 AI 生成${api.noun}`}
           preview={plan.preview}
           onCancel={() => setPlan(null)}
           onConfirm={generate}
         />
       )}
 
-      {templateOpen && <TemplateModal onClose={() => setTemplateOpen(false)} onToast={onToast} />}
+      {templateOpen && (
+        <TemplateModal
+          name={api.template}
+          noun={api.noun}
+          onClose={() => setTemplateOpen(false)}
+          onToast={onToast}
+        />
+      )}
     </section>
   );
 }
 
-/** 编辑组报模板：「## 栏目」一行一个，紧跟的「> 」行是给 AI 的说明。 */
-function TemplateModal({ onClose, onToast }: { onClose: () => void; onToast: (t: string) => void }) {
+/** 编辑报告模板：「## 栏目」一行一个，紧跟的「> 」行是给 AI 的说明。 */
+function TemplateModal({
+  name,
+  noun,
+  onClose,
+  onToast,
+}: {
+  name: string;
+  noun: string;
+  onClose: () => void;
+  onToast: (t: string) => void;
+}) {
   const [body, setBody] = useState<string | null>(null);
   const [isDefault, setIsDefault] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void ReportService.Template("group")
+    void ReportService.Template(name)
       .then((t) => {
         setBody(t.body);
         setIsDefault(t.isDefault);
       })
       .catch((err) => setError(readableError(err)));
-  }, []);
+  }, [name]);
 
   const save = async () => {
     if (body === null) return;
     try {
-      await ReportService.SaveTemplate("group", body);
-      onToast("已保存模板，下次生成组报时生效");
+      await ReportService.SaveTemplate(name, body);
+      onToast(`已保存模板，下次生成${noun}时生效`);
       onClose();
     } catch (err) {
       setError(readableError(err));
@@ -325,11 +398,11 @@ function TemplateModal({ onClose, onToast }: { onClose: () => void; onToast: (t:
   return (
     <div className="modal-mask is-center is-nested" onMouseDown={onClose}>
       <div className="modal template-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>组报模板</h2>
+        <h2>{noun}模板</h2>
         <div className="settings-desc">
           「## 栏目名」一行一个栏目，可增删、改名、调整顺序；紧跟的「&gt; 」行是给 AI 的说明，含
           [产品线×类别] 的栏目按产品线 → 类别输出。
-          {isDefault && " 当前是内置默认模板，保存后写到工作台 templates/group.md。"}
+          {isDefault && ` 当前是内置默认模板，保存后写到工作台 templates/${name}.md。`}
         </div>
         <textarea
           className="field template-text"

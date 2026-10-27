@@ -33,7 +33,7 @@ type reportJSON struct {
 // runReport 分发 report 子命令。
 func runReport(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry/group")
+		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry/group/product")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -63,6 +63,8 @@ func runReport(ctx context.Context, args []string, common *commonFlags, stdin io
 		return reportCarry(rest, common, stdout, stderr, env)
 	case "group":
 		return reportGroup(ctx, rest, common, stdin, stdout, stderr, env)
+	case "product":
+		return reportProduct(ctx, rest, common, stdin, stdout, stderr, env)
 	default:
 		return usagef("未知 report 子命令 %q", sub)
 	}
@@ -425,10 +427,7 @@ func reportStatus(args []string, common *commonFlags, stdout, stderr io.Writer, 
 		}
 		return "\t" + draftStateLabel(*e.Normalized)
 	}
-	header := "人员\t组\t状态"
-	if st.Level == store.ReportLevelMember {
-		header += "\t归一"
-	}
+	header := "人员\t组\t状态\t归一"
 	fmt.Fprintln(tw, header)
 	for _, e := range st.Entries {
 		fmt.Fprintf(tw, "%s\t%s\t%s%s\n", e.Name, orDash(e.Group), reportStatusLabel(e.Status), normalized(e))

@@ -191,7 +191,7 @@ func groupDone(ws *store.Workspace, d *store.Draft, verb string, common *commonF
 // toGroupJSON 把组报转成 JSON。
 func toGroupJSON(ws *store.Workspace, d *store.Draft, withBody bool) groupJSON {
 	dj := draftJSONFrom(ws, d, nil, withBody)
-	dj.Path = filepath.Join(ws.ReportsDir(), d.Week, store.GroupDirName, d.Person+".md")
+	dj.Path = filepath.Join(ws.ReportsDir(), d.Week, draftKindOf(d), d.Person+".md")
 	return groupJSON{
 		draftJSON:     dj,
 		Group:         d.Group,

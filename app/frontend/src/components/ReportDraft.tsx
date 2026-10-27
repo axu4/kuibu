@@ -12,13 +12,18 @@ type NormalizePlan = Omit<RawPlan, "persons" | "skipped"> & {
   skipped: NonNullable<RawPlan["skipped"]>;
 };
 
-async function prepare(week: string, persons: string[], force: boolean): Promise<NormalizePlan> {
-  const p = await ReportService.PrepareNormalize(week, persons, "", force);
+async function prepare(
+  week: string,
+  level: string,
+  persons: string[],
+  force: boolean,
+): Promise<NormalizePlan> {
+  const p = await ReportService.PrepareNormalize(week, level, persons, "", force);
   return { ...p, persons: p.persons ?? [], skipped: p.skipped ?? [] };
 }
 
-async function normalize(week: string, persons: string[], force: boolean) {
-  return (await ReportService.Normalize(week, persons, "", force)) ?? [];
+async function normalize(week: string, level: string, persons: string[], force: boolean) {
+  return (await ReportService.Normalize(week, level, persons, "", force)) ?? [];
 }
 
 /** 归一稿编辑防抖。 */
@@ -27,6 +32,8 @@ const SAVE_DEBOUNCE_MS = 800;
 interface ReportDraftProps {
   week: string;
   personId: string;
+  /** 层级：member（组员归一稿）或 lead（组长归一稿）。 */
+  level?: string;
   /** report:changed 时递增，外部改动后重新读取。 */
   refreshTick: number;
   onToast: (text: string) => void;
@@ -36,7 +43,13 @@ interface ReportDraftProps {
  * 归一稿子 tab：AI 生成（先预览确认）→ 人工修改 → 定稿。
  * 定稿后只读，需先「取消定稿」才能修改。
  */
-export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraftProps) {
+export function ReportDraft({
+  week,
+  personId,
+  level = "member",
+  refreshTick,
+  onToast,
+}: ReportDraftProps) {
   const [draft, setDraft] = useState<DraftData | null>(null);
   const [failed, setFailed] = useState(false);
   // 编辑器只在打开或外部改动正文时重建，自己保存不重建。
@@ -52,7 +65,7 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
 
   const load = useCallback(async () => {
     try {
-      const d = await ReportService.GetDraft(week, personId);
+      const d = await ReportService.GetDraft(week, personId, level);
       setFailed(false);
       setDraft(d);
       // 有未保存输入时不覆盖编辑器；正文与已知一致时不重建。
@@ -86,7 +99,7 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
     if (body === null) return;
     setSaving("saving");
     try {
-      const d = await ReportService.SaveDraft(week, personId, body);
+      const d = await ReportService.SaveDraft(week, personId, level, body);
       knownBodyRef.current = d.body;
       if (pendingRef.current === body) pendingRef.current = null;
       setDraft(d);
@@ -116,7 +129,7 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
     setOverwriteAsk(null);
     try {
       await flush();
-      const p = await prepare(week, [personId], force);
+      const p = await prepare(week, level, [personId], force);
       if (p.persons.length === 0) {
         onToast("没有可归一的周报");
         return;
@@ -137,7 +150,7 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
   const send = async () => {
     if (!plan) return;
     try {
-      const results = await normalize(week, plan.plan.persons, plan.force);
+      const results = await normalize(week, level, plan.plan.persons, plan.force);
       const r = results[0];
       if (r?.error) onToast(`生成失败：${r.error}`);
       else if (r?.warning) onToast(r.warning);
@@ -155,8 +168,8 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
     try {
       await flush();
       const d = final
-        ? await ReportService.FinalizeDraft(week, personId)
-        : await ReportService.UnfinalizeDraft(week, personId);
+        ? await ReportService.FinalizeDraft(week, personId, level)
+        : await ReportService.UnfinalizeDraft(week, personId, level);
       setDraft(d);
       if (!final) setRevision((r) => r + 1);
     } catch (err) {
@@ -249,24 +262,25 @@ export function ReportDraft({ week, personId, refreshTick, onToast }: ReportDraf
 
 interface BatchNormalizeProps {
   week: string;
+  level?: string;
   onClose: () => void;
   onToast: (text: string) => void;
 }
 
 /** 批量归一本周已交：逐人汇总进一个预览，一次确认。已人工修改或定稿的人跳过。 */
-export function BatchNormalize({ week, onClose, onToast }: BatchNormalizeProps) {
+export function BatchNormalize({ week, level = "member", onClose, onToast }: BatchNormalizeProps) {
   const [plan, setPlan] = useState<NormalizePlan | null>(null);
 
   useEffect(() => {
     let alive = true;
-    void prepare(week, [], false)
+    void prepare(week, level, [], false)
       .then((p) => {
         if (!alive) return;
         if (p.persons.length === 0) {
           onToast(
             p.skipped.length > 0
               ? `${p.skipped.length} 人的归一稿已修改或定稿，没有需要生成的`
-              : "本周还没有已交的组员周报",
+              : "本周还没有已交的周报",
           );
           onClose();
           return;
@@ -296,7 +310,7 @@ export function BatchNormalize({ week, onClose, onToast }: BatchNormalizeProps) 
       onCancel={onClose}
       onConfirm={async () => {
         try {
-          const results = await normalize(week, plan.persons, false);
+          const results = await normalize(week, level, plan.persons, false);
           const failed = results.filter((r) => r.error);
           const warned = results.filter((r) => r.warning);
           let msg = `已生成 ${results.length - failed.length} 份草稿`;

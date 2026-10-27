@@ -32,6 +32,23 @@ const DefaultGroupTemplate = `# 组报模板
 > 只提炼对其他组有借鉴意义的 AI 使用和 AI Coding 经验，没有就写「无」。
 `
 
+// DefaultProductTemplate 是内置的 SE 产品 / 项目周报模板。templates/product.md 不存在时使用。
+// 带 [产品线×类别] 的栏目放进各产品线一章，其余栏目在最后单独成章。
+const DefaultProductTemplate = `# 产品报模板
+
+## 本周完成
+> [产品线×类别] 合并各组本周完成的事项，同一事项去重，保留进度、关键数字和来源组。
+
+## 下周计划
+> [产品线×类别] 合并各组下周计划。
+
+## 风险与求助
+> 需要产品线负责人或跨组协调的风险和求助，没有就写「无」。
+
+## AI 使用 / AI Coding 实践经验
+> 各组值得推广的 AI 使用经验，没有就写「无」。
+`
+
 var templateNamePattern = regexp.MustCompile(`^[\p{Han}\w-]{1,40}$`)
 
 // TemplatesDir 返回模板目录。
@@ -51,8 +68,11 @@ func (w *Workspace) ReadTemplate(name string) (body string, isDefault bool, err 
 	}
 	data, err := os.ReadFile(filepath.Join(w.TemplatesDir(), name+noteExt))
 	if errors.Is(err, os.ErrNotExist) {
-		if name == "group" {
+		switch name {
+		case "group":
 			return DefaultGroupTemplate, true, nil
+		case "product":
+			return DefaultProductTemplate, true, nil
 		}
 		return "", false, newReportError(ErrNotFound, "模板不存在: %s", name)
 	}
@@ -78,7 +98,7 @@ func (w *Workspace) WriteTemplate(name, body string) error {
 
 // ListTemplates 返回模板名；内置的 group 总在列表里。
 func (w *Workspace) ListTemplates() ([]string, error) {
-	names := map[string]bool{"group": true}
+	names := map[string]bool{"group": true, "product": true}
 	entries, err := os.ReadDir(w.TemplatesDir())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("读取模板目录失败: %w", err)
