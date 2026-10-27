@@ -51,6 +51,9 @@ const usageText = `用法:
   report status [--week W] [--level L]   提交状态
   report rm <week> <person>              删除周报
   report config [--weekday N]            查看/修改周报日
+  report normalize (--person p|--all)    AI 归一组员周报为草稿（不带 --yes 只预览，退出 8）
+  report draft show|edit <week> <person> 查看/修改归一稿（edit 从 stdin 或 --file 读）
+  report finalize|unfinalize <w> <p>     定稿 / 取消定稿
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
   asset add <file>                       归档资源并输出相对路径
@@ -334,6 +337,12 @@ func classify(err error) (string, int) {
 		return "CONFLICT", Error
 	case errors.Is(err, store.ErrAmbiguousPerson):
 		return "AMBIGUOUS_PERSON", Error
+	case errors.Is(err, store.ErrHumanEdits):
+		return "HUMAN_EDITS_EXIST", HumanEditsExist
+	case errors.Is(err, store.ErrNotFinal):
+		return "NOT_FINAL", NotFinal
+	case errors.Is(err, store.ErrFinalized):
+		return "FINALIZED", Error
 	case errors.Is(err, llm.ErrNeedsConfirm):
 		return "NEEDS_CONFIRM", NeedsConfirm
 	case errors.Is(err, llm.ErrNotFound):

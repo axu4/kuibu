@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/axu4/kuibu/internal/store"
 )
 
 // reportMetaColumns 是 reports 表中查询 ReportMeta 所需的列。
@@ -71,6 +73,10 @@ func (ix *Index) ListReports(f ReportFilter) ([]ReportMeta, error) {
 	if f.Level != "" {
 		conds = append(conds, "level = ?")
 		args = append(args, f.Level)
+	} else {
+		// 不指定层级时只列原文，归一稿要显式按 level=member-normalized 查。
+		conds = append(conds, "level != ?")
+		args = append(args, store.DraftDirName)
 	}
 	if f.Group != "" {
 		conds = append(conds, "grp = ?")

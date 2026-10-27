@@ -523,6 +523,8 @@ type ReportStatusEntry struct {
 	FirstSubmittedAt *time.Time `json:"firstSubmittedAt,omitempty"`
 	// SubmittedAt 是最近一次提交时间，missing 时为空。
 	SubmittedAt *time.Time `json:"submittedAt,omitempty"`
+	// Normalized 是归一稿状态，只在组员层级（member）填写。
+	Normalized *DraftState `json:"normalized,omitempty"`
 }
 
 // ReportStatus 是一次提交状态统计。
@@ -564,6 +566,25 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 	submitted := map[string]*Report{}
 	for _, r := range reports {
 		submitted[r.Person] = r
+	}
+	// 组员层级附带归一稿状态。
+	var drafts map[string]*Draft
+	if level == ReportLevelMember {
+		list, err := w.ListDrafts(week)
+		if err != nil {
+			return nil, err
+		}
+		drafts = map[string]*Draft{}
+		for _, d := range list {
+			drafts[d.Person] = d
+		}
+	}
+	draftState := func(person string) *DraftState {
+		if drafts == nil {
+			return nil
+		}
+		st := DraftStateFor(drafts[person], submitted[person])
+		return &st
 	}
 
 	weekday, err := w.ReportWeekday()
@@ -608,6 +629,7 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 			Role:         p.Role,
 			Active:       true,
 			Status:       "missing",
+			Normalized:   draftState(p.ID),
 		}
 		if r, ok := submitted[p.ID]; ok {
 			first := r.FirstSubmittedAt
@@ -639,6 +661,7 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 			Group:        r.Group,
 			ProductLines: append([]string(nil), r.ProductLines...),
 			Status:       "submitted",
+			Normalized:   draftState(r.Person),
 		}
 		if p, ok := byID[r.Person]; ok {
 			entry.Role = p.Role

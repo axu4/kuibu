@@ -16,7 +16,8 @@ import (
 
 // fileKind 判断路径属于哪类索引：note / todo / people / report，无法识别时
 // 返回空字符串。周报仅识别 reports/<周>/<层级>/<person>.md 这样的三层路径，
-// .history/ 与隐藏目录不参与。
+// .history/ 与隐藏目录不参与。归一稿（reports/<周>/member-normalized/）也算
+// report，在 reports 表里的 level 记为 member-normalized。
 func fileKind(ws *store.Workspace, path string) string {
 	path = filepath.Clean(path)
 	switch filepath.Dir(path) {
@@ -267,7 +268,7 @@ func (ix *Index) upsertReport(ctx context.Context, tx *sql.Tx, path string, forc
 		return Change{Kind: ChangeUnchanged}, nil
 	}
 
-	report, err := store.ReadReportFile(path)
+	report, err := readReportOrDraft(path)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			id, removed, delErr := deleteReport(ctx, tx, path)
@@ -380,6 +381,31 @@ func deletePerson(ctx context.Context, tx *sql.Tx, path string) (string, bool, e
 		return "", false, fmt.Errorf("删除组员索引项失败: %w", err)
 	}
 	return id, true, nil
+}
+
+// readReportOrDraft 读取周报原文或归一稿；归一稿转成 level=member-normalized
+// 的 Report，与原文共用 reports 表与全文索引，ID 不会与原文冲突。
+func readReportOrDraft(path string) (*store.Report, error) {
+	if filepath.Base(filepath.Dir(path)) != store.DraftDirName {
+		return store.ReadReportFile(path)
+	}
+	d, err := store.ReadDraftFile(path)
+	if err != nil {
+		return nil, err
+	}
+	submitted := d.EditedAt
+	if submitted.IsZero() {
+		submitted = d.GeneratedAt
+	}
+	return &store.Report{
+		Person:      d.Person,
+		Name:        d.Name,
+		Week:        d.Week,
+		Level:       store.DraftDirName,
+		Source:      d.Status,
+		SubmittedAt: submitted,
+		Body:        d.Body,
+	}, nil
 }
 
 // deleteReport 按路径删除周报索引项，返回被删除的周报 ID 与是否真的删除。
