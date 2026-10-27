@@ -16,6 +16,7 @@ import { Editor } from "./components/LazyEditor";
 import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
 import { ReportView } from "./components/ReportView";
+import { CalendarView } from "./components/CalendarView";
 import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
@@ -30,6 +31,7 @@ const MAIN_VIEWS: { key: MainView; label: string; icon: IconName }[] = [
   { key: "notes", label: "笔记", icon: "note" },
   { key: "todo", label: "待办", icon: "todo" },
   { key: "report", label: "周报", icon: "report" },
+  { key: "calendar", label: "日历", icon: "calendar" },
 ];
 
 /** 自动保存防抖时间（毫秒）。 */
@@ -126,6 +128,9 @@ export default function App() {
   // 从更新提示条进入设置时定位到「软件更新」一节。
   const [settingsFocusUpdate, setSettingsFocusUpdate] = useState(false);
   const [view, setView] = useState<MainView>(loadMainView);
+  // 从日历跳转进来时用 key 强制重挂目标视图，使初始周/人员/待办生效。
+  const [reportJump, setReportJump] = useState<{ week: string; personId: string; level: string; key: number } | null>(null);
+  const [todoJump, setTodoJump] = useState<{ id: string; key: number } | null>(null);
   const [titleDraft, setTitleDraft] = useState("");
   // 待办视图把分组与标签渲染进侧栏的这个容器。
   const [todoNavHost, setTodoNavHost] = useState<HTMLDivElement | null>(null);
@@ -630,6 +635,18 @@ export default function App() {
     [openNote],
   );
 
+  /** 从日历月视图格子跳到该人该周的周报（框架组长 tab）。 */
+  const openReportFromCalendar = useCallback((week: string, personId: string, level: string) => {
+    setReportJump({ week, personId, level, key: Date.now() });
+    setView("report");
+  }, []);
+
+  /** 从日历日视图跳到待办视图并打开该待办。 */
+  const openTodoFromCalendar = useCallback((id: string) => {
+    setTodoJump({ id, key: Date.now() });
+    setView("todo");
+  }, []);
+
   /** 切换主视图；切到待办前先保存当前笔记。 */
   const switchView = useCallback(
     (next: MainView) => {
@@ -827,7 +844,7 @@ export default function App() {
               <div className="tree" />
             )}
           </>
-        ) : view === "report" ? (
+        ) : view === "report" || view === "calendar" ? (
           <div className="sidebar-slot" />
         ) : (
           <div className="sidebar-slot" ref={setTodoNavHost} />
@@ -859,7 +876,12 @@ export default function App() {
           <div className="todo-shell">
             {shortcutBanners}
             {updateBannerEl}
-            <TodoView onOpenNote={openNoteFromTodo} navHost={todoNavHost} />
+            <TodoView
+              key={todoJump ? `${workspace}-${todoJump.key}` : workspace}
+              onOpenNote={openNoteFromTodo}
+              navHost={todoNavHost}
+              initialTodoId={todoJump?.id}
+            />
           </div>
         ) : (
           <main className="content">
@@ -872,7 +894,28 @@ export default function App() {
         workspace ? (
           <div className="report-shell">
             {shortcutBanners}
-            <ReportView key={workspace} />
+            <ReportView
+              key={reportJump ? `${workspace}-${reportJump.key}` : workspace}
+              initialWeek={reportJump?.week}
+              initialPersonId={reportJump?.personId}
+              initialLevel={reportJump?.level}
+            />
+          </div>
+        ) : (
+          <main className="content">
+            <div className="toolbar" />
+            {welcome}
+          </main>
+        )
+      ) : view === "calendar" ? (
+        workspace ? (
+          <div className="report-shell">
+            {shortcutBanners}
+            <CalendarView
+              onOpenReport={openReportFromCalendar}
+              onOpenNote={openNoteFromTodo}
+              onOpenTodo={openTodoFromCalendar}
+            />
           </div>
         ) : (
           <main className="content">

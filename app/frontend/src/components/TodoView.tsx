@@ -44,6 +44,8 @@ interface TodoViewProps {
   onOpenNote: (id: string) => void;
   /** 侧栏里留给分组与标签的容器。 */
   navHost: HTMLElement | null;
+  /** 从日历跳转进来时初始打开的待办；不传则不自动打开详情。 */
+  initialTodoId?: string;
 }
 
 /**
@@ -52,7 +54,7 @@ interface TodoViewProps {
  * 所有读写都经 TodoService（Go 侧再走 internal/store 与 internal/index），
  * 前端不拼路径、不解析文件。
  */
-export function TodoView({ onOpenNote, navHost }: TodoViewProps) {
+export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) {
   const [group, setGroup] = useState<Group>("today");
   const [tag, setTag] = useState("");
   const [query, setQuery] = useState("");
@@ -151,6 +153,12 @@ export function TodoView({ onOpenNote, navHost }: TodoViewProps) {
       await refreshDetail(current);
     }
   }, [refreshCounts, refreshDetail, refreshList, refreshTags]);
+
+  // 从日历跳转进来时打开指定待办的详情。
+  useEffect(() => {
+    if (initialTodoId) void openDetail(initialTodoId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 首次加载与分组/标签/检索变化时刷新列表。
   useEffect(() => {

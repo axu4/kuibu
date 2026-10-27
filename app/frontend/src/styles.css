@@ -3585,3 +3585,136 @@ body.quicknote-body {
 .editor-loading {
   min-height: 240px;
 }
+
+/* 团队日历视图：月视图表格与日视图月历格，沿用配色 token，深色模式跟随 :root。 */
+
+.calendar-table-wrap {
+  overflow-x: auto;
+  padding: 0 24px 24px;
+}
+
+.calendar-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.calendar-table th,
+.calendar-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.calendar-table th {
+  color: var(--ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.calendar-week-range {
+  display: block;
+  color: var(--ink-3);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.calendar-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-cell:hover {
+  background: var(--hover);
+}
+
+.calendar-cell-meta {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.calendar-cell-empty {
+  display: block;
+  padding: 6px 8px;
+  color: var(--ink-4);
+}
+
+.calendar-grid {
+  padding: 0 24px 24px;
+}
+
+.calendar-grid-head,
+.calendar-grid-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-grid-head {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.calendar-grid-head > div {
+  padding: 6px 8px;
+}
+
+.calendar-day {
+  min-height: 96px;
+  border-top: 1px solid var(--line);
+  padding: 6px 8px;
+  overflow: hidden;
+}
+
+.calendar-day.is-other-month {
+  opacity: 0.45;
+}
+
+.calendar-day-num {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.calendar-report-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.calendar-day-item {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-day-item:hover {
+  background: var(--hover);
+  color: var(--ink);
+}

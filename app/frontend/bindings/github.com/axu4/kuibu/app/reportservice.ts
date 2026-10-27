@@ -25,6 +25,21 @@ import * as llm$0 from "../internal/llm/models.js";
 import * as $models from "./models.js";
 
 /**
+ * CalendarDay 返回团队日历日视图数据，与 CLI `kuibu calendar day --json` 一致。只读。
+ */
+export function CalendarDay(month: string): $CancellablePromise<core$0.CalendarDayMonth> {
+    return $Call.ByID(2614503509, month);
+}
+
+/**
+ * CalendarMonth 返回团队日历月视图数据，与 CLI `kuibu calendar month --json` 一致。
+ * perspective 为 "" 时默认 member（框架组长视角），"lead" 为 SE 视角。只读。
+ */
+export function CalendarMonth(month: string, group: string, perspective: string): $CancellablePromise<core$0.CalendarMonth> {
+    return $Call.ByID(281281901, month, group, perspective);
+}
+
+/**
  * Carry 把「部分 / 延期」的计划顺延到本周下周计划；ids 为空表示全部。
  */
 export function Carry(week: string, person: string, ids: string[] | null): $CancellablePromise<$models.CarryResult> {
