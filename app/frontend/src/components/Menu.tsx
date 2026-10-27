@@ -6,6 +6,9 @@ export interface MenuItem {
   label: string;
   icon?: IconName;
   danger?: boolean;
+  /** 置灰不可点；title 里写原因。 */
+  disabled?: boolean;
+  title?: string;
   onClick: () => void;
 }
 
@@ -66,6 +69,8 @@ export function Menu({ x, y, items, onClose }: MenuProps) {
           type="button"
           role="menuitem"
           className={item.danger ? "is-danger" : ""}
+          disabled={item.disabled}
+          title={item.title}
           onClick={() => {
             onClose();
             item.onClick();

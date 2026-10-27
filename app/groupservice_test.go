@@ -149,4 +149,14 @@ func TestProductReportService(t *testing.T) {
 	if g, _ = reports.ProductReport("2026-W44"); g.Status != "final" || g.LeadName != "产品报" {
 		t.Fatalf("ProductReport = %+v", g)
 	}
+	c, err := reports.ExportClipboard("product", "2026-W44")
+	if err != nil || !strings.Contains(c.HTML, "<h2>Kuibu</h2>") || !strings.Contains(c.Text, "• 完成网关（平台组）") {
+		t.Fatalf("ExportClipboard = %+v, %v", c, err)
+	}
+	if _, err := reports.UnfinalizeProduct("2026-W44"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reports.ExportClipboard("product", "2026-W44"); !errors.Is(err, store.ErrNotFinal) {
+		t.Fatalf("未定稿复制应 NotFinal, got %v", err)
+	}
 }

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -115,10 +117,32 @@ func TestReportProductFlow(t *testing.T) {
 	if r := e.run("改", ws("report", "product", "edit", "--week", "2026-W44")...); r.code != Error {
 		t.Fatalf("定稿后修改应失败: %+v", r)
 	}
+	// 导出：只认定稿，内容与定稿正文一致（不含 front matter）。
+	md := e.mustRun("", ws("report", "export", "product", "--week", "2026-W44")...).stdout
+	if strings.Contains(md, "status:") || !strings.HasPrefix(md, "> 未纳入") {
+		t.Fatalf("导出 Markdown 应只含正文:\n%s", md)
+	}
+	out2 := filepath.Join(t.TempDir(), "x.html")
+	res2 := e.mustRun("", ws("report", "export", "product", "--week", "2026-W44", "--format", "feishu-html", "--out", out2, "--json")...).jsonOut(t)
+	if res2["fileName"] != "产品报-2026-W44.md" {
+		t.Fatalf("默认文件名 = %v", res2["fileName"])
+	}
+	if data, _ := os.ReadFile(out2); !strings.Contains(string(data), "<h2>产品线A</h2>") {
+		t.Fatalf("HTML 导出:\n%s", data)
+	}
+	if r := e.run("", ws("report", "export", "group", "--week", "2026-W43", "--group", "框架组")...); r.code != Error && r.code != NotFinal {
+		t.Fatalf("没有组报时导出应失败: %+v", r)
+	}
+
 	// 组长定稿内容变了 → 来源已更新。
 	e.mustRun("", ws("report", "unfinalize", "2026-W44", "赵六", "--level", "lead")...)
 	out = e.mustRun("", ws("report", "product", "show", "--week", "2026-W44", "--json")...).jsonOut(t)
 	if out["sourceChanged"] != true {
 		t.Fatal("组长取消定稿后应标来源已更新")
+	}
+	// 产品报取消定稿后导出返回 7。
+	e.mustRun("", ws("report", "product", "unfinalize", "--week", "2026-W44")...)
+	if r := e.run("", ws("report", "export", "product", "--week", "2026-W44", "--json")...); r.code != NotFinal {
+		t.Fatalf("未定稿导出应返回 7: %+v", r)
 	}
 }

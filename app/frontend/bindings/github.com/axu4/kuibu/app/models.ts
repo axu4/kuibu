@@ -80,6 +80,15 @@ export interface DraftData {
 }
 
 /**
+ * ExportContent 是「复制为飞书格式」要写进剪贴板的内容。
+ */
+export interface ExportContent {
+    "title": string;
+    "html": string;
+    "text": string;
+}
+
+/**
  * GroupData 是组长本周的组报。Exists 为 false 表示还没生成。
  */
 export interface GroupData {

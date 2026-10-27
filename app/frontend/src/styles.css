@@ -3474,3 +3474,8 @@ body.quicknote-body {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+.menu button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}

@@ -46,6 +46,22 @@ export function Delete(week: string, person: string, level: string): $Cancellabl
 }
 
 /**
+ * ExportClipboard 返回定稿报告的 HTML 与纯文本，前端同时写入剪贴板（飞书取 HTML）。
+ * 只返回内容，不发送到任何地方。未定稿返回 NOT_FINAL。
+ */
+export function ExportClipboard(kind: string, week: string): $CancellablePromise<$models.ExportContent> {
+    return $Call.ByID(361593225, kind, week);
+}
+
+/**
+ * ExportReport 弹出保存对话框，把定稿报告导出为 Markdown。kind 为 group / product。
+ * 未定稿返回 NOT_FINAL；用户取消时返回空路径且不报错。
+ */
+export function ExportReport(kind: string, week: string): $CancellablePromise<string> {
+    return $Call.ByID(2275790131, kind, week);
+}
+
+/**
  * FinalizeDraft 定稿。
  */
 export function FinalizeDraft(week: string, person: string, level: string): $CancellablePromise<$models.DraftData> {

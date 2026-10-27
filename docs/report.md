@@ -237,6 +237,16 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 - **front matter**：同组报，`sources` 为纳入的组长 ID，`missing` 为未纳入的组；组长定稿内容变化后标「来源已更新」。
 - `report product show --product <产品线>` 只输出那一章。
 
+## 导出定稿
+
+组报、产品报定稿后可以导出（核心逻辑 `internal/core/export.go`，CLI 与 App 共用）。
+
+- **只认定稿**：未定稿导出 / 复制一律返回 `7 NOT_FINAL`；App 里「导出 Markdown」「复制为飞书格式」在未定稿时置灰。导出内容是定稿正文，不含 front matter。
+- **格式**：`md`（原文）、`feishu-html`（HTML）、`text`（纯文本：标题只留文字，列表用「•」与两格缩进，链接写成「文字（地址）」）。
+- **Markdown → HTML** 由自写的小转换器完成（不引入第三方库），覆盖标题、嵌套 / 有序列表、引用、段落、加粗、斜体、行内代码、链接，并转义 HTML。只服务于本项目生成的报告，不追求完整 CommonMark。
+- **文件名**：`<组名>-组报-<周>.md`、`产品报-<周>.md`。
+- **复制为飞书格式**：前端用 `navigator.clipboard.write` 同时写 `text/html` 与 `text/plain`，飞书粘贴取 HTML；WKWebView 不支持时退回纯文本并提示。只进剪贴板，不发送到任何地方。
+
 ## ISO 周与周报日
 
 - 周编号 `YYYY-WNN`，周一到周日；跨年按 `time.ISOWeek` 规则。例如
@@ -318,6 +328,7 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 | `report group submit [--week W] [--group g]` | 定稿组报带入 SE tab（组长本人 lead 层级）；未定稿返回 7 |
 | `report product generate [--week W] [--template t] [--allow-missing] [--yes \| --dry-run] [--force]` | SE 按产品线汇总组长定稿；有组长未定稿返回 7；不带 `--yes` 只预览，退出 8 |
 | `report product show [--product p]\|edit\|finalize\|unfinalize [--week W]` | 查看（可只看一章）/ 修改 / 定稿 / 取消定稿产品报 |
+| `report export group\|product [--week W] [--group g] [--format md\|feishu-html\|text] [--out file]` | 导出定稿，不给 `--out` 输出到 stdout；未定稿返回 7 |
 | `template list\|show\|edit <名称>` | 报告模板（`templates/<名称>.md`，edit 读 stdin） |
 
 ### 示例
