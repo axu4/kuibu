@@ -7,6 +7,7 @@ import type {
   UpdateInfo,
 } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
+import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
   modifiersOnlyDisplay,
@@ -92,6 +93,17 @@ export function Settings({
     }, 0);
     return () => window.clearTimeout(id);
   }, [focusUpdate]);
+
+  // Esc 关闭设置；录制快捷键时按键已在捕获阶段被吞掉，不会走到这里。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !recording) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, recording]);
 
   // 监听 Apply 期间推送的进度阶段。
   useEffect(() => {
@@ -267,9 +279,17 @@ export function Settings({
   const statusNotice = status?.notice ?? "";
 
   return (
-    <div className="modal-mask" onMouseDown={onClose}>
+    <div className="modal-mask is-center" onMouseDown={onClose}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>设置</h2>
+        <div className="settings-head">
+          <h2>设置</h2>
+          <button type="button" className="icon-btn" title="关闭（Esc）" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </div>
+
+        {/* 只有中间这一段滚动，标题和底部始终可见。 */}
+        <div className="settings-body">
 
         <div className="settings-row">
           <div className="settings-label">
@@ -401,7 +421,19 @@ export function Settings({
                     </span>
                   </div>
                   {checkResult.notes && (
-                    <pre className="update-notes">{checkResult.notes}</pre>
+                    <div className="update-notes">
+                      {parseReleaseNotes(checkResult.notes).map((line, i) =>
+                        line.kind === "heading" ? (
+                          <h4 key={i}>{line.text}</h4>
+                        ) : line.kind === "item" ? (
+                          <p key={i} className="is-item">
+                            {line.text}
+                          </p>
+                        ) : (
+                          <p key={i}>{line.text}</p>
+                        ),
+                      )}
+                    </div>
                   )}
                   <div className="settings-actions">
                     <button
@@ -463,6 +495,7 @@ export function Settings({
             </button>
           </div>
         </section>
+        </div>
 
         <div className="settings-footer">
           <span>快捷键保存在 config.json（可用 KUIBU_CONFIG_DIR 覆盖目录）</span>
