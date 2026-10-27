@@ -111,7 +111,7 @@ func TestReportReviewService(t *testing.T) {
 	if _, err := reports.Review("2026-W44", zhang.ID); !errors.Is(err, store.ErrNotFinal) {
 		t.Fatalf("上周未定稿应 NotFinal, got %v", err)
 	}
-	if _, err := reports.FinalizeDraft("2026-W43", zhang.ID); err != nil {
+	if _, err := reports.FinalizeDraft("2026-W43", zhang.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	res, err := reports.Review("2026-W44", zhang.ID)
