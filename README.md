@@ -138,7 +138,7 @@ cd app && wails3 dev            # 开发模式
 cd app && wails3 package        # 打包，产物 app/bin/kuibu.app
 ```
 
-App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG_DIR`/config.json）定位工作台，都没有时显示欢迎页。
+App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG_DIR`/config.json）定位工作台；都没有时（首次安装）自动在 `~/Documents/跬步` 建一个工作台并写入用户配置，之后可在侧栏顶部或设置里更换。该目录已存在且非空、又不是工作台时不动它，退回欢迎页让用户选择。
 
 ## 反馈与协作
 

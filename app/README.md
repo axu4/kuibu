@@ -113,6 +113,7 @@ Go → 前端事件：`workspace:changed`（`{ ids }`，笔记）、`todo:change
 - 读写一律经 `internal/store`（Markdown + YAML front matter 是唯一事实来源），
   索引与文件监听用 `internal/index`。App 不自己拼文件路径读写笔记。
 - 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG_DIR`/config.json）定位工作台，
+  都没有时自动初始化 `~/Documents/跬步`（`config.EnsureWorkspace`），
   打开后 `index.Sync` 并启动 `index.Watch`；外部变化通过 Wails 事件 `workspace:changed`
   （`{ ids: string[] }`）通知前端。自己保存也会触发事件，前端比较正文与本地是否一致来忽略。
 - 工作台图片：AssetServer 中间件把 `/workspace-assets/<file>` 映射到 `<工作台>/assets/<file>`，

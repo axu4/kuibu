@@ -19,6 +19,10 @@ interface SettingsProps {
   onStatusChange: (status: ShortcutStatus) => void;
   /** 打开后定位到「软件更新」一节（从顶部更新提示条进入）。 */
   focusUpdate?: boolean;
+  /** 当前工作台目录。 */
+  workspace: string;
+  /** 更换工作台（弹出目录选择框）。 */
+  onChangeWorkspace: () => void;
 }
 
 /**
@@ -27,7 +31,13 @@ interface SettingsProps {
  * 录制模式：窗口级监听 keydown 并 preventDefault/stopPropagation，
  * 避免按键触发其它操作（例如 ⌘W 关窗、⌘Q 退出）。
  */
-export function Settings({ onClose, onStatusChange, focusUpdate }: SettingsProps) {
+export function Settings({
+  onClose,
+  onStatusChange,
+  focusUpdate,
+  workspace,
+  onChangeWorkspace,
+}: SettingsProps) {
   const [status, setStatus] = useState<ShortcutStatus | null>(null);
   const [recording, setRecording] = useState(false);
   const [preview, setPreview] = useState<string>("");
@@ -260,6 +270,19 @@ export function Settings({ onClose, onStatusChange, focusUpdate }: SettingsProps
     <div className="modal-mask" onMouseDown={onClose}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
         <h2>设置</h2>
+
+        <div className="settings-row">
+          <div className="settings-label">
+            <span>工作台</span>
+            <span className="settings-desc settings-path" title={workspace}>
+              {workspace || "尚未打开"}
+            </span>
+          </div>
+          <button type="button" className="btn" onClick={onChangeWorkspace}>
+            <Icon name="folder" size={14} />
+            更换…
+          </button>
+        </div>
 
         <div className="settings-row">
           <div className="settings-label">

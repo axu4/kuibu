@@ -112,13 +112,21 @@ func (s *WorkspaceService) ServiceName() string {
 
 // ServiceStartup 在应用启动时打开工作台、同步索引并开始监听文件变化。
 func (s *WorkspaceService) ServiceStartup(_ context.Context, _ application.ServiceOptions) error {
-	dir, err := config.Locate(os.Getenv)
+	// 首次启动没有配置时自动在 ~/Documents/跬步 建一个工作台，免得先选目录；
+	// 之后可以在侧栏顶部或设置里更换。
+	fallback, err := config.FallbackWorkspaceDir()
 	if err != nil {
-		log.Printf("kuibu: 读取默认工作台失败: %v", err)
+		log.Printf("kuibu: %v", err)
 		return nil
 	}
-	if dir == "" {
+	dir, created, err := config.EnsureWorkspace(os.Getenv, fallback)
+	if err != nil {
+		// 默认目录被占用等情况：退回欢迎页让用户自己选。
+		log.Printf("kuibu: 准备默认工作台失败: %v", err)
 		return nil
+	}
+	if created {
+		log.Printf("kuibu: 已创建默认工作台 %s", dir)
 	}
 	if err := s.open(dir); err != nil {
 		// 默认工作台打不开时退回欢迎页，而不是让应用启动失败。

@@ -434,43 +434,64 @@ kbd {
   color: var(--ink-3);
 }
 
-.view-switch {
+/* 主视图导航：竖排，加新视图只需多一行。 */
+.main-nav {
   flex: 0 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 2px;
-  margin: 4px 10px 8px;
-  padding: 2px;
-  border-radius: 9px;
-  background: var(--hover);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 6px 0 4px;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--line);
 }
 
-.view-switch-btn {
+.main-nav-item {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 28px;
+  gap: 10px;
+  height: 32px;
+  padding: 0 10px;
   border: none;
   border-radius: 7px;
   background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.main-nav-item .icon {
   color: var(--ink-2);
-  font-size: 13px;
 }
 
-.view-switch-btn:hover {
-  color: var(--ink);
+.main-nav-item:hover {
+  background: var(--hover);
 }
 
-.view-switch-btn.is-active {
+.main-nav-item.is-active {
   background: var(--raised);
-  color: var(--ink);
   font-weight: 600;
-  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
-.view-switch-btn.is-active .icon {
+.main-nav-item.is-active .icon {
   color: var(--accent);
+}
+
+.main-nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.main-nav-key {
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.main-nav-item:hover .main-nav-key {
+  opacity: 1;
 }
 
 .sidebar-section {
@@ -1191,6 +1212,14 @@ kbd {
 .settings-desc {
   color: var(--ink-3);
   font-size: 12px;
+}
+
+/* 路径结尾（文件夹名）最重要，所以整段换行显示而不是截断。 */
+.settings-path {
+  max-width: 300px;
+  word-break: break-all;
+  line-height: 1.5;
+  user-select: text;
 }
 
 .settings-value {

@@ -17,9 +17,17 @@ import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
 import { ReportView } from "./components/ReportView";
 import { Icon } from "./components/Icon";
+import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
 import { loadMainView, saveMainView } from "./lib/todo";
 import type { MainView } from "./lib/todo";
+
+/** 侧栏里的主视图，顺序即 ⌘1、⌘2… 的快捷键顺序；以后加视图往这里加一行。 */
+const MAIN_VIEWS: { key: MainView; label: string; icon: IconName }[] = [
+  { key: "notes", label: "笔记", icon: "note" },
+  { key: "todo", label: "待办", icon: "todo" },
+  { key: "report", label: "周报", icon: "report" },
+];
 
 /** 自动保存防抖时间（毫秒）。 */
 const SAVE_DEBOUNCE_MS = 600;
@@ -575,15 +583,9 @@ export default function App() {
       if (key === "s") {
         e.preventDefault();
         void saveNow();
-      } else if (key === "1") {
+      } else if (/^[1-9]$/.test(key) && MAIN_VIEWS[Number(key) - 1]) {
         e.preventDefault();
-        switchView("notes");
-      } else if (key === "2") {
-        e.preventDefault();
-        switchView("todo");
-      } else if (key === "3") {
-        e.preventDefault();
-        switchView("report");
+        switchView(MAIN_VIEWS[Number(key) - 1].key);
       } else if (key === "n" && view === "notes" && workspace) {
         e.preventDefault();
         void createNote("");
@@ -694,34 +696,19 @@ export default function App() {
           </button>
         </div>
 
-        <nav className="view-switch" aria-label="视图">
-          <button
-            type="button"
-            className={`view-switch-btn${view === "notes" ? " is-active" : ""}`}
-            title="笔记（⌘1）"
-            onClick={() => switchView("notes")}
-          >
-            <Icon name="note" />
-            笔记
-          </button>
-          <button
-            type="button"
-            className={`view-switch-btn${view === "todo" ? " is-active" : ""}`}
-            title="待办（⌘2）"
-            onClick={() => switchView("todo")}
-          >
-            <Icon name="todo" />
-            待办
-          </button>
-          <button
-            type="button"
-            className={`view-switch-btn${view === "report" ? " is-active" : ""}`}
-            title="周报（⌘3）"
-            onClick={() => switchView("report")}
-          >
-            <Icon name="report" />
-            周报
-          </button>
+        <nav className="main-nav" aria-label="视图">
+          {MAIN_VIEWS.map((item, i) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`main-nav-item${view === item.key ? " is-active" : ""}`}
+              onClick={() => switchView(item.key)}
+            >
+              <Icon name={item.icon} />
+              <span className="main-nav-label">{item.label}</span>
+              <kbd className="main-nav-key">⌘{i + 1}</kbd>
+            </button>
+          ))}
         </nav>
 
         {view === "notes" ? (
@@ -1004,6 +991,8 @@ export default function App() {
           }}
           onStatusChange={applyShortcutStatus}
           focusUpdate={settingsFocusUpdate}
+          workspace={workspace}
+          onChangeWorkspace={() => void chooseWorkspace()}
         />
       )}
 
