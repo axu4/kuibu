@@ -10,7 +10,7 @@
 #
 # 关于 app/ 与根模块：app/ 是独立 module（app/go.mod），根模块的 `./...` 不包含它。
 # 但 go-linux 的 `gofmt -l .` 是按目录扫描的，会扫到 app/ 下手写的 Go 文件
-# （app/main.go、app/workspaceservice.go、app/build/{ios,android}/*.go），这是期望的：
+# （app/main.go、app/workspaceservice.go 等），这是期望的：
 # 这些文件也必须是 gofmt 干净的。app/frontend/bindings 只有 .ts/.js，node_modules 在
 # go-linux job 里不会被安装，因此无需排除；如果以后新增了生成出来的 Go 文件
 # （例如 obfuscated bindings），需要在 gofmt 步骤里显式排除。
@@ -162,6 +162,11 @@ jobs:
       - name: Package .app
         working-directory: app
         run: wails3 package
+
+      # 确保 app/ 下 `go build ./...` 能链接通过（曾因 Wails 模板的 iOS/Android 占位包失败，#39）。
+      - name: go build
+        working-directory: app
+        run: go build ./...
 
       - name: go vet
         working-directory: app

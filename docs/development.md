@@ -80,7 +80,9 @@ cd app && wails3 package                    # 打包，产物 app/bin/kuibu.app
 
 - **`app/` 是独立 module**，根模块的 `./...` 不包含它；两边要分别 `go vet`/`go build`。
 - **绑定是提交进仓库的生成物**（`app/frontend/bindings/`）。改了 `WorkspaceService` 的方法签名或结构体后必须跑 `wails3 generate bindings -ts -i` 并提交；CI 会重新生成并 `git diff` 校验，不一致直接失败。
-- `wails3 package` 会先构建前端到 `frontend/dist`（`main.go` 用 `go:embed` 打包），所以没打包过时 `app/` 的 `go build` 会因缺少 `frontend/dist` 失败。
+- `app/main.go` 用 `//go:embed all:frontend/dist` 打包前端，所以 `app/` 下 `go build`/`go vet` 前必须先有 `frontend/dist`：跑过 `wails3 package`，或 `cd app/frontend && npm ci && npm run build`。
+- Linux 上构建/测试 `app/` 要加 `-tags gtk3`（需 pkg-config、libgtk-3-dev、libwebkit2gtk-4.1-dev），例如 `cd app && go build -tags gtk3 ./... && go vet -tags gtk3 ./...`。
+- 本项目只做 macOS（以后 Windows），Wails 模板生成的 `build/ios`、`build/android` 已删除；它们是没有 `main` 的 `package main`，会让 `app/` 下 `go build ./...` 链接失败。
 
 ## 测试约定
 

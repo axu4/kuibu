@@ -20,7 +20,7 @@
 根模块的跨平台守门人——核心库与 CLI 必须在 Linux 上可构建、可测试。
 
 1. `actions/setup-go@v5`，`go-version-file: go.mod`（即 go 1.26.0，自动取该 minor 的最新补丁），开 module 缓存。
-2. **gofmt 检查**：`gofmt -l .` 有输出就失败。注意这是按目录扫描，会扫到 `app/` 下手写的 Go 文件（`app/main.go`、`app/workspaceservice.go`、`app/build/{ios,android}/*.go`），这些也必须是 gofmt 干净的；`app/frontend/bindings` 只有 `.ts/.js`，node_modules 在这个 job 里不安装，无需排除。
+2. **gofmt 检查**：`gofmt -l .` 有输出就失败。注意这是按目录扫描，会扫到 `app/` 下手写的 Go 文件（`app/main.go`、`app/workspaceservice.go` 等），这些也必须是 gofmt 干净的；`app/frontend/bindings` 只有 `.ts/.js`，node_modules 在这个 job 里不安装，无需排除。
 3. `go vet ./...`
 4. `go build ./...`
 5. `go test -race ./...`（需要 cgo，因此不设 `CGO_ENABLED=0`；构建不依赖 cgo 由纯 Go 的 `modernc.org/sqlite` 保证）
