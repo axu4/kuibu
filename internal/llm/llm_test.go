@@ -185,8 +185,8 @@ func TestRetryOn429ThenSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Text != "ok" || calls != 3 {
-		t.Fatalf("resp=%+v calls=%d", resp, calls)
+	if resp.Text != "ok" || atomic.LoadInt32(&calls) != 3 {
+		t.Fatalf("resp=%+v calls=%d", resp, atomic.LoadInt32(&calls))
 	}
 	if len(waits) != 2 || waits[0] != time.Second {
 		t.Fatalf("应按 Retry-After 等待: %v", waits)
@@ -209,8 +209,8 @@ func TestNoRetryOn401AndChineseMessage(t *testing.T) {
 	if err == nil {
 		t.Fatal("应报错")
 	}
-	if calls != 1 {
-		t.Fatalf("401 不应重试, calls=%d", calls)
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("401 不应重试, calls=%d", atomic.LoadInt32(&calls))
 	}
 	if !strings.Contains(err.Error(), "密钥无效") {
 		t.Fatalf("错误应中文化: %v", err)
@@ -235,8 +235,8 @@ func TestTimeoutRetriesThenFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "超时") {
 		t.Fatalf("应报超时, got %v", err)
 	}
-	if calls != 3 {
-		t.Fatalf("超时应重试 2 次, calls=%d", calls)
+	if atomic.LoadInt32(&calls) != 3 {
+		t.Fatalf("超时应重试 2 次, calls=%d", atomic.LoadInt32(&calls))
 	}
 }
 
@@ -259,16 +259,16 @@ func TestOutboundNeedsConfirmSendsNothing(t *testing.T) {
 	if !errors.Is(err, ErrNeedsConfirm) {
 		t.Fatalf("未确认应返回 ErrNeedsConfirm, got %v", err)
 	}
-	if calls != 0 {
-		t.Fatalf("未确认不应发请求, calls=%d", calls)
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("未确认不应发请求, calls=%d", atomic.LoadInt32(&calls))
 	}
 	if !strings.Contains(preview.Text, "张三本周完成了 A") || !strings.Contains(preview.Text, "归一周报") || preview.ModelName != "ds" {
 		t.Fatalf("预览应包含完整内容: %+v", preview)
 	}
 
 	_, resp, err := o.Send(context.Background(), "", req, true)
-	if err != nil || resp.Text != "ok" || calls != 1 {
-		t.Fatalf("确认后应发送: resp=%+v err=%v calls=%d", resp, err, calls)
+	if err != nil || resp.Text != "ok" || atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("确认后应发送: resp=%+v err=%v calls=%d", resp, err, atomic.LoadInt32(&calls))
 	}
 	// 用量日志只记元数据。
 	logPath, _ := UsagePath(env)

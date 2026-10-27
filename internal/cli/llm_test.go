@@ -87,7 +87,7 @@ func TestLLMSendNeedsConfirm(t *testing.T) {
 		t.Fatalf("不带 --yes 退出码 = %d, want 8\nstderr=%s", res.code, res.stderr)
 	}
 	if atomic.LoadInt32(calls) != 0 {
-		t.Fatalf("不带 --yes 不应发请求, calls=%d", *calls)
+		t.Fatalf("不带 --yes 不应发请求, calls=%d", atomic.LoadInt32(calls))
 	}
 	if !strings.Contains(res.stdout, body) || !strings.Contains(res.stdout, "归一") {
 		t.Fatalf("应输出完整预览: %s", res.stdout)
@@ -98,12 +98,12 @@ func TestLLMSendNeedsConfirm(t *testing.T) {
 
 	res = e.mustRun(body, "llm", "send", "--dry-run")
 	if atomic.LoadInt32(calls) != 0 || !strings.Contains(res.stdout, body) {
-		t.Fatalf("--dry-run 只预览: calls=%d out=%s", *calls, res.stdout)
+		t.Fatalf("--dry-run 只预览: calls=%d out=%s", atomic.LoadInt32(calls), res.stdout)
 	}
 
 	res = e.mustRun(body, "llm", "send", "--yes", "--json")
 	if atomic.LoadInt32(calls) != 1 || res.jsonOut(t)["text"] != "好的" {
-		t.Fatalf("--yes 应发送: calls=%d out=%s", *calls, res.stdout)
+		t.Fatalf("--yes 应发送: calls=%d out=%s", atomic.LoadInt32(calls), res.stdout)
 	}
 	if strings.Contains(res.stdout+res.stderr, llmTestKey) {
 		t.Fatal("输出不应含明文密钥")
