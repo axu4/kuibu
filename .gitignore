@@ -27,6 +27,7 @@ node_modules/
 
 # App（Wails）构建产物与本地状态
 app/bin
+app/app
 app/.task
 app/frontend/dist
 app/frontend/node_modules
