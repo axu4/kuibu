@@ -9,6 +9,14 @@ import * as core$0 from "../internal/core/models.js";
 import * as llm$0 from "../internal/llm/models.js";
 
 /**
+ * CarryResult 是一键顺延的结果。
+ */
+export interface CarryResult {
+    "added": number;
+    "review": core$0.ReviewResult;
+}
+
+/**
  * CheckResult 是一次在线检查的结果。
  */
 export interface CheckResult {
@@ -449,6 +457,11 @@ export interface ReportPerson {
      * SourceChanged 表示归一后原文又被重新提交。
      */
     "sourceChanged": boolean;
+
+    /**
+     * Alignment 是对照上周计划的对齐率 0~1，没有可对照数据时为 null。
+     */
+    "alignment": number | null;
 }
 
 /**

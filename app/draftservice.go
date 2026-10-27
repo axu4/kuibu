@@ -200,3 +200,110 @@ func toDraftData(ws *store.Workspace, d *store.Draft) DraftData {
 	}
 	return out
 }
+
+// CarryResult 是一键顺延的结果。
+type CarryResult struct {
+	Added  int               `json:"added"`
+	Review core.ReviewResult `json:"review"`
+}
+
+// Review 返回「对照上周计划」。上周没有定稿时返回 NOT_FINAL 错误。
+func (s *ReportService) Review(week, person string) (core.ReviewResult, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	res, err := core.LoadReview(ws, week, s.draftPersonID(ws, week, person))
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	return *res, nil
+}
+
+// SetReview 人工设置一条上周计划的状态与对应项；status 为空表示清除。
+func (s *ReportService) SetReview(week, person, planID, status string, matches []string, note string) (core.ReviewResult, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	id := s.draftPersonID(ws, week, person)
+	res, err := core.SetReviewItem(ws, week, id, planID, status, matches, note)
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	s.emitReport(nil, []string{week + "/" + store.DraftDirName + "/" + id})
+	return *res, nil
+}
+
+// PrepareReviewSuggest 生成 AI 对照建议的外发预览，不发请求。
+func (s *ReportService) PrepareReviewSuggest(week, person, model string) (llm.Preview, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return llm.Preview{}, err
+	}
+	res, err := core.LoadReview(ws, week, s.draftPersonID(ws, week, person))
+	if err != nil {
+		return llm.Preview{}, err
+	}
+	out := &llm.Outbound{Env: s.llmEnv()}
+	preview, _, err := out.Prepare(model, core.ReviewSuggestRequest(res))
+	return preview, err
+}
+
+// ReviewSuggest 发送并写入 AI 建议。只能由外发确认弹窗的「确认发送」调用。
+func (s *ReportService) ReviewSuggest(week, person, model string) (core.ReviewResult, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	id := s.draftPersonID(ws, week, person)
+	res, err := core.LoadReview(ws, week, id)
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	out := &llm.Outbound{Env: s.llmEnv()}
+	_, resp, err := out.Send(ctx, model, core.ReviewSuggestRequest(res), true)
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	res, _, err = core.ApplySuggestion(ws, week, id, resp.Text)
+	if err != nil {
+		return core.ReviewResult{}, err
+	}
+	s.emitReport(nil, []string{week + "/" + store.DraftDirName + "/" + id})
+	return *res, nil
+}
+
+// Carry 把「部分 / 延期」的计划顺延到本周下周计划；ids 为空表示全部。
+func (s *ReportService) Carry(week, person string, ids []string) (CarryResult, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return CarryResult{}, err
+	}
+	id := s.draftPersonID(ws, week, person)
+	res, added, err := core.Carry(ws, week, id, ids, s.clock())
+	if err != nil {
+		return CarryResult{}, err
+	}
+	s.emitReport(nil, []string{week + "/" + store.DraftDirName + "/" + id})
+	return CarryResult{Added: added, Review: *res}, nil
+}
+
+// draftPersonID 把姓名 / 别名解析成组员 ID，解析不到时原样返回。
+func (s *ReportService) draftPersonID(ws *store.Workspace, week, person string) string {
+	if id, err := ws.ResolveReportPerson(week, store.ReportLevelMember, person); err == nil {
+		return id
+	}
+	return strings.TrimSpace(person)
+}
+
+// alignmentFor 返回某人本周对齐率；没有可对照的数据时为 nil。
+func alignmentFor(ws *store.Workspace, week, personID string) *float64 {
+	res, err := core.LoadReview(ws, week, personID)
+	if err != nil {
+		return nil
+	}
+	return res.Alignment
+}

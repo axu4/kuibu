@@ -3319,3 +3319,134 @@ body.quicknote-body {
   border-top: 1px solid var(--line);
   padding-top: 4px;
 }
+
+/* ---------- 周报：对照上周 ---------- */
+
+.report-detail.is-wide {
+  flex-basis: min(760px, 62vw);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.review-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.review-head .btn {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.review-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.review-rate-num {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-counts {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.review-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.review-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.review-col-title {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.review-col-title.is-sub {
+  margin-top: 10px;
+}
+
+.review-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: 8px;
+}
+
+.review-plan.is-done {
+  border-left-color: var(--accent);
+}
+
+.review-plan.is-partial,
+.review-plan.is-delayed {
+  border-left-color: var(--amber);
+}
+
+.review-plan.is-canceled {
+  border-left-color: var(--line-strong);
+  color: var(--ink-3);
+}
+
+.review-plan-text,
+.review-done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.review-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.review-plan-row .segmented {
+  margin-top: 0;
+}
+
+.review-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-match {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.review-done {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--line);
+}

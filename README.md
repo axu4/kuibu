@@ -214,6 +214,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | `report config [--weekday N]` | 查看/修改周报日（1-7，缺省 4） |
 | `report normalize (--person p \| --all) [--week W] [--yes] [--force]` | AI 归一组员周报为草稿，不带 `--yes` 只预览（退出 8） |
 | `report draft show\|edit <week> <person>` / `report finalize\|unfinalize <week> <person>` | 查看、修改、定稿归一稿 |
+| `report review [set\|suggest] <week> <person>` / `report carry <week> <person>` | 对照上周计划、对齐率、顺延 |
 | `tree [--root <id>]` | 缩进大纲打印笔记树，孤儿/环节点带标记 |
 | `search <query> [--limit n]` | 全文检索，输出 id、标题、片段 |
 | `asset add <file>` | 归档资源并打印可直接写入 Markdown 的相对路径 |
