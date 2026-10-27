@@ -10,7 +10,7 @@
 | [development.md](development.md) | 目录说明、开发环境（Go 1.26.x / Node 22 / wails3 v3.0.0）、常用命令、绑定生成、测试约定、分支与 PR 工作流 |
 | [ci.md](ci.md) | CI 三个 job（go-linux / go-macos / app-macos）的职责与触发条件、artifact 与签名说明、本地复现 |
 | [update.md](update.md) | 在线更新原理、token 来源顺序与限制 |
-| [release.md](release.md) | 发布步骤、资产命名约定、失败重跑与版本号规则 |
+| [release.md](release.md) | 发布步骤、按 PR 标签自动合并与自动发版、资产命名约定、失败重跑与版本号规则 |
 | [wails.md](wails.md) | Wails v3.0.0 GA 与 `@wailsio/runtime` 3.0.0、升级注意事项与回归清单、Go 版本建议 |
 
 其他文档：
