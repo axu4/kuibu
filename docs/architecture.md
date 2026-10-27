@@ -293,3 +293,7 @@ source: ""
 - 原文件名清洗为文件系统安全字符（保留中文、字母、数字与 `.-_`，其余变 `_`，为空时用 `asset`），并去掉路径分隔符。
 - 返回的是**相对 `notes/` 下笔记文件**的路径：`../assets/<文件名>`，直接写进 Markdown 正文，笔记搬到别处也仍然成立。
 - **App 显示**：`WorkspaceService` 的 AssetServer 中间件把 `/workspace-assets/<file>` 映射到 `<工作台>/assets/<file>`，只接受不含路径分隔符、不含 `..` 的普通文件名（防路径穿越）。前端 `markdown.ts` 负责 `../assets/x` ↔ `/workspace-assets/x` 的双向改写：编辑器里显示 URL，保存前改回相对路径，保证文件内容始终是 Markdown 原生相对引用。
+- **编辑器粘贴 / 拖入**：
+  - ⌘V 粘贴截图、拖入图片、图片块「上传」：Crepe 的 upload 插件调用 ImageBlock 的 `onUpload`（`Editor.tsx` 里配置），前端把文件读成 base64 交给 `WorkspaceService.SaveAsset` → `AddAssetBytes`，返回的 `../assets/x` 改写成显示 URL 插入。笔记与待办详情共用这个编辑器，两处都生效。
+  - 从 Finder 拖文件：主窗口开了 Wails 原生文件拖放，会拦下 DOM 的 drop。笔记编辑器区域带 `data-file-drop-target` + `data-note-drop`，`main.go` 的 `WindowFilesDropped` 按属性分流：笔记 → `WorkspaceService.HandleNoteDroppedFiles` → `AddAsset`，再发 `note:assets-dropped`，编辑器在光标处插入 `![名](...)`（图片）或 `[名](...)`（其他文件）；待办详情（`data-todo-id`）仍是加附件。
+  - 不压缩，原样保存。

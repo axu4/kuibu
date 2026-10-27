@@ -89,6 +89,8 @@ type TodoChangeEvent struct {
 type WorkspaceService struct {
 	// app 在 main 中注入，用于弹原生对话框与发事件。
 	app *application.App
+	// emitHook 可在测试里替换事件发送。
+	emitHook func(name string, data any)
 
 	// mu 保护 ws / idx / cancel，避免后台 goroutine 与前端调用并发访问。
 	mu  sync.Mutex
@@ -162,6 +164,10 @@ func (s *WorkspaceService) index() *index.Index {
 
 // emit 向前端发事件；app 尚未注入时安全忽略。
 func (s *WorkspaceService) emit(name string, data any) {
+	if s.emitHook != nil {
+		s.emitHook(name, data)
+		return
+	}
 	if s.app == nil {
 		return
 	}

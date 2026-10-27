@@ -85,7 +85,7 @@ func main() {
 			InvisibleTitleBarHeight: 40,
 		},
 		// 允许从 Finder 拖文件到主窗口；只有带 data-file-drop-target 属性的
-		// 元素（待办详情面板）会成为目标，事件在下面转发给 TodoService。
+		// 元素（待办详情面板、笔记编辑器）会成为目标，事件在下面按属性分流。
 		EnableFileDrop: true,
 	})
 	ui.mainWindow = mainWindow
@@ -94,9 +94,17 @@ func main() {
 	// 前端在详情面板上写 data-todo-id，这里据此把文件挂到对应待办。
 	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
 		files := e.Context().DroppedFiles()
-		todoID := ""
+		todoID, noteDrop := "", false
 		if details := e.Context().DropTargetDetails(); details != nil {
 			todoID = details.Attributes["data-todo-id"]
+			noteDrop = details.Attributes["data-note-drop"] != ""
+		}
+		// 笔记编辑器：存进 assets/，前端在光标处插入图片或链接。
+		if noteDrop && len(files) > 0 {
+			if _, err := workspace.HandleNoteDroppedFiles(files); err != nil {
+				log.Printf("kuibu: 保存拖入笔记的文件失败: %v", err)
+			}
+			return
 		}
 		if todoID == "" || len(files) == 0 {
 			return

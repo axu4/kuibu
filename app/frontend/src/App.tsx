@@ -1006,6 +1006,7 @@ export default function App() {
                       noteId={note.data.id}
                       initialBody={body}
                       onChange={onBodyChange}
+                      fileDrop
                     />
                   ) : (
                     <textarea

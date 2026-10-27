@@ -80,6 +80,26 @@ export interface DraftData {
 }
 
 /**
+ * DroppedAsset 是拖进笔记的一个文件。
+ */
+export interface DroppedAsset {
+    /**
+     * Name 是原文件名。
+     */
+    "name": string;
+
+    /**
+     * Rel 是正文里用的相对路径（../assets/xxx）。
+     */
+    "rel": string;
+
+    /**
+     * Image 表示是否是图片（插入 ![] 还是 []）。
+     */
+    "image": boolean;
+}
+
+/**
  * ExportContent 是「复制为飞书格式」要写进剪贴板的内容。
  */
 export interface ExportContent {
