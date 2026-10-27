@@ -4,6 +4,8 @@ import type { GroupData } from "../../bindings/github.com/axu4/kuibu/app";
 import type { Preview } from "../../bindings/github.com/axu4/kuibu/internal/llm";
 import { Editor } from "./Editor";
 import { Icon } from "./Icon";
+import { MoreMenu } from "./Menu";
+import { copyRich } from "../lib/clipboard";
 import { SendPreview } from "./SendPreview";
 import { readableError } from "../lib/todo";
 
@@ -210,6 +212,29 @@ export function GroupReport({
 
   const final = data?.status === "final";
 
+  const exportMd = async () => {
+    try {
+      const path = await ReportService.ExportReport(kind, week);
+      if (path) onToast(`已导出到 ${path}`);
+    } catch (err) {
+      onToast(`导出失败：${readableError(err)}`);
+    }
+  };
+
+  const copyFeishu = async () => {
+    try {
+      const c = await ReportService.ExportClipboard(kind, week);
+      const mode = await copyRich(c.html, c.text);
+      onToast(
+        mode === "html"
+          ? "已复制，粘贴到飞书即可（保留标题、列表格式）"
+          : "当前环境不支持富文本剪贴板，已复制为纯文本",
+      );
+    } catch (err) {
+      onToast(`复制失败：${readableError(err)}`);
+    }
+  };
+
   return (
     <section className="report-detail is-wide">
       <div className="report-detail-head">
@@ -222,6 +247,24 @@ export function GroupReport({
             {data?.leadName && <span>{data.leadName}</span>}
           </div>
         </div>
+        <MoreMenu
+          items={[
+            {
+              label: "导出 Markdown",
+              icon: "download",
+              disabled: !final,
+              title: final ? undefined : "定稿后才能导出",
+              onClick: () => void exportMd(),
+            },
+            {
+              label: "复制为飞书格式",
+              icon: "copy",
+              disabled: !final,
+              title: final ? undefined : "定稿后才能复制",
+              onClick: () => void copyFeishu(),
+            },
+          ]}
+        />
         <button type="button" className="icon-btn" title="关闭" onClick={onClose}>
           <Icon name="close" />
         </button>

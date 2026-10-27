@@ -20,6 +20,7 @@ export type {
     CarryResult,
     CheckResult,
     DraftData,
+    ExportContent,
     GroupData,
     GroupPlanData,
     LLMList,
