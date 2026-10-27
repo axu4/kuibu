@@ -32,7 +32,7 @@ function displayURL(rel: string): string {
   return toDisplayMarkdown(rel).replace(/[ ()]/g, (c) => encodeURIComponent(c));
 }
 
-interface EditorProps {
+export interface EditorProps {
   /** 当前笔记 ID，用于区分笔记切换。 */
   noteId: string;
   /** 打开时的正文（Markdown 原文）。 */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ReportService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { DraftData, NormalizePlan as RawPlan } from "../../bindings/github.com/axu4/kuibu/app";
-import { Editor } from "./Editor";
+import { Editor } from "./LazyEditor";
 import { Icon } from "./Icon";
 import { SendPreview } from "./SendPreview";
 import { readableError } from "../lib/todo";

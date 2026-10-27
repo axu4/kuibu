@@ -1,7 +1,5 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
-import QuickNote from "./QuickNote";
 import "./styles.css";
 
 /**
@@ -20,8 +18,15 @@ if (isQuickNote) {
   document.body.classList.add("quicknote-body");
 }
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    {isQuickNote ? <QuickNote /> : <App />}
-  </React.StrictMode>,
-);
+// 按窗口只加载需要的代码：随手记小窗不加载主窗口（及其编辑器、周报等）的代码。
+const load = isQuickNote
+  ? import("./QuickNote").then((m) => m.default)
+  : import("./App").then((m) => m.default);
+
+void load.then((Root) => {
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <Root />
+    </React.StrictMode>,
+  );
+});
