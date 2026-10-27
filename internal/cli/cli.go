@@ -30,6 +30,8 @@ const usageText = `用法:
   note edit <id> [--title t] ...         修改笔记
   note mv <id> [--parent <id>|--root]    移动笔记
   note rm <id> [-r|--recursive]          删除笔记
+  note extract-todos <id> [--dry-run]    把笔记里的「- [ ] …」行抽成待办（不重复）
+  meeting open [--week W] | list         本周周会笔记（没有就建）/ 列出周会
   todo add <文本> [--due <值>]           快速录入待办
   todo list [--status s] [--due d]       列出待办
   todo show <id>                         查看待办详情
@@ -183,6 +185,8 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runLLM(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "template":
 		err = runTemplate(cmdArgs, &common, stdin, stdout, stderr, env)
+	case "meeting":
+		err = runMeeting(cmdArgs, &common, stdout, stderr, env)
 	default:
 		jsonMode := common.json || hasJSONFlag(cmdArgs)
 		if jsonMode {

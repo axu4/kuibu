@@ -54,7 +54,7 @@ func newNoteJSON(n *store.Note, withBody bool) noteJSON {
 // runNote 分发 note 子命令。
 func runNote(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("note 需要子命令: new/list/show/edit/mv/rm")
+		return usagef("note 需要子命令: new/list/show/edit/mv/rm/extract-todos")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -70,6 +70,8 @@ func runNote(ctx context.Context, args []string, common *commonFlags, stdin io.R
 		return noteMove(rest, common, stdout, stderr, env)
 	case "rm":
 		return noteRemove(ctx, rest, common, stdout, stderr, env)
+	case "extract-todos":
+		return noteExtractTodos(rest, common, stdout, stderr, env)
 	default:
 		return usagef("未知 note 子命令 %q", sub)
 	}
