@@ -1,0 +1,54 @@
+# 跬步（kuibu）合并后自动发版
+#
+# 手动合并（网页、gh、Claude 应用）带 release:patch / release:minor / release:major
+# 标签的 PR 后，按标签递增版本号、在合并提交上打 tag，再触发 Release 工作流。
+#
+# 由 auto-merge 工作流合并的 PR 不走这里：工作流自带 token 的操作不会触发其他工作流，
+# 那条路径在 auto-merge.sh 里直接调用同一个 release-from-pr.sh。
+#
+# 也可以在 Actions 里手动运行，填 PR 号，用于失败重跑或补发（已打过 tag 的会跳过）。
+#
+# 安全：pull_request_target 以本仓库的写权限运行，所以只检出 main，不执行 PR 代码。
+
+name: Auto release
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: '已合并、带 release:* 标签的 PR 号'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 打 tag 并触发 Release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+        contains(github.event.pull_request.labels.*.name, 'release:major')))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main（只取脚本与 tags）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: 打 tag 并触发 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+        run: bash .github/scripts/release-from-pr.sh "$PR_NUMBER"

@@ -24,6 +24,31 @@ git push origin v0.2.0
 
 推完 tag 后 GitHub Actions 会自动跑 `Release` workflow。也可以不推 tag，直接在 GitHub 的 Actions → Release → Run workflow 里填 tag 手动触发（见下文「失败如何重跑」）。
 
+## 自动合并与自动发版（按 PR 标签）
+
+日常更推荐用标签，不用手动打 tag：
+
+| 标签 | 作用 |
+| --- | --- |
+| `automerge` | CI 通过后自动 squash 合并（标题末尾带 `(#PR号)`） |
+| `release:patch` | 合并后发 patch 版（v0.4.0 → v0.4.1），修 bug 用 |
+| `release:minor` | 合并后发 minor 版（v0.4.0 → v0.5.0），加功能用 |
+| `release:major` | 合并后发 major 版（v0.4.0 → v1.0.0） |
+
+- 两类标签互相独立：只打 `automerge` 就只合并不发版；只打 `release:*` 就在你手动合并后发版。文档、CLAUDE.md 这类改动不需要发版，就别打 `release:*`，免得 App 每次都提示更新。
+- 同时有多个 `release:*` 时取最大的。新版本号从最新的正式 tag（`vX.Y.Z`，忽略 `-rc` 等预发布）递增，tag 打在 PR 的合并提交上，然后触发 `Release` workflow，并在 PR 下留言说明发了哪个版本。
+- 自动合并的条件：PR 打开、不是草稿、带 `automerge`、来自本仓库分支（fork 的 PR 不会自动合并）、该提交上最新一次 CI 成功。合并时锁定已通过 CI 的提交（`--match-head-commit`），期间有新推送就等新提交的 CI。
+- 合并后补打 `release:*` 不会自动发版；这时在 Actions → **Auto release** → Run workflow 填 PR 号即可。已经打过 tag 的合并提交会被跳过，重跑不会重复发版。
+
+实现：
+
+- `.github/workflows/auto-merge.yml`：`pull_request_target`（打上 `automerge` 时）与 `workflow_run`（CI 跑完时）触发，执行 `.github/scripts/auto-merge.sh`。
+- `.github/workflows/auto-release.yml`：`pull_request_target`（PR 关闭且已合并）与手动 `workflow_dispatch` 触发，执行 `.github/scripts/release-from-pr.sh`。
+- `.github/scripts/next-version.sh`：版本号递增。
+- 两个工作流都以仓库写权限运行，所以只检出 `main` 上的脚本，从不检出或执行 PR 里的代码；它们改动工作流文件后要合并进 `main` 才生效。
+- GitHub 规定工作流自带 token 的操作（合并 PR、推 tag）不会再触发其他工作流，所以：自动合并后直接在同一个 job 里调用 `release-from-pr.sh`；推完 tag 后用 `gh workflow run release.yml -f tag=…` 显式触发 Release（`workflow_dispatch` 不受这条限制）。
+- 两个发版 PR 几乎同时合并、算出同一个版本号时，后推的 tag 会失败，脚本会重新拉取 tags 再算，最多试 3 次。
+
 ## workflow 做了什么
 
 1. **计算版本**：从 tag 去掉 `v` 前缀得到 `VERSION`，并校验 `MAJOR.MINOR.PATCH[-prerelease]` 格式。
