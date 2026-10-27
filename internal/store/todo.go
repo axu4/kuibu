@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -943,4 +944,86 @@ func validTodoURL(s string) bool {
 		return false
 	}
 	return u.Scheme != ""
+}
+
+// SetTodoStatusTree 把待办及其全部后代设为 status（已是该状态的后代不改写），
+// 返回更新后的本条与所有被改动的 ID（含本条）。
+func (w *Workspace) SetTodoStatusTree(id, status string, now time.Time) (*Todo, []string, error) {
+	t, err := w.SetTodoStatus(id, status, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	changed := []string{t.ID}
+	var walk func(parent string) error
+	walk = func(parent string) error {
+		children, err := w.TodoChildren(parent)
+		if err != nil {
+			return err
+		}
+		for _, c := range children {
+			if c.Status != status {
+				if _, err := w.SetTodoStatus(c.ID, status, now); err != nil {
+					return err
+				}
+				changed = append(changed, c.ID)
+			}
+			if err := walk(c.ID); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := walk(id); err != nil {
+		return t, changed, err
+	}
+	return t, changed, nil
+}
+
+// OpenDescendantCount 返回未完成（todo / doing）的后代数量。
+func (w *Workspace) OpenDescendantCount(id string) (int, error) {
+	children, err := w.TodoChildren(id)
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, c := range children {
+		if c.Status != StatusDone && c.Status != StatusCanceled {
+			total++
+		}
+		n, err := w.OpenDescendantCount(c.ID)
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// TodoAttachmentPath 把待办附件的相对路径解析成 assets/ 下的绝对路径。只接受该待办
+// 附件列表里的路径，且必须落在工作台 assets/ 目录内，拒绝任何路径穿越。
+func (w *Workspace) TodoAttachmentPath(id, rel string) (string, error) {
+	todo, err := w.GetTodo(id)
+	if err != nil {
+		return "", err
+	}
+	allowed := false
+	for _, a := range todo.Attachments {
+		if a == rel {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return "", fmt.Errorf("%w: 附件不在该待办列表中: %s", ErrInvalid, rel)
+	}
+	name := path.Base(strings.ReplaceAll(rel, `\`, "/"))
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("%w: 非法附件路径 %q", ErrInvalid, rel)
+	}
+	assetsDir := filepath.Clean(w.AssetsDir())
+	full := filepath.Join(assetsDir, name)
+	if !strings.HasPrefix(full, assetsDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("%w: 附件路径越界 %q", ErrInvalid, rel)
+	}
+	return full, nil
 }

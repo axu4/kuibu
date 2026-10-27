@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"path"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -277,12 +276,7 @@ func (s *TodoService) List(filter TodoListFilter) ([]TodoItem, error) {
 	if view == "" {
 		view = todoViewAll
 	}
-	statuses := []string{store.StatusTodo, store.StatusDoing}
-	if view == todoViewDone {
-		statuses = []string{store.StatusDone, store.StatusCanceled}
-	}
-
-	metaFilter := index.TodoFilter{Statuses: statuses, Query: filter.Query}
+	metaFilter := index.TodoFilter{Statuses: core.TodoViewStatuses(view), Query: filter.Query}
 	if filter.Tag != "" {
 		metaFilter.Tags = []string{filter.Tag}
 	}
@@ -291,27 +285,17 @@ func (s *TodoService) List(filter TodoListFilter) ([]TodoItem, error) {
 		return nil, err
 	}
 
-	// 再按视图做日期过滤（今天含逾期、本周用 DueRange）。
+	// 再按视图做日期过滤（今天含逾期、本周），规则在核心库。
 	matched := make([]index.TodoMeta, 0, len(metas))
 	now := s.clock()
-	today := now.Format("2006-01-02")
-	weekFrom, weekTo, rangeErr := core.DueRange("week", now)
-	if rangeErr != nil {
-		return nil, rangeErr
-	}
 	for _, m := range metas {
-		date := dueDate(m.Due)
-		switch view {
-		case todoViewToday:
-			if date == "" || date > today {
-				continue
-			}
-		case todoViewWeek:
-			if date == "" || date < weekFrom || date > weekTo {
-				continue
-			}
+		ok, err := core.InTodoView(view, m.Due, now)
+		if err != nil {
+			return nil, err
 		}
-		matched = append(matched, m)
+		if ok {
+			matched = append(matched, m)
+		}
 	}
 
 	// 子任务进度与缩进展示需要全部待办的父子关系。
@@ -344,14 +328,6 @@ func (s *TodoService) List(filter TodoListFilter) ([]TodoItem, error) {
 		roots = []TodoItem{}
 	}
 	return roots, nil
-}
-
-// dueDate 取截止字符串的日期部分（YYYY-MM-DD），空值返回空字符串。
-func dueDate(due string) string {
-	if len(due) < 10 {
-		return ""
-	}
-	return due[:10]
 }
 
 // listItem 把一条索引元数据转成列表项，并递归挂上匹配到的子任务。
@@ -407,8 +383,7 @@ func (s *TodoService) itemFromMeta(m index.TodoMeta) TodoItem {
 	}
 	if m.DueAt != nil {
 		item.DueAt = formatTime(*m.DueAt)
-		item.Overdue = (m.Status == store.StatusTodo || m.Status == store.StatusDoing) &&
-			m.DueAt.Before(s.clock())
+		item.Overdue = core.TodoOverdue(m.Status, m.DueAt, s.clock())
 	}
 	if m.DoneAt != nil {
 		item.DoneAt = formatTime(*m.DoneAt)
@@ -583,34 +558,14 @@ func (s *TodoService) SetStatus(id, status string, withChildren bool) (TodoItem,
 		return TodoItem{}, err
 	}
 	now := s.clock()
-	if _, err := ws.SetTodoStatus(id, status, now); err != nil {
-		return TodoItem{}, err
-	}
 	if withChildren {
-		if err := s.applyStatusToDescendants(ws, id, status, now); err != nil {
+		if _, _, err := ws.SetTodoStatusTree(id, status, now); err != nil {
 			return TodoItem{}, err
 		}
+	} else if _, err := ws.SetTodoStatus(id, status, now); err != nil {
+		return TodoItem{}, err
 	}
 	return s.getItem(ws, idx, id)
-}
-
-// applyStatusToDescendants 递归把 status 应用到全部后代。
-func (s *TodoService) applyStatusToDescendants(ws *store.Workspace, id, status string, now time.Time) error {
-	children, err := ws.TodoChildren(id)
-	if err != nil {
-		return err
-	}
-	for _, c := range children {
-		if c.Status != status {
-			if _, err := ws.SetTodoStatus(c.ID, status, now); err != nil {
-				return err
-			}
-		}
-		if err := s.applyStatusToDescendants(ws, c.ID, status, now); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // OpenChildrenCount 返回未完成的子任务数（含全部后代）。
@@ -619,27 +574,7 @@ func (s *TodoService) OpenChildrenCount(id string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return s.openChildren(ws, id)
-}
-
-// openChildren 递归统计未完成后代数量。
-func (s *TodoService) openChildren(ws *store.Workspace, id string) (int, error) {
-	children, err := ws.TodoChildren(id)
-	if err != nil {
-		return 0, err
-	}
-	total := 0
-	for _, c := range children {
-		if c.Status != store.StatusDone && c.Status != store.StatusCanceled {
-			total++
-		}
-		n, err := s.openChildren(ws, c.ID)
-		if err != nil {
-			return 0, err
-		}
-		total += n
-	}
-	return total, nil
+	return ws.OpenDescendantCount(id)
 }
 
 // AddLink 添加链接（同 URL 去重，已有则更新标题）。
@@ -750,29 +685,9 @@ func (s *TodoService) OpenAttachment(id, rel string) error {
 	if err != nil {
 		return err
 	}
-	todo, err := ws.GetTodo(id)
+	full, err := ws.TodoAttachmentPath(id, rel)
 	if err != nil {
 		return err
-	}
-	allowed := false
-	for _, a := range todo.Attachments {
-		if a == rel {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return fmt.Errorf("%w: 附件不在该待办列表中: %s", store.ErrInvalid, rel)
-	}
-
-	name := path.Base(strings.ReplaceAll(rel, `\`, "/"))
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("%w: 非法附件路径 %q", store.ErrInvalid, rel)
-	}
-	assetsDir := filepath.Clean(ws.AssetsDir())
-	full := filepath.Join(assetsDir, name)
-	if !strings.HasPrefix(full, assetsDir+string(filepath.Separator)) {
-		return fmt.Errorf("%w: 附件路径越界 %q", store.ErrInvalid, rel)
 	}
 	return s.open(full, false)
 }

@@ -33,9 +33,9 @@ const usageText = `用法:
   note extract-todos <id> [--dry-run]    把笔记里的「- [ ] …」行抽成待办（不重复）
   meeting open [--week W] | list         本周周会笔记（没有就建）/ 列出周会
   todo add <文本> [--due <值>]           快速录入待办
-  todo list [--status s] [--due d]       列出待办
+  todo list [--view v] [--status s] [--due d]  列出待办（--view today|week|all|done）
   todo show <id>                         查看待办详情
-  todo done|reopen|start|cancel <id>     变更待办状态
+  todo done|reopen|start|cancel <id>     变更待办状态（done/cancel 有未完成子任务时需 --with-children 或 --only-parent）
   todo edit <id> [--title t] ...         修改待办
   todo sub <id> <文本>                   新增子待办
   todo link|unlink <id> <url>            管理待办链接
@@ -353,6 +353,8 @@ func classify(err error) (string, int) {
 		return "CONFLICT", Error
 	case errors.Is(err, store.ErrAmbiguousPerson):
 		return "AMBIGUOUS_PERSON", Error
+	case errors.Is(err, store.ErrNeedsConfirm):
+		return "NEEDS_CONFIRM", NeedsConfirm
 	case errors.Is(err, store.ErrHumanEdits):
 		return "HUMAN_EDITS_EXIST", HumanEditsExist
 	case errors.Is(err, store.ErrNotFinal):

@@ -30,6 +30,9 @@ var (
 
 	// ErrAmbiguousPerson 表示按姓名/别名匹配到多个人员。
 	ErrAmbiguousPerson = errors.New("姓名匹配不唯一")
+
+	// ErrNeedsConfirm 表示操作有连带影响，需要人工确认（CLI 退出码 8）。
+	ErrNeedsConfirm = errors.New("需要确认")
 )
 
 // todoError 是待办操作专用的私有错误类型：Error() 返回待办文案，Unwrap()

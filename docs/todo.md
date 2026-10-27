@@ -9,9 +9,9 @@
 | 命令 | 说明 |
 | --- | --- |
 | `todo add "<文本>" [--due <值>] [--tag t]... [--parent <id>] [--raw] [--dry-run] [--body/--file/--stdin]` | 快速录入待办；文本可由多个位置参数拼接 |
-| `todo list [--status todo,doing\|all\|...] [--due today\|tomorrow\|week\|overdue] [--tag t]... [--parent <id>\|--root] [--search <词>] [--tree]` | 列出待办（走索引，先增量同步） |
+| `todo list [--view today\|week\|all\|done] [--status todo,doing\|all\|...] [--due today\|tomorrow\|week\|overdue] [--tag t]... [--parent <id>\|--root] [--search <词>] [--tree]` | 列出待办（走索引，先增量同步）；`--view` 与 App 侧栏分组一致：today = 有截止且不晚于今天（含逾期），week = 截止在本周，all = 全部未完成，done = 已完成 / 已取消；不能与 `--status` / `--due` 同用 |
 | `todo show <id>` | 查看待办详情（含正文、子任务、链接、附件） |
-| `todo done <id>` / `todo reopen <id>` / `todo start <id>` / `todo cancel <id>` | 变更状态 |
+| `todo done <id>` / `todo reopen <id>` / `todo start <id>` / `todo cancel <id>` | 变更状态；`done` / `cancel` 时若还有未完成子任务，必须加 `--with-children`（连同全部后代）或 `--only-parent`（只改本条），否则退出 8（`NEEDS_CONFIRM`）并说明子任务数 |
 | `todo edit <id> [--title t] [--due <值>\|--no-due] [--tag t ...] [--status s] [--body/--file/--stdin]` | 修改待办，至少给一个修改项 |
 | `todo sub <id> "<文本>"` | 新增子待办，等价于 `todo add "<文本>" --parent <id>` |
 | `todo link <id> <url> [--title t]` / `todo unlink <id> <url>` | 管理链接 |
@@ -277,6 +277,10 @@ App 的待办界面是「轻量版飞书任务」：录入步骤尽量少，详�
 - 「取消」：什么都不做
 
 列表的勾选框与详情面板的状态按钮走同一套判断（先 `OpenChildrenCount`）。
+
+这些规则都在核心库，App 只是薄封装，CLI 行为一致：`store.SetTodoStatusTree`（本条 + 后代）、
+`store.OpenDescendantCount`（未完成后代数）、`core.TodoViewStatuses` / `core.InTodoView`（视图过滤）、
+`core.TodoOverdue`（逾期判断）、`store.TodoAttachmentPath`（附件只允许列表里、落在 `assets/` 内的文件）。
 
 ### 随手记小窗的待办模式
 
