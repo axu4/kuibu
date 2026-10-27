@@ -67,6 +67,14 @@ export function Get(id: string): $CancellablePromise<$models.NoteData> {
 }
 
 /**
+ * HandleNoteDroppedFiles 处理拖进笔记编辑器的文件：存进 assets/ 并通知前端在光标处插入。
+ * 拖放事件由 main.go 的 WindowFilesDropped 监听器按 data-note-drop 属性转发到这里。
+ */
+export function HandleNoteDroppedFiles(files: string[] | null): $CancellablePromise<$models.DroppedAsset[] | null> {
+    return $Call.ByID(1793444819, files);
+}
+
+/**
  * Move 把笔记移到 parent 下的第 pos 个位置；parent 为空表示根层级。
  */
 export function Move(id: string, parent: string, pos: number): $CancellablePromise<void> {
@@ -85,6 +93,14 @@ export function OpenMeeting(): $CancellablePromise<$models.NoteData> {
  */
 export function Rename(id: string, title: string): $CancellablePromise<void> {
     return $Call.ByID(2533726090, id, title);
+}
+
+/**
+ * SaveAsset 把编辑器粘贴 / 上传的文件存进 assets/（内容相同复用已有文件），返回相对路径。
+ * data 是 base64 编码的文件内容。
+ */
+export function SaveAsset(name: string, data: string): $CancellablePromise<string> {
+    return $Call.ByID(3888989179, name, data);
 }
 
 /**
