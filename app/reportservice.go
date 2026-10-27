@@ -84,6 +84,20 @@ type ReportPerson struct {
 	Alignment *float64 `json:"alignment"`
 }
 
+// ReportGroupCounts 是一个组的提交进度。
+type ReportGroupCounts struct {
+	// Group 是组名，空组名由前端显示为「未分组」。
+	Group string `json:"group"`
+	// Expected 是该组应交人数。
+	Expected int `json:"expected"`
+	// Submitted 是该组按时已交人数。
+	Submitted int `json:"submitted"`
+	// Late 是该组迟交人数。
+	Late int `json:"late"`
+	// Missing 是该组未交人数。
+	Missing int `json:"missing"`
+}
+
 // ReportStatusData 是一次提交状态统计。
 type ReportStatusData struct {
 	// Week 是 ISO 周编号。
@@ -96,6 +110,8 @@ type ReportStatusData struct {
 	Entries []ReportPerson `json:"entries"`
 	// Extra 是有提交但不在应交名单里的人。
 	Extra []ReportPerson `json:"extra"`
+	// Groups 是按组汇总的应交进度，只统计应交名单，未分组（空组名）排在最后。
+	Groups []ReportGroupCounts `json:"groups"`
 }
 
 // ReportData 是一份周报的原文与元数据。
@@ -383,7 +399,45 @@ func (s *ReportService) Status(week, level, group, productLine string) (ReportSt
 	for _, e := range st.Extra {
 		out.Extra = append(out.Extra, s.withAlignment(ws, week, level, toReportPerson(e)))
 	}
+	out.Groups = groupCounts(out.Entries)
 	return out, nil
+}
+
+// groupCounts 按组汇总应交名单的提交进度。
+//
+// 只统计应交名单（entries），名单外（extra）不计入任何一个组；未分组（空组名）
+// 排在最后，其余按组名升序，保证同一份名单每次展示的顺序一致。
+func groupCounts(entries []ReportPerson) []ReportGroupCounts {
+	byGroup := make(map[string]*ReportGroupCounts)
+	for _, e := range entries {
+		key := strings.TrimSpace(e.Group)
+		item, ok := byGroup[key]
+		if !ok {
+			item = &ReportGroupCounts{Group: key}
+			byGroup[key] = item
+		}
+		item.Expected++
+		switch e.Status {
+		case "submitted":
+			item.Submitted++
+		case "late":
+			item.Late++
+		default:
+			item.Missing++
+		}
+	}
+	out := make([]ReportGroupCounts, 0, len(byGroup))
+	for _, item := range byGroup {
+		out = append(out, *item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		// 未分组（空组名）排最后。
+		if (out[i].Group == "") != (out[j].Group == "") {
+			return out[j].Group == ""
+		}
+		return out[i].Group < out[j].Group
+	})
+	return out
 }
 
 // withAlignment 给有归一稿的组员补上对齐率。

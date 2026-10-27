@@ -69,6 +69,23 @@ export function formatSubmittedAt(value: string): string {
   return `${WEEKDAY_NAMES[date.getDay()]} ${hm}`;
 }
 
+/** 组名展示：空组名统一显示为「未分组」。 */
+export function groupLabel(group: string): string {
+  return group.trim() || "未分组";
+}
+
+/**
+ * 一个组的完成进度百分比（0~100），按「应交」算。
+ * 已交与迟交都算交上来了；应交为 0 时返回 0。
+ */
+export function groupProgressPercent(expected: number, submitted: number, late: number): number {
+  if (expected <= 0) {
+    return 0;
+  }
+  const done = Math.max(0, Math.min(expected, submitted + late));
+  return Math.round((done / expected) * 100);
+}
+
 /** 提交状态的中文文案。 */
 export function reportStatusLabel(status: string): string {
   switch (status) {
