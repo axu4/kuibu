@@ -74,6 +74,10 @@ type ReportPerson struct {
 	FirstSubmittedAt string `json:"firstSubmittedAt"`
 	// SubmittedAt 是最近一次提交时间（RFC3339），missing 时为空。
 	SubmittedAt string `json:"submittedAt"`
+	// Normalized 是归一稿状态 none / draft / final，组长层级为空。
+	Normalized string `json:"normalized"`
+	// SourceChanged 表示归一后原文又被重新提交。
+	SourceChanged bool `json:"sourceChanged"`
 }
 
 // ReportStatusData 是一次提交状态统计。
@@ -213,6 +217,8 @@ type ReportService struct {
 	now func() time.Time
 	// emit 可在测试里替换，默认走 WorkspaceService.emit。
 	emit func(name string, data any)
+	// env 读取大模型配置（KUIBU_CONFIG_DIR），测试可替换，默认 os.Getenv。
+	env func(string) string
 }
 
 // newReportService 创建周报服务，复用 WorkspaceService 的工作台与索引。
@@ -679,6 +685,10 @@ func toReportPerson(e store.ReportStatusEntry) ReportPerson {
 	}
 	if e.SubmittedAt != nil {
 		p.SubmittedAt = formatTime(*e.SubmittedAt)
+	}
+	if e.Normalized != nil {
+		p.Normalized = e.Normalized.Status
+		p.SourceChanged = e.Normalized.SourceChanged
 	}
 	return p
 }

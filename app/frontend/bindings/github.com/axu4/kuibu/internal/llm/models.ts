@@ -24,3 +24,30 @@ export interface Preset {
     "baseUrl": string;
     "model": string;
 }
+
+/**
+ * Preview 是外发前给人看的完整内容：发给谁、发什么。
+ */
+export interface Preview {
+    /**
+     * ModelName 是配置里的模型名称。
+     */
+    "modelName": string;
+
+    /**
+     * Provider 与 ModelID、BaseURL 说明内容会发到哪里。
+     */
+    "provider": string;
+    "modelId": string;
+    "baseUrl": string;
+
+    /**
+     * Text 是将发送的全部文本（系统提示 + 各条消息），与实际请求内容一致。
+     */
+    "text": string;
+
+    /**
+     * Chars 是 Text 的字数，便于判断是否过长。
+     */
+    "chars": number;
+}

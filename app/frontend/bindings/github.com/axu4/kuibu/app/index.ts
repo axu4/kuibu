@@ -18,8 +18,11 @@ export {
 
 export type {
     CheckResult,
+    DraftData,
     LLMList,
     LLMModelInput,
+    NormalizePlan,
+    NormalizeResultData,
     NoteData,
     PersonData,
     PersonInput,
