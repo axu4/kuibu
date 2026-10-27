@@ -3146,3 +3146,103 @@ body.quicknote-body {
 .weekday-option:disabled {
   opacity: 0.6;
 }
+
+/* ---------- 设置：AI 模型 ---------- */
+
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.settings-section-head h3 {
+  margin: 0;
+}
+
+.llm-intro {
+  margin-bottom: 8px;
+  line-height: 1.55;
+}
+
+.llm-row .settings-label {
+  min-width: 0;
+}
+
+.llm-default {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.llm-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.llm-ok {
+  color: var(--accent);
+}
+
+.llm-bad {
+  color: var(--seal);
+  word-break: break-all;
+}
+
+.llm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.llm-form h2 {
+  margin-bottom: 0;
+}
+
+.llm-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* ---------- 外发确认弹窗 ---------- */
+
+.send-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 560px;
+  max-height: calc(100vh - 48px);
+}
+
+.send-preview-text {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 50vh;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--sidebar);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.send-preview-spacer {
+  flex: 1;
+}

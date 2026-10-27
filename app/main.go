@@ -20,6 +20,7 @@ func main() {
 	todos := newTodoService(workspace)
 	updates := newUpdateService()
 	reports := newReportService(workspace)
+	llms := newLLMService()
 	shell.todo = todos
 	ui := newShellUI(nil)
 
@@ -41,6 +42,7 @@ func main() {
 			application.NewService(todos),
 			application.NewService(updates),
 			application.NewService(reports),
+			application.NewService(llms),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
