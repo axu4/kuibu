@@ -387,53 +387,6 @@ kbd {
   --wails-draggable: drag;
 }
 
-.workspace-switch {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  height: 38px;
-  padding: 0 8px 0 6px;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  text-align: left;
-  --wails-draggable: no-drag;
-}
-
-.workspace-switch:hover {
-  background: var(--hover);
-}
-
-.workspace-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--accent);
-  color: var(--accent-ink);
-  font-family: var(--font-serif);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.workspace-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.workspace-chevron {
-  color: var(--ink-3);
-}
-
 /* 主视图导航：竖排，加新视图只需多一行。 */
 .main-nav {
   flex: 0 0 auto;

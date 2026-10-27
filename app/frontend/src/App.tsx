@@ -753,8 +753,6 @@ export default function App() {
     </div>
   );
 
-  const workspaceName = workspace ? workspace.split("/").filter(Boolean).pop() : "";
-
   const welcome = (
     <div className="welcome">
       <div className="welcome-mark">跬</div>
@@ -769,18 +767,8 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar" style={{ width: sidebarWidth }}>
-        <div className="sidebar-top">
-          <button
-            type="button"
-            className="workspace-switch"
-            title={workspace ? `${workspace}\n点击切换工作台` : "选择工作台文件夹"}
-            onClick={() => void chooseWorkspace()}
-          >
-            <span className="workspace-mark">跬</span>
-            <span className="workspace-name">{workspaceName || "选择工作台"}</span>
-            <Icon name="chevronDown" size={14} className="workspace-chevron" />
-          </button>
-        </div>
+        {/* 工作台是内部实现，不在界面上暴露：这里只留拖拽区，切换入口在「设置 → 工作台」。 */}
+        <div className="sidebar-top" />
 
         <nav className="main-nav" aria-label="视图">
           {MAIN_VIEWS.map((item, i) => (
