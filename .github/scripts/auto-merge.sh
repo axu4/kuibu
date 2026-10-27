@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# 带 automerge 标签的 PR 在 CI 通过后自动 squash 合并；带 release:* 标签的再接着发版。
+# 本仓库分支的 PR 在 CI 通过后自动 squash 合并，合并后按标题接着发版。
 #
 # 用法：auto-merge.sh [PR 号] [head SHA]
-#   - 加标签时（pull_request_target labeled）传 PR 号；
+#   - 草稿转为可评审时（pull_request_target ready_for_review）传 PR 号；
 #   - CI 跑完时（workflow_run）传 head SHA，由它反查 PR。
 # 依赖环境变量：GH_TOKEN、GITHUB_REPOSITORY。
 #
-# 只在以下条件都满足时合并：PR 打开、不是草稿、带 automerge 标签、来自本仓库分支
-# （不自动合并 fork）、该 head 提交上最新一次 CI 已成功完成。
+# 只在以下条件都满足时合并：PR 打开、不是草稿、来自本仓库分支（仓库公开，
+# 别人只能从 fork 提 PR，这些不会被自动合并）、该 head 提交上最新一次 CI 已成功。
+# 不想被自动合并的 PR 开成草稿即可。
 # 合并时用 --match-head-commit 锁定已通过 CI 的提交，防止期间又有新推送。
 set -euo pipefail
 
@@ -26,18 +27,12 @@ if [ -z "$pr" ]; then
 fi
 
 info="$(gh pr view "$pr" --repo "$repo" \
-  --json number,title,state,isDraft,headRefOid,isCrossRepository,labels)"
+  --json number,title,state,isDraft,headRefOid,isCrossRepository)"
 state="$(jq -r '.state' <<<"$info")"
 draft="$(jq -r '.isDraft' <<<"$info")"
 cross="$(jq -r '.isCrossRepository' <<<"$info")"
 sha="$(jq -r '.headRefOid' <<<"$info")"
 title="$(jq -r '.title' <<<"$info")"
-labels="$(jq -r '.labels[].name' <<<"$info")"
-
-if ! grep -qx "automerge" <<<"$labels"; then
-  echo "PR #$pr 没有 automerge 标签，跳过。"
-  exit 0
-fi
 if [ "$state" != "OPEN" ] || [ "$draft" = "true" ]; then
   echo "PR #$pr 状态为 $state（草稿：$draft），跳过。"
   exit 0
