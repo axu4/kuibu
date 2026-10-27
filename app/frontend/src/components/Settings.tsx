@@ -7,6 +7,7 @@ import type {
   UpdateInfo,
 } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
+import { LLMSettings } from "./LLMSettings";
 import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
@@ -376,6 +377,8 @@ export function Settings({
             </>
           )}
         </div>
+
+        <LLMSettings />
 
         <section className="settings-section" id="settings-update">
           <h3>软件更新</h3>

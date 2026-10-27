@@ -13,6 +13,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/axu4/kuibu/internal/llm"
 	"github.com/axu4/kuibu/internal/store"
 	"github.com/axu4/kuibu/internal/version"
 )
@@ -55,6 +56,10 @@ const usageText = `用法:
   asset add <file>                       归档资源并输出相对路径
   index rebuild                          重建索引
   watch                                  监听工作台变化
+  llm add <名称> [--preset p] ...        添加/更新大模型（密钥从 stdin 读）
+  llm list | default <名称> | rm <名称>  管理大模型
+  llm test [<名称>]                      连通测试（固定测试语）
+  llm send [--model m] [--yes]           外发正文（stdin）；不带 --yes 只预览并退出 8
   version [--json]                       打印版本号
   help                                   打印本帮助
 
@@ -161,6 +166,8 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runIndex(ctx, cmdArgs, &common, stdout, stderr, env)
 	case "watch":
 		err = runWatch(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "llm":
+		err = runLLM(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	default:
 		jsonMode := common.json || hasJSONFlag(cmdArgs)
 		if jsonMode {
@@ -327,6 +334,14 @@ func classify(err error) (string, int) {
 		return "CONFLICT", Error
 	case errors.Is(err, store.ErrAmbiguousPerson):
 		return "AMBIGUOUS_PERSON", Error
+	case errors.Is(err, llm.ErrNeedsConfirm):
+		return "NEEDS_CONFIRM", NeedsConfirm
+	case errors.Is(err, llm.ErrNotFound):
+		return "NOT_FOUND", Error
+	case errors.Is(err, llm.ErrNoModel):
+		return "NO_MODEL", Error
+	case errors.Is(err, llm.ErrInvalid):
+		return "INVALID", Error
 	default:
 		return "INTERNAL", Error
 	}

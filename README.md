@@ -157,6 +157,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | [docs/development.md](docs/development.md) | 目录说明、开发环境、常用命令、测试约定、分支与 PR 流程 |
 | [docs/ci.md](docs/ci.md) | CI 三个 job、触发条件、artifact 与本地复现 |
 | [docs/update.md](docs/update.md) | 在线更新原理、token 来源顺序与限制 |
+| [docs/llm.md](docs/llm.md) | 大模型配置、密钥存储、外发确认规则、`kuibu llm` 用法 |
 | [docs/release.md](docs/release.md) | 发布步骤、资产命名约定、失败重跑与版本号规则 |
 | [docs/wails.md](docs/wails.md) | Wails 版本、升级步骤与回归清单、Go 版本建议 |
 | [app/README.md](app/README.md) | 桌面外壳的目录、数据流与编辑器选型 |
