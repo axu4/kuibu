@@ -226,7 +226,7 @@ func toGroupData(ws *store.Workspace, d *store.Draft, lead *store.Person) GroupD
 		out.FinalizedAt = formatTime(d.FinalizedAt)
 	}
 	if d.Kind == store.ProductDirName {
-		out.LeadName = "产品报"
+		out.LeadName = d.Name
 	} else if r, err := ws.ReadReport(d.Week, store.ReportLevelLead, d.Person); err == nil && r.Source == store.ReportSourceGroup {
 		out.Submitted = true
 	}

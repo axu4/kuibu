@@ -15,6 +15,8 @@ interface PreviewRow {
 interface ReportPasteProps {
   week: string;
   level: ReportLevel;
+  /** 给出时按组长月报归档（level 应为 lead），week 传月份。 */
+  month?: boolean;
   /** 预设人员（「重新粘贴」/未交者的「粘贴」），空字符串表示不预设。 */
   presetPersonId: string;
   onClose: () => void;
@@ -26,7 +28,16 @@ interface ReportPasteProps {
  *
  * 预设了某人且整段没有头行时，直接归到此人；粘贴了多份时退回按头行识别。
  */
-export function ReportPaste({ week, level, presetPersonId, onClose, onDone }: ReportPasteProps) {
+export function ReportPaste({
+  week,
+  level,
+  month = false,
+  presetPersonId,
+  onClose,
+  onDone,
+}: ReportPasteProps) {
+  // 组长月报在服务端用 lead-month 层级归档。
+  const submitLevel: string = month ? "lead-month" : level;
   const [text, setText] = useState("");
   const [people, setPeople] = useState<PersonData[]>([]);
   const [rows, setRows] = useState<PreviewRow[] | null>(null);
@@ -64,10 +75,10 @@ export function ReportPaste({ week, level, presetPersonId, onClose, onDone }: Re
     try {
       let previews: ReportPreview[];
       try {
-        previews = (await ReportService.Preview(raw, level, week, presetPersonId)) ?? [];
+        previews = (await ReportService.Preview(raw, submitLevel, week, presetPersonId)) ?? [];
       } catch {
         // 预设人员只允许单份文本；多份时退回按头行识别。
-        previews = (await ReportService.Preview(raw, level, week, "")) ?? [];
+        previews = (await ReportService.Preview(raw, submitLevel, week, "")) ?? [];
       }
       setRows(
         previews.map((p) => ({
@@ -80,7 +91,7 @@ export function ReportPaste({ week, level, presetPersonId, onClose, onDone }: Re
     } finally {
       setBusy(false);
     }
-  }, [text, busy, level, week, presetPersonId]);
+  }, [text, busy, submitLevel, week, presetPersonId]);
 
   const setPerson = useCallback((index: number, personId: string) => {
     setRows((prev) => (prev ? prev.map((r, i) => (i === index ? { ...r, personId } : r)) : null));
@@ -99,7 +110,7 @@ export function ReportPaste({ week, level, presetPersonId, onClose, onDone }: Re
         text: r.preview.text,
         person: r.personId,
         week: r.preview.week || week,
-        level,
+        level: submitLevel,
       }));
     if (items.length === 0) return;
     setBusy(true);
@@ -112,7 +123,7 @@ export function ReportPaste({ week, level, presetPersonId, onClose, onDone }: Re
     } finally {
       setBusy(false);
     }
-  }, [rows, busy, level, week, onDone]);
+  }, [rows, busy, submitLevel, week, onDone]);
 
   return (
     <div className="modal-mask" onClick={onClose}>

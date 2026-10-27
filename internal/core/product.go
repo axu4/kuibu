@@ -233,7 +233,7 @@ func SaveProductReport(ws *store.Workspace, p *GroupPlan, model, text string, fo
 		Sources:    p.SourceIDs(),
 		Missing:    p.Missing,
 		Person:     store.ProductReportID,
-		Name:       "产品报",
+		Name:       p.LeadName,
 		Week:       p.Week,
 		SourceHash: p.SourceHash(),
 		Model:      model,

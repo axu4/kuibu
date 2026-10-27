@@ -3,6 +3,7 @@ import { Clipboard, Events } from "@wailsio/runtime";
 import { ReportService } from "../../bindings/github.com/axu4/kuibu/app";
 import type {
   ReportData,
+  ReportMonth,
   ReportPerson,
   ReportStatusData,
   ReportWeek,
@@ -56,6 +57,7 @@ export function ReportView() {
   const [toast, setToast] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [period, setPeriod] = useState<"week" | "month">("week");
   // 外部变化后用于强制重载当前详情（status 没变时，effect 依赖可能不触发）。
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -302,6 +304,20 @@ export function ReportView() {
   const counts = status?.counts;
   const empty = status && (status.entries?.length ?? 0) === 0 && extra.length === 0;
 
+  if (period === "month") {
+    return (
+      <MonthView
+        level={level}
+        onLevel={changeLevel}
+        onWeek={() => {
+          setPeriod("week");
+          const w = weekRef.current;
+          if (w) void loadStatus(w.week, levelRef.current);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="report-view">
       <section className="report-main">
@@ -342,6 +358,7 @@ export function ReportView() {
             </div>
 
             <div className="report-head-meta">
+              <PeriodSwitch period="week" onChange={(p) => p === "month" && setPeriod("month")} />
               {week && <span>{weekdayLabel(week.reportDay)}截止</span>}
             </div>
 
@@ -474,7 +491,7 @@ export function ReportView() {
           entry={selectedEntry}
           report={detail}
           failed={detailError}
-          week={week}
+          period={week.week}
           level={level}
           refreshTick={refreshTick}
           onToast={setToast}
@@ -585,8 +602,10 @@ interface ReportDetailPanelProps {
   entry: ReportPerson;
   report: ReportData | null;
   failed: boolean;
-  week: ReportWeek;
-  level: ReportLevel;
+  /** 周编号或月份编号。 */
+  period: string;
+  /** member / lead / lead-month。 */
+  level: string;
   refreshTick: number;
   onToast: (text: string) => void;
   onClose: () => void;
@@ -602,7 +621,7 @@ function ReportDetailPanel({
   entry,
   report,
   failed,
-  week,
+  period,
   level,
   refreshTick,
   onToast,
@@ -622,7 +641,7 @@ function ReportDetailPanel({
         <div className="report-detail-head-main">
           <div className="report-detail-title">{entry.name}</div>
           <div className="report-detail-meta">
-            <span>{week.week}</span>
+            <span>{period}</span>
             {entry.submittedAt && <span>{formatSubmittedAt(entry.submittedAt)} 提交</span>}
           </div>
         </div>
@@ -664,7 +683,7 @@ function ReportDetailPanel({
       {showReview ? (
         <div className="report-detail-body">
           <ReportReview
-            week={week.week}
+            week={period}
             personId={entry.personId}
             refreshTick={refreshTick}
             onToast={onToast}
@@ -673,7 +692,7 @@ function ReportDetailPanel({
       ) : showDraft ? (
         <div className="report-detail-body">
           <ReportDraft
-            week={week.week}
+            week={period}
             personId={entry.personId}
             level={level}
             refreshTick={refreshTick}
@@ -764,6 +783,386 @@ function WeekdayModal({ current, onClose }: { current: number; onClose: () => vo
         <div className="modal-buttons">
           <button type="button" className="btn" onClick={onClose}>
             完成
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 周 / 月切换，放在周（月）切换旁。 */
+function PeriodSwitch({
+  period,
+  onChange,
+}: {
+  period: "week" | "month";
+  onChange: (p: "week" | "month") => void;
+}) {
+  return (
+    <div className="segmented period-switch">
+      <button
+        type="button"
+        className={`segmented-btn${period === "week" ? " is-active" : ""}`}
+        onClick={() => onChange("week")}
+      >
+        周
+      </button>
+      <button
+        type="button"
+        className={`segmented-btn${period === "month" ? " is-active" : ""}`}
+        onClick={() => onChange("month")}
+      >
+        月
+      </button>
+    </div>
+  );
+}
+
+interface MonthViewProps {
+  level: ReportLevel;
+  onLevel: (level: ReportLevel) => void;
+  onWeek: () => void;
+}
+
+/**
+ * 月视角：框架组长 = 组月报（当月各周定稿组报合并）；SE = 组长月报收集状态、
+ * 粘贴归档、组长月报归一稿与产品月报。读写一律经 ReportService。
+ */
+function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
+  const [month, setMonth] = useState<ReportMonth | null>(null);
+  const [status, setStatus] = useState<ReportStatusData | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ReportData | null>(null);
+  const [detailError, setDetailError] = useState(false);
+  const [paste, setPaste] = useState<{ personId: string } | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(level === "member");
+  const [dayOpen, setDayOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const monthRef = useRef<ReportMonth | null>(null);
+  monthRef.current = month;
+
+  const load = useCallback(
+    async (m: ReportMonth) => {
+      setMonth(m);
+      if (level !== "lead") {
+        setStatus(null);
+        return;
+      }
+      try {
+        setStatus(await ReportService.Status(m.month, "lead-month", "", ""));
+      } catch (err) {
+        setToast(`读取月报状态失败：${readableError(err)}`);
+      }
+    },
+    [level],
+  );
+
+  useEffect(() => {
+    setSelectedId(null);
+    setPanelOpen(level === "member");
+    const cur = monthRef.current;
+    void (cur ? load(cur) : ReportService.Month("this").then(load)).catch((err) =>
+      setToast(`读取月份失败：${readableError(err)}`),
+    );
+  }, [level, load]);
+
+  useEffect(() => {
+    const off = Events.On("report:changed", () => {
+      const m = monthRef.current;
+      if (!m) return;
+      void ReportService.Month(m.month)
+        .then(load)
+        .then(() => setRefreshTick((t) => t + 1))
+        .catch(() => undefined);
+    });
+    return off;
+  }, [load]);
+
+  const shift = async (delta: number) => {
+    const m = monthRef.current;
+    if (!m) return;
+    try {
+      setSelectedId(null);
+      await load(await ReportService.ShiftMonth(m.month, delta));
+    } catch (err) {
+      setToast(`切换月份失败：${readableError(err)}`);
+    }
+  };
+
+  const entries = useMemo(
+    () => sortByName([...(status?.entries ?? []), ...(status?.extra ?? [])]),
+    [status],
+  );
+  const selected = entries.find((e) => e.personId === selectedId) ?? null;
+
+  useEffect(() => {
+    const m = monthRef.current;
+    if (!selected || !m || selected.status === "missing") {
+      setDetail(null);
+      return;
+    }
+    setDetailError(false);
+    let alive = true;
+    void ReportService.Get(m.month, selected.personId, "lead-month")
+      .then((d) => alive && setDetail(d))
+      .catch(() => alive && setDetailError(true));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.personId, selected?.status, refreshTick]);
+
+  const counts = status?.counts;
+
+  return (
+    <div className="report-view">
+      <section className="report-main">
+        <div className="toolbar">
+          <div className="toolbar-spacer" />
+        </div>
+        <div className="report-scroll">
+          <header className="report-head">
+            <div className="report-title-row">
+              <h1>周报</h1>
+              <div className="week-switcher">
+                <button type="button" className="icon-btn" title="上个月" onClick={() => void shift(-1)}>
+                  <Icon name="chevronLeft" size={14} />
+                </button>
+                <span className="week-label">{month ? month.month : "…"}</span>
+                <button type="button" className="icon-btn" title="下个月" onClick={() => void shift(1)}>
+                  <Icon name="chevron" size={14} />
+                </button>
+                {month && !month.isCurrent && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => void ReportService.Month("this").then(load)}
+                  >
+                    回到本月
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="report-head-meta">
+              <PeriodSwitch period="month" onChange={(p) => p === "week" && onWeek()} />
+              {month && (
+                <span>
+                  {level === "lead"
+                    ? `每月 ${month.collectDay} 日收组长月报`
+                    : `本月包含 ${(month.weeks ?? []).join("、")}`}
+                </span>
+              )}
+            </div>
+            <div className="segmented report-tabs">
+              <button
+                type="button"
+                className={`segmented-btn${level === "member" ? " is-active" : ""}`}
+                onClick={() => onLevel("member")}
+              >
+                {levelLabel("member")}
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn${level === "lead" ? " is-active" : ""}`}
+                onClick={() => onLevel("lead")}
+              >
+                {levelLabel("lead")}
+              </button>
+            </div>
+          </header>
+
+          <div className="report-toolbar">
+            <div className="report-stats">
+              {level === "lead" ? (
+                <>
+                  <span>
+                    应交 <b>{counts?.expected ?? 0}</b>
+                  </span>
+                  <span>
+                    已交 <b>{counts?.submitted ?? 0}</b>
+                  </span>
+                  <span>
+                    迟交 <b>{counts?.late ?? 0}</b>
+                  </span>
+                  <span>
+                    未交 <b>{counts?.missing ?? 0}</b>
+                  </span>
+                </>
+              ) : (
+                <span>组月报由本月各周已定稿的组报合并</span>
+              )}
+            </div>
+            <div className="report-actions">
+              <button
+                type="button"
+                className={`btn${panelOpen ? " is-on" : ""}`}
+                onClick={() => {
+                  setSelectedId(null);
+                  setPanelOpen((v) => !v);
+                }}
+              >
+                <Icon name="report" size={14} />
+                {level === "member" ? "组月报" : "产品月报"}
+              </button>
+              {level === "lead" && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setPaste({ personId: "" })}
+                  >
+                    <Icon name="paste" size={14} />
+                    粘贴月报
+                  </button>
+                  <MoreMenu
+                    items={[
+                      {
+                        label: "批量归一本月已交",
+                        icon: "bolt",
+                        onClick: () => setBatchOpen(true),
+                      },
+                      { label: "设置收集日", icon: "calendar", onClick: () => setDayOpen(true) },
+                    ]}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+          {level === "lead" ? (
+            <div className="report-list">
+              <div className="report-section">
+                {entries.map((e) => (
+                  <ReportRow
+                    key={e.personId}
+                    entry={e}
+                    showGroup
+                    selected={selectedId === e.personId}
+                    onSelect={() => {
+                      setPanelOpen(false);
+                      setSelectedId(e.personId);
+                    }}
+                  />
+                ))}
+                {status && entries.length === 0 && (
+                  <div className="report-empty">
+                    <p>还没有组长，先在名单里添加组长。</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="report-empty">
+              <p>
+                组月报合并本月各周（{(month?.weeks ?? []).join("、") || "…"}）已定稿的组报。点「组月报」生成、编辑、定稿和导出。
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {panelOpen && month && (
+        <GroupReport
+          key={`${level}-${month.month}`}
+          kind={level === "member" ? "month-group" : "month-product"}
+          week={month.month}
+          refreshTick={refreshTick}
+          onClose={() => setPanelOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
+      {!panelOpen && selected && month && (
+        <ReportDetailPanel
+          entry={selected}
+          report={detail}
+          failed={detailError}
+          period={month.month}
+          level="lead-month"
+          refreshTick={refreshTick}
+          onToast={setToast}
+          onClose={() => setSelectedId(null)}
+          onRepaste={() => setPaste({ personId: selected.personId })}
+          onDelete={() => setToast("组长月报可重新粘贴覆盖，旧版自动保留在历史记录里")}
+        />
+      )}
+
+      {paste && month && (
+        <ReportPaste
+          week={month.month}
+          level="lead"
+          month
+          presetPersonId={paste.personId}
+          onClose={() => setPaste(null)}
+          onDone={() => {
+            setPaste(null);
+            void load(month);
+            setRefreshTick((t) => t + 1);
+          }}
+        />
+      )}
+
+      {batchOpen && month && (
+        <BatchNormalize
+          week={month.month}
+          level="lead-month"
+          onClose={() => setBatchOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
+      {dayOpen && month && (
+        <MonthDayModal current={month.collectDay} onClose={() => setDayOpen(false)} />
+      )}
+
+      {toast && (
+        <div className="toast" role="alert" onClick={() => setToast(null)}>
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 设置月报收集日（1-31，超过当月天数按月末，不因周末顺延）。 */
+function MonthDayModal({ current, onClose }: { current: number; onClose: () => void }) {
+  const [day, setDay] = useState(String(current));
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    const n = Number(day);
+    if (!Number.isInteger(n) || n < 1 || n > 31) {
+      setError("收集日必须是 1-31 的整数");
+      return;
+    }
+    try {
+      await ReportService.SetReportMonthDay(n);
+      onClose();
+    } catch (err) {
+      setError(`设置失败：${readableError(err)}`);
+    }
+  };
+  return (
+    <div className="modal-mask" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>设置月报收集日</h2>
+        <p>每月这一天收组长月报，晚于当天 24:00 算迟交；超过当月天数按月末，不因周末顺延。</p>
+        <input
+          className="field"
+          type="number"
+          min={1}
+          max={31}
+          value={day}
+          onChange={(e) => setDay(e.target.value)}
+        />
+        {error && <div className="settings-error">{error}</div>}
+        <div className="modal-buttons">
+          <button type="button" className="btn" onClick={onClose}>
+            取消
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => void save()}>
+            保存
           </button>
         </div>
       </div>
