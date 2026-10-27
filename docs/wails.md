@@ -75,7 +75,8 @@ cd app && wails3 package && go vet ./...
 | `app/shellservice.go` | `ShellService`：快捷键状态/修改/恢复默认、随手记保存、窗口控制 |
 | `app/shortcut.go` | 快捷键纯函数：校验规范化、macOS 符号化、托盘菜单标签 |
 | `app/build/tray/tray-template.png` | 菜单栏模板图标（44×44，纯黑 + 透明） |
-| `app/build/tray/gen/main.go` | 图标生成脚本（`//go:build ignore`，不参与构建） |
+| `app/build/tray/tray-template.svg` | 菜单栏图标源文件；`render.sh` 渲染成上面的 PNG |
+| `app/build/tray/candidates/` | 图标候选（SVG + PNG + `preview.png` 预览），换图标时用 |
 | `app/frontend/src/lib/shortcut.ts` | 前端同规则的加速键 ↔ 符号 ↔ KeyboardEvent 转换 |
 | `app/frontend/src/QuickNote.tsx` | 随手记小窗（`/?view=quicknote`） |
 | `app/frontend/src/components/Settings.tsx` | 设置面板（快捷键录制） |
@@ -140,8 +141,11 @@ cd app && wails3 package && go vet ./...
 ### 图标生成
 
 ```sh
-cd app && go run build/tray/gen/main.go   # 重新生成 build/tray/tray-template.png
+cd app && sh build/tray/render.sh                                   # tray-template.svg → tray-template.png
+cd app && sh build/tray/render.sh build/tray/candidates/b-two-steps.svg   # 换成某个候选
 ```
 
-脚本用 `image/png` 标准库 + 4×4 超采样画三级台阶，只有黑色与 alpha（模板图标由系统
-自动适配深浅色菜单栏）。生成物提交进仓库，脚本带 `//go:build ignore`，不参与构建。
+图标源是 SVG（`build/tray/tray-template.svg`，44×44 视图、纯黑 + 透明，模板图标由系统
+自动适配深浅色菜单栏），`render.sh` 用本机 Google Chrome 的 headless 模式渲染成 44×44 PNG
+（菜单栏显示为 22pt）。PNG 生成物提交进仓库，构建不依赖 Chrome。
+当前用候选 A「一枚脚印」；候选见 `build/tray/candidates/preview.png`（浅色 / 深色菜单栏对比）。
