@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Events } from "@wailsio/runtime";
-import { ShellService, UpdateService } from "../../bindings/github.com/axu4/kuibu/app";
+import { CLIService, ShellService, UpdateService } from "../../bindings/github.com/axu4/kuibu/app";
 import type {
   CheckResult,
+  CLIStatus,
   ShortcutStatus,
   UpdateInfo,
 } from "../../bindings/github.com/axu4/kuibu/app";
@@ -60,6 +61,11 @@ export function Settings({
   const [tokenBusy, setTokenBusy] = useState(false);
   const [autoCheckBusy, setAutoCheckBusy] = useState(false);
 
+  // 命令行工具安装状态。
+  const [cliStatus, setCliStatus] = useState<CLIStatus | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
+  const [cliError, setCliError] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     try {
       const next = await ShellService.GetShortcutStatus();
@@ -85,6 +91,26 @@ export function Settings({
   useEffect(() => {
     void loadUpdateInfo();
   }, [loadUpdateInfo]);
+
+  useEffect(() => {
+    CLIService.Status()
+      .then(setCliStatus)
+      .catch((err) => setCliError(readableError(err)));
+  }, []);
+
+  const installCli = async () => {
+    setCliBusy(true);
+    setCliError(null);
+    try {
+      setCliStatus(await CLIService.Install());
+    } catch (err) {
+      setCliError(readableError(err));
+      // 失败后刷新一次，状态以磁盘为准。
+      CLIService.Status().then(setCliStatus).catch(() => {});
+    } finally {
+      setCliBusy(false);
+    }
+  };
 
   // 从顶部「发现新版本」提示条进入时，滚动到软件更新一节。
   useEffect(() => {
@@ -380,6 +406,39 @@ export function Settings({
 
         <LLMSettings />
 
+        <section className="settings-section">
+          <h3>命令行工具</h3>
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>kuibu 命令</span>
+              <span className="settings-desc">{cliStatusText(cliStatus)}</span>
+            </div>
+            {cliStatus?.available && (
+              <button
+                type="button"
+                className={`btn${cliStatus.state === "installed" ? "" : " btn-primary"}`}
+                disabled={cliBusy}
+                onClick={() => void installCli()}
+              >
+                <Icon name="download" size={14} />
+                {cliBusy
+                  ? "安装中…"
+                  : cliStatus.state === "installed"
+                    ? "重新安装"
+                    : cliStatus.state === "other"
+                      ? "覆盖安装"
+                      : "安装"}
+              </button>
+            )}
+          </div>
+          {cliStatus?.available && cliStatus.state !== "installed" && (
+            <div className="settings-hint">
+              会把 {cliStatus.linkPath} 软链到 App 自带的命令行程序，需要输入一次管理员密码；以后随 App 自动更新。
+            </div>
+          )}
+          {cliError && <div className="settings-error">{cliError}</div>}
+        </section>
+
         <section className="settings-section" id="settings-update">
           <h3>软件更新</h3>
 
@@ -573,6 +632,26 @@ function formatDateTime(value: string): string {
   }
   const hm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${hm}`;
+}
+
+/** 命令行工具状态的一行说明。 */
+function cliStatusText(status: CLIStatus | null): string {
+  if (!status) {
+    return "…";
+  }
+  if (!status.available) {
+    return status.reason;
+  }
+  switch (status.state) {
+    case "installed":
+      return `已安装到 ${status.linkPath}，新开终端即可使用 kuibu`;
+    case "other":
+      return status.current
+        ? `${status.linkPath} 已指向 ${status.current}（不是本 App 自带的）`
+        : `${status.linkPath} 已有一个独立安装的 kuibu`;
+    default:
+      return "尚未安装，终端里还用不了 kuibu";
+  }
 }
 
 /** 把 Go 侧的 token 来源映射成更自然的展示文案。 */

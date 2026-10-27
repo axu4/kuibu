@@ -181,6 +181,8 @@ jobs:
         shell: bash
         run: |
           test -f app/bin/kuibu.app/Contents/MacOS/kuibu
+          # 自带的命令行程序（设置里「安装命令行工具」会软链到它）。
+          app/bin/kuibu.app/Contents/Helpers/kuibu version
           ditto -c -k --keepParent app/bin/kuibu.app kuibu-macos-arm64.zip
           ls -lh kuibu-macos-arm64.zip
 

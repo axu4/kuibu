@@ -9,6 +9,41 @@ import * as core$0 from "../internal/core/models.js";
 import * as llm$0 from "../internal/llm/models.js";
 
 /**
+ * CLIStatus 是命令行工具的安装状态，暴露给前端设置页。
+ */
+export interface CLIStatus {
+    /**
+     * Available 表示当前 App 自带 CLI、可以安装。
+     */
+    "available": boolean;
+
+    /**
+     * Reason 是不可安装时的中文原因。
+     */
+    "reason": string;
+
+    /**
+     * Target 是 .app 包内 CLI 的路径。
+     */
+    "target": string;
+
+    /**
+     * LinkPath 是软链位置，例如 /usr/local/bin/kuibu。
+     */
+    "linkPath": string;
+
+    /**
+     * State 是 missing / installed / other。
+     */
+    "state": string;
+
+    /**
+     * Current 是占用链接位置的软链所指向的路径（State 为 other 时有意义）。
+     */
+    "current": string;
+}
+
+/**
  * CarryResult 是一键顺延的结果。
  */
 export interface CarryResult {
