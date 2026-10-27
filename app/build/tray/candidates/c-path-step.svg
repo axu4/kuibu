@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="44" height="44">
+  <!-- 方案 C：一条由虚到实、向右上延伸的路，终点一个实心圆点：「积跬步」到达一点。 -->
+  <g fill="#000">
+    <circle cx="8" cy="36" r="2.4"/>
+    <circle cx="15" cy="29.5" r="2.8"/>
+    <circle cx="22.5" cy="23.5" r="3.2"/>
+    <circle cx="33.5" cy="12.5" r="6.5"/>
+  </g>
+</svg>
