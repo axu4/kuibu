@@ -488,3 +488,127 @@ func TestHandleWatchEventEmitsReportChanged(t *testing.T) {
 		}
 	}
 }
+
+// Status 的按组汇总：只统计应交名单，按组名升序。
+//
+// 注意 store.ReportStatus 的既有规则：应交名单只含「本周一所属组非空」的在职人员，
+// 没填组名的人不进应交名单，因此按组汇总里也不会出现空组名的组。
+func TestReportStatusGroupCounts(t *testing.T) {
+	reports, _, _ := newTestReports(t)
+
+	// 框架组：张三按时交，李四没交。
+	if _, err := reports.CreatePerson(PersonInput{Name: "张三", Group: "框架组", Role: store.RoleMember}); err != nil {
+		t.Fatalf("CreatePerson 张三失败: %v", err)
+	}
+	if _, err := reports.CreatePerson(PersonInput{Name: "李四", Group: "框架组", Role: store.RoleMember}); err != nil {
+		t.Fatalf("CreatePerson 李四失败: %v", err)
+	}
+	// B 组：只有一个人，未交。
+	if _, err := reports.CreatePerson(PersonInput{Name: "赵六", Group: "B组", Role: store.RoleMember}); err != nil {
+		t.Fatalf("CreatePerson 赵六失败: %v", err)
+	}
+	// 没填组名：按既有规则不进应交名单。
+	if _, err := reports.CreatePerson(PersonInput{Name: "孙七", Role: store.RoleMember}); err != nil {
+		t.Fatalf("CreatePerson 孙七失败: %v", err)
+	}
+
+	// Submit 的 Person 可以传姓名，由 store 解析成 ID。
+	if _, err := reports.Submit([]SubmitItem{{
+		Text:   "【周报】张三 2026-10-29\n完成核心库",
+		Person: "张三",
+		Week:   "2026-W44",
+		Level:  store.ReportLevelMember,
+	}}); err != nil {
+		t.Fatalf("Submit 失败: %v", err)
+	}
+
+	st, err := reports.Status("2026-W44", store.ReportLevelMember, "", "")
+	if err != nil {
+		t.Fatalf("Status 失败: %v", err)
+	}
+
+	// 顺序：组名升序（B组 在 框架组 前）。
+	if len(st.Groups) != 2 {
+		t.Fatalf("组数 = %d（%+v），期望 2", len(st.Groups), st.Groups)
+	}
+	if st.Groups[0].Group != "B组" || st.Groups[1].Group != "框架组" {
+		t.Errorf("组顺序 = %q, %q，期望 B组, 框架组", st.Groups[0].Group, st.Groups[1].Group)
+	}
+
+	frame := st.Groups[1]
+	if frame.Expected != 2 || frame.Submitted != 1 || frame.Late != 0 || frame.Missing != 1 {
+		t.Errorf("框架组 = %+v，期望 expected=2 submitted=1 late=0 missing=1", frame)
+	}
+	if b := st.Groups[0]; b.Expected != 1 || b.Missing != 1 {
+		t.Errorf("B组 = %+v，期望 expected=1 missing=1", b)
+	}
+
+	// 各组合计必须等于 Counts 的应交口径（未分组的人本来就不进 Counts，因此能对上）。
+	totalExpected, totalSubmitted, totalLate, totalMissing := 0, 0, 0, 0
+	for _, g := range st.Groups {
+		if g.Expected != g.Submitted+g.Late+g.Missing {
+			t.Errorf("组 %q 内部不自洽: %+v", g.Group, g)
+		}
+		totalExpected += g.Expected
+		totalSubmitted += g.Submitted
+		totalLate += g.Late
+		totalMissing += g.Missing
+	}
+	if totalExpected != st.Counts.Expected || totalSubmitted != st.Counts.Submitted ||
+		totalLate != st.Counts.Late || totalMissing != st.Counts.Missing {
+		t.Errorf("分组合计与 Counts 不一致: 组合计 expected=%d submitted=%d late=%d missing=%d, Counts=%+v",
+			totalExpected, totalSubmitted, totalLate, totalMissing, st.Counts)
+	}
+}
+
+// 名单外的提交（不在应交名单里的人）不计入任何组。
+func TestReportStatusGroupCountsExcludesExtra(t *testing.T) {
+	reports, _, _ := newTestReports(t)
+
+	if _, err := reports.CreatePerson(PersonInput{Name: "张三", Group: "框架组", Role: store.RoleMember}); err != nil {
+		t.Fatalf("CreatePerson 张三失败: %v", err)
+	}
+	// 周八不在应交名单里（没填组名），但他提交了，会进 Extra。
+	zhou, err := reports.CreatePerson(PersonInput{Name: "周八", Role: store.RoleMember})
+	if err != nil {
+		t.Fatalf("CreatePerson 周八失败: %v", err)
+	}
+	if _, err := reports.Submit([]SubmitItem{{
+		Text:   "【周报】周八 2026-10-29\n名单外的人",
+		Person: zhou.ID,
+		Week:   "2026-W44",
+		Level:  store.ReportLevelMember,
+	}}); err != nil {
+		t.Fatalf("Submit 失败: %v", err)
+	}
+
+	st, err := reports.Status("2026-W44", store.ReportLevelMember, "", "")
+	if err != nil {
+		t.Fatalf("Status 失败: %v", err)
+	}
+	if len(st.Extra) != 1 {
+		t.Fatalf("Extra = %+v，期望 1 人", st.Extra)
+	}
+	if len(st.Groups) != 1 || st.Groups[0].Group != "框架组" {
+		t.Fatalf("Groups = %+v，期望只有框架组", st.Groups)
+	}
+	if g := st.Groups[0]; g.Expected != 1 || g.Submitted != 0 || g.Missing != 1 {
+		t.Errorf("框架组 = %+v，期望 expected=1 submitted=0 missing=1（名单外的人不算已交）", g)
+	}
+}
+
+// 空名单时按组汇总返回空列表而不是 nil，前端可以直接遍历。
+func TestReportStatusGroupCountsEmpty(t *testing.T) {
+	reports, _, _ := newTestReports(t)
+
+	st, err := reports.Status("2026-W44", store.ReportLevelMember, "", "")
+	if err != nil {
+		t.Fatalf("Status 失败: %v", err)
+	}
+	if st.Groups == nil {
+		t.Error("Groups 不应为 nil")
+	}
+	if len(st.Groups) != 0 {
+		t.Errorf("空名单 Groups = %+v，期望空", st.Groups)
+	}
+}

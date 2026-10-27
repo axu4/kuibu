@@ -39,6 +39,7 @@ export type {
     QuickTodoSaved,
     ReportCounts,
     ReportData,
+    ReportGroupCounts,
     ReportMonth,
     ReportPerson,
     ReportPreview,

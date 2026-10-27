@@ -17,6 +17,8 @@ import { ReportReview, alignmentText } from "./ReportReview";
 import { GroupReport } from "./GroupReport";
 import {
   formatSubmittedAt,
+  groupLabel,
+  groupProgressPercent,
   levelLabel,
   loadReportLevel,
   reportStatusLabel,
@@ -439,6 +441,32 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
               />
             </div>
           </div>
+
+          {(status?.groups?.length ?? 0) > 0 && (
+            <div className="report-group-stats">
+              {(status?.groups ?? []).map((g) => (
+                <div key={g.group || "\u0000ungrouped"} className="report-group-stat">
+                  <div className="report-group-stat-head">
+                    <span className="report-group-stat-name">{groupLabel(g.group)}</span>
+                    <span className="report-group-stat-ratio">
+                      {g.submitted + g.late}/{g.expected}
+                    </span>
+                  </div>
+                  <div className="report-group-stat-bar" aria-hidden>
+                    <span
+                      className="report-group-stat-fill"
+                      style={{ width: `${groupProgressPercent(g.expected, g.submitted, g.late)}%` }}
+                    />
+                  </div>
+                  <div className="report-group-stat-meta">
+                    {g.late > 0 && <span className="is-late">迟交 {g.late}</span>}
+                    {g.missing > 0 && <span className="is-missing">未交 {g.missing}</span>}
+                    {g.late === 0 && g.missing === 0 && <span className="is-done">全部已交</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {empty ? (
             <div className="report-empty">

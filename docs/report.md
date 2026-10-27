@@ -315,6 +315,29 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 - 有提交但不在应交名单里的（含已离职但交过的人）单独放 `Extra`。
 - 汇总计数：`expected` / `submitted` / `late` / `missing` / `extra` / `total`。
 
+### 按组汇总
+
+App 的 `ReportService.Status` 在整体计数之外，另外给出按组的进度
+`Groups []ReportGroupCounts`（`json:"groups"`）：
+
+| 字段 | 说明 |
+| --- | --- |
+| `group` | 组名；空组名表示未分组 |
+| `expected` | 该组应交人数 |
+| `submitted` | 该组按时已交人数 |
+| `late` | 该组迟交人数 |
+| `missing` | 该组未交人数 |
+
+- **只统计应交名单**（`Entries`）：名单外（`Extra`）的人不进任何一组，
+  因此各组 `expected` 之和等于整体 `expected`。
+- 每组满足 `expected = submitted + late + missing`。
+- 排序：组名升序，**未分组（空组名）排最后**；空名单时是不含元素的数组，
+  不是 `null`。
+- 注：应交名单本身只含「该周周一时所属组非空」的在职人员，所以没填组名的人
+  不会出现在按组汇总里。
+- App 界面在提交状态上方按组展示「组名 + 已交/应交 + 进度条 + 迟交/未交」，
+  空组名显示为「未分组」。
+
 ## CLI 用法
 
 所有 `person` / `report` 子命令都支持 `--json` 与 `--workspace <dir>`，参数
@@ -438,6 +461,12 @@ App 与 CLI 共用同一套核心库，推荐直接调用：
 App 侧栏第三个视图「周报」，服务是 `app/reportservice.go`（`ReportService`），
 前端在 `app/frontend/src/components/ReportView.tsx`、`ReportPaste.tsx`、
 `PeopleManager.tsx`。
+
+- `ReportService.Status(week, level, group, productLine)` 返回 `ReportStatusData`，
+  其中 `Groups` 是按组汇总的应交进度（见上文「按组汇总」），前端用
+  `lib/report.ts` 的 `groupLabel` / `groupProgressPercent` 渲染。
+- `ReportService.Groups()` 返回名单里出现过的组名（去重排序），供筛选下拉用；
+  它与 `Status().Groups` 不同，后者带计数。
 
 - 顶部周切换器：`‹ 2026-W44 · 10/26–11/01 ›`，非本周显示「回到本周」；旁边
   小字提示周报日（如「周四截止」）。
