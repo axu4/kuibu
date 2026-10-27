@@ -51,7 +51,7 @@ func TestGroupReportService(t *testing.T) {
 	if _, err := reports.PrepareGroup("2026-W44", "", false, false); !errors.Is(err, store.ErrNotFinal) {
 		t.Fatalf("组员未定稿应 NotFinal, got %v", err)
 	}
-	if _, err := reports.FinalizeDraft("2026-W44", zhang.ID); err != nil {
+	if _, err := reports.FinalizeDraft("2026-W44", zhang.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	p, err := reports.PrepareGroup("2026-W44", "", false, false)

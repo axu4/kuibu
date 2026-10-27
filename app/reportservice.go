@@ -78,6 +78,8 @@ type ReportPerson struct {
 	Normalized string `json:"normalized"`
 	// SourceChanged 表示归一后原文又被重新提交。
 	SourceChanged bool `json:"sourceChanged"`
+	// FromGroup 表示组长周报由定稿组报带入，本身就是定稿。
+	FromGroup bool `json:"fromGroup"`
 	// Alignment 是对照上周计划的对齐率 0~1，没有可对照数据时为 null。
 	Alignment *float64 `json:"alignment"`
 }
@@ -699,6 +701,7 @@ func toReportPerson(e store.ReportStatusEntry) ReportPerson {
 	if e.Normalized != nil {
 		p.Normalized = e.Normalized.Status
 		p.SourceChanged = e.Normalized.SourceChanged
+		p.FromGroup = e.Normalized.FromGroup
 	}
 	return p
 }
