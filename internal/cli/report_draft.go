@@ -46,13 +46,21 @@ func draftJSONFrom(ws *store.Workspace, d *store.Draft, report *store.Report, wi
 		EditedAt:      timePtr(d.EditedAt),
 		FinalizedAt:   timePtr(d.FinalizedAt),
 		HumanEdited:   d.HumanEdited,
-		Path:          filepath.Join(ws.ReportsDir(), d.Week, store.DraftDirName, d.Person+".md"),
+		Path:          filepath.Join(ws.ReportsDir(), d.Week, draftKindOf(d), d.Person+".md"),
 	}
 	if withBody {
 		body := d.Body
 		out.Body = &body
 	}
 	return out
+}
+
+// draftKindOf 返回草稿所在目录，缺省为组员归一稿。
+func draftKindOf(d *store.Draft) string {
+	if d.Kind == "" {
+		return store.DraftDirName
+	}
+	return d.Kind
 }
 
 // timePtr 零值返回 nil。
@@ -78,12 +86,16 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 	yes := fs.Bool("yes", false, "已人工确认预览内容，真正发送")
 	dryRun := fs.Bool("dry-run", false, "只输出将发送的内容")
 	force := fs.Bool("force", false, "覆盖已人工修改或已定稿的归一稿（旧版移入历史）")
+	level := fs.String("level", store.ReportLevelMember, "层级: member（组员）| lead（组长）")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(pos) > 0 || (len(persons) == 0) == !*all {
-		return usagef("用法: kuibu report normalize [--week W] (--person p... | --all) [--model m] [--dry-run|--yes] [--force]")
+		return usagef("用法: kuibu report normalize [--week W] [--level member|lead] (--person p... | --all) [--model m] [--dry-run|--yes] [--force]")
+	}
+	if !store.ValidReportLevel(*level) {
+		return usagef("非法层级 %q（member|lead）", *level)
 	}
 
 	now, err := nowFrom(env)
@@ -98,20 +110,23 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 	if err != nil {
 		return err
 	}
-	jobs, skipped, err := core.PlanNormalize(ws, week, persons, *force)
+	batch, skipped, err := core.PlanNormalizeLevel(ws, week, *level, persons, *force)
 	if err != nil {
 		return err
 	}
-	if len(jobs) == 0 {
+	if len(batch.Persons) == 0 {
 		if len(skipped) > 0 {
 			printSkipped(skipped, common, stdout)
-			return skippedError(skipped)
+			if hasHumanEdits(skipped) {
+				return skippedError(skipped)
+			}
+			return nil
 		}
-		return usagef("%s 没有可归一的组员周报", week)
+		return usagef("%s 没有可归一的%s周报", week, levelLabel(*level))
 	}
 
 	out := &llm.Outbound{Env: env}
-	text := core.CombinedPreviewText(jobs)
+	text := batch.Text
 	preview, _, err := out.Prepare(*model, llm.Request{Messages: []llm.Message{{Role: "user", Content: text}}})
 	if err != nil {
 		return err
@@ -126,10 +141,10 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 		if *dryRun {
 			return nil
 		}
-		return fmt.Errorf("%w：共 %d 人，确认上面的内容无误后加 --yes 重新执行", llm.ErrNeedsConfirm, len(jobs))
+		return fmt.Errorf("%w：共 %d 人，确认上面的内容无误后加 --yes 重新执行", llm.ErrNeedsConfirm, len(batch.Persons))
 	}
 
-	results, err := core.RunNormalize(ctx, ws, out, *model, jobs, *force, true, now)
+	results, err := batch.Run(ctx, ws, out, *model, *force, true, now)
 	if err != nil {
 		return err
 	}
@@ -139,7 +154,7 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 			failed++
 		}
 		if r.Draft != nil {
-			upsertReportIndex(ws, week, store.DraftDirName, r.Person, stderr)
+			upsertReportIndex(ws, week, store.NormalizedKind(*level), r.Person, stderr)
 		}
 	}
 	if common.json {
@@ -159,7 +174,7 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 		}
 		printSkipped(skipped, common, stdout)
 	}
-	if len(skipped) > 0 {
+	if hasHumanEdits(skipped) {
 		return skippedError(skipped)
 	}
 	if failed > 0 {
@@ -176,6 +191,16 @@ func printSkipped(skipped []core.NormalizeSkip, common *commonFlags, stdout io.W
 	for _, s := range skipped {
 		fmt.Fprintf(stdout, "- 跳过 %s：%s\n", s.Name, s.Reason)
 	}
+}
+
+// hasHumanEdits 判断跳过的人里是否有因人工修改 / 已定稿而跳过的（组报带入的不算）。
+func hasHumanEdits(skipped []core.NormalizeSkip) bool {
+	for _, s := range skipped {
+		if !strings.Contains(s.Reason, "组报带入") {
+			return true
+		}
+	}
+	return false
 }
 
 // skippedError 有人因人工修改被跳过时返回 HUMAN_EDITS_EXIST。
@@ -199,17 +224,19 @@ func reportDraft(args []string, common *commonFlags, stdin io.Reader, stdout, st
 	fs := newFlagSet("report draft " + sub)
 	addCommonFlags(fs, common)
 	file := fs.String("file", "", "从文件读取新正文（edit）")
+	level := fs.String("level", store.ReportLevelMember, "层级: member|lead")
 	pos, err := parseCommand(fs, rest)
 	if err != nil {
 		return err
 	}
-	ws, week, personID, err := draftTarget(pos, common, env, "用法: kuibu report draft "+sub+" <week> <person>")
+	ws, week, personID, err := draftTarget(pos, common, env, "用法: kuibu report draft "+sub+" <week> <person> [--level member|lead]")
 	if err != nil {
 		return err
 	}
+	kind := store.NormalizedKind(*level)
 	switch sub {
 	case "show":
-		return showDraft(ws, week, personID, common, stdout)
+		return showDraft(ws, kind, *level, week, personID, common, stdout)
 	case "edit":
 		var data []byte
 		if *file != "" {
@@ -224,12 +251,12 @@ func reportDraft(args []string, common *commonFlags, stdin io.Reader, stdout, st
 		if err != nil {
 			return err
 		}
-		d, err := ws.EditDraft(week, personID, string(data), now)
+		d, err := ws.EditDraftKind(kind, week, personID, string(data), now)
 		if err != nil {
 			return err
 		}
-		upsertReportIndex(ws, week, store.DraftDirName, personID, stderr)
-		return printDraftResult(ws, d, common, stdout, "已保存修改")
+		upsertReportIndex(ws, week, kind, personID, stderr)
+		return printDraftResult(ws, d, *level, common, stdout, "已保存修改")
 	default:
 		return usagef("未知 report draft 子命令 %q", sub)
 	}
@@ -243,14 +270,16 @@ func reportFinalize(args []string, finalize bool, common *commonFlags, stdout, s
 	}
 	fs := newFlagSet("report " + name)
 	addCommonFlags(fs, common)
+	level := fs.String("level", store.ReportLevelMember, "层级: member|lead")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
 	}
-	ws, week, personID, err := draftTarget(pos, common, env, "用法: kuibu report "+name+" <week> <person>")
+	ws, week, personID, err := draftTarget(pos, common, env, "用法: kuibu report "+name+" <week> <person> [--level member|lead]")
 	if err != nil {
 		return err
 	}
+	kind := store.NormalizedKind(*level)
 	var d *store.Draft
 	verb := "已取消定稿"
 	if finalize {
@@ -258,19 +287,19 @@ func reportFinalize(args []string, finalize bool, common *commonFlags, stdout, s
 		if err != nil {
 			return err
 		}
-		d, err = ws.FinalizeDraft(week, personID, now)
+		d, err = ws.FinalizeDraftKind(kind, week, personID, now)
 		if err != nil {
 			return err
 		}
 		verb = "已定稿"
 	} else {
-		d, err = ws.UnfinalizeDraft(week, personID)
+		d, err = ws.UnfinalizeDraftKind(kind, week, personID)
 		if err != nil {
 			return err
 		}
 	}
-	upsertReportIndex(ws, week, store.DraftDirName, personID, stderr)
-	return printDraftResult(ws, d, common, stdout, verb)
+	upsertReportIndex(ws, week, kind, personID, stderr)
+	return printDraftResult(ws, d, *level, common, stdout, verb)
 }
 
 // draftTarget 解析 <week> <person> 位置参数。
@@ -300,12 +329,12 @@ func draftTarget(pos []string, common *commonFlags, env func(string) string, usa
 }
 
 // showDraft 输出归一稿。
-func showDraft(ws *store.Workspace, week, personID string, common *commonFlags, stdout io.Writer) error {
-	d, err := ws.ReadDraft(week, personID)
+func showDraft(ws *store.Workspace, kind, level, week, personID string, common *commonFlags, stdout io.Writer) error {
+	d, err := ws.ReadDraftKind(kind, week, personID)
 	if err != nil {
 		return err
 	}
-	report, _ := ws.ReadReport(week, store.ReportLevelMember, personID)
+	report, _ := ws.ReadReport(week, level, personID)
 	if common.json {
 		return writeJSON(stdout, draftJSONFrom(ws, d, report, true))
 	}
@@ -324,8 +353,8 @@ func showDraft(ws *store.Workspace, week, personID string, common *commonFlags, 
 }
 
 // printDraftResult 输出写操作后的归一稿摘要。
-func printDraftResult(ws *store.Workspace, d *store.Draft, common *commonFlags, stdout io.Writer, verb string) error {
-	report, _ := ws.ReadReport(d.Week, store.ReportLevelMember, d.Person)
+func printDraftResult(ws *store.Workspace, d *store.Draft, level string, common *commonFlags, stdout io.Writer, verb string) error {
+	report, _ := ws.ReadReport(d.Week, level, d.Person)
 	if common.json {
 		return writeJSON(stdout, draftJSONFrom(ws, d, report, false))
 	}
@@ -336,6 +365,9 @@ func printDraftResult(ws *store.Workspace, d *store.Draft, common *commonFlags, 
 // draftStateLabel 返回归一状态的中文。
 func draftStateLabel(st store.DraftState) string {
 	label := map[string]string{"none": "未归一", store.DraftStatusDraft: "草稿", store.DraftStatusFinal: "已定稿"}[st.Status]
+	if st.FromGroup {
+		label = "定稿（组报）"
+	}
 	if label == "" {
 		label = st.Status
 	}

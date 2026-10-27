@@ -569,21 +569,19 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 	for _, r := range reports {
 		submitted[r.Person] = r
 	}
-	// 组员层级附带归一稿状态。
-	var drafts map[string]*Draft
-	if level == ReportLevelMember {
-		list, err := w.ListDrafts(week)
-		if err != nil {
-			return nil, err
-		}
-		drafts = map[string]*Draft{}
-		for _, d := range list {
-			drafts[d.Person] = d
-		}
+	// 附带归一稿状态（组员 → member-normalized，组长 → lead-normalized）。
+	list, err := w.ListDraftsKind(NormalizedKind(level), week)
+	if err != nil {
+		return nil, err
+	}
+	drafts := map[string]*Draft{}
+	for _, d := range list {
+		drafts[d.Person] = d
 	}
 	draftState := func(person string) *DraftState {
-		if drafts == nil {
-			return nil
+		// 组长经组报带入的周报本身就是定稿，不需要再归一。
+		if r := submitted[person]; r != nil && r.Source == ReportSourceGroup && drafts[person] == nil {
+			return &DraftState{Status: DraftStatusFinal, FromGroup: true}
 		}
 		st := DraftStateFor(drafts[person], submitted[person])
 		return &st

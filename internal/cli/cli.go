@@ -51,13 +51,15 @@ const usageText = `用法:
   report status [--week W] [--level L]   提交状态
   report rm <week> <person>              删除周报
   report config [--weekday N]            查看/修改周报日
-  report normalize (--person p|--all)    AI 归一组员周报为草稿（不带 --yes 只预览，退出 8）
+  report normalize (--person p|--all)    AI 归一周报为草稿（--level lead 归一组长；不带 --yes 只预览，退出 8）
   report draft show|edit <week> <person> 查看/修改归一稿（edit 从 stdin 或 --file 读）
   report finalize|unfinalize <w> <p>     定稿 / 取消定稿
   report review <week> <person>          对照上周计划（set/suggest 子命令标状态、AI 建议）
   report carry <week> <person>           把未完成计划顺延到本周下周计划
   report group generate [--week W] ...   AI 合并组员定稿为组报（不带 --yes 只预览，退出 8）
   report group show|edit|finalize|unfinalize|submit  组报查看、修改、定稿、带入 SE
+  report product generate [--week W] ... SE 按产品线汇总组长定稿（不带 --yes 只预览，退出 8）
+  report product show [--product p]|edit|finalize|unfinalize  产品报查看、修改、定稿
   template list|show|edit <名称>         报告模板（templates/<名称>.md）
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
