@@ -7,6 +7,7 @@ import type {
   UpdateInfo,
 } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
+import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
   modifiersOnlyDisplay,
@@ -50,6 +51,8 @@ export function Settings({
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
+  // 更新内容单独弹窗显示，设置里只留一行入口。
+  const [notesOpen, setNotesOpen] = useState(false);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ stage: string; message: string } | null>(null);
   const [tokenDraft, setTokenDraft] = useState("");
@@ -92,6 +95,23 @@ export function Settings({
     }, 0);
     return () => window.clearTimeout(id);
   }, [focusUpdate]);
+
+  // Esc 关闭设置；录制快捷键时按键已在捕获阶段被吞掉，不会走到这里。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || recording) {
+        return;
+      }
+      // 更新内容弹窗开着时，Esc 只关它。
+      if (notesOpen) {
+        setNotesOpen(false);
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [notesOpen, onClose, recording]);
 
   // 监听 Apply 期间推送的进度阶段。
   useEffect(() => {
@@ -267,9 +287,17 @@ export function Settings({
   const statusNotice = status?.notice ?? "";
 
   return (
-    <div className="modal-mask" onMouseDown={onClose}>
+    <div className="modal-mask is-center" onMouseDown={onClose}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>设置</h2>
+        <div className="settings-head">
+          <h2>设置</h2>
+          <button type="button" className="icon-btn" title="关闭（Esc）" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </div>
+
+        {/* 只有中间这一段滚动，标题和底部始终可见。 */}
+        <div className="settings-body">
 
         <div className="settings-row">
           <div className="settings-label">
@@ -393,28 +421,35 @@ export function Settings({
           {checkResult && (
             <div className="update-result">
               {checkResult.hasUpdate ? (
-                <>
-                  <div className="update-result-head">
+                <div className="settings-row is-update">
+                  <div className="settings-label">
                     <span className="update-new">发现新版本 v{checkResult.latest}</span>
                     <span className="settings-desc">
                       {formatDateTime(checkResult.publishedAt)} 发布
+                      {checkResult.notes && (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            className="link-btn"
+                            onClick={() => setNotesOpen(true)}
+                          >
+                            查看更新内容
+                          </button>
+                        </>
+                      )}
                     </span>
                   </div>
-                  {checkResult.notes && (
-                    <pre className="update-notes">{checkResult.notes}</pre>
-                  )}
-                  <div className="settings-actions">
-                    <button
-                      type="button"
-                      className="is-primary"
-                      disabled={applying}
-                      onClick={() => void applyUpdate()}
-                    >
-                      <Icon name="download" size={14} />
-                      {applying ? "更新中…" : "更新并重启"}
-                    </button>
-                  </div>
-                </>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={applying}
+                    onClick={() => void applyUpdate()}
+                  >
+                    <Icon name="download" size={14} />
+                    {applying ? "更新中…" : "更新并重启"}
+                  </button>
+                </div>
               ) : (
                 <div className="settings-hint">
                   已是最新版本（v{checkResult.latest}）
@@ -463,6 +498,7 @@ export function Settings({
             </button>
           </div>
         </section>
+        </div>
 
         <div className="settings-footer">
           <span>快捷键保存在 config.json（可用 KUIBU_CONFIG_DIR 覆盖目录）</span>
@@ -471,6 +507,51 @@ export function Settings({
           </button>
         </div>
       </div>
+
+      {notesOpen && checkResult?.hasUpdate && (
+        <div
+          className="modal-mask is-center is-nested"
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            setNotesOpen(false);
+          }}
+        >
+          <div className="modal release-notes" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>跬步 v{checkResult.latest} 更新内容</h2>
+            <div className="settings-desc">{formatDateTime(checkResult.publishedAt)} 发布</div>
+            <div className="update-notes">
+              {parseReleaseNotes(checkResult.notes).map((line, i) =>
+                line.kind === "heading" ? (
+                  <h4 key={i}>{line.text}</h4>
+                ) : line.kind === "item" ? (
+                  <p key={i} className="is-item">
+                    {line.text}
+                  </p>
+                ) : (
+                  <p key={i}>{line.text}</p>
+                ),
+              )}
+            </div>
+            <div className="modal-buttons">
+              <button type="button" className="btn" onClick={() => setNotesOpen(false)}>
+                稍后
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={applying}
+                onClick={() => {
+                  setNotesOpen(false);
+                  void applyUpdate();
+                }}
+              >
+                <Icon name="download" size={14} />
+                {applying ? "更新中…" : "更新并重启"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
