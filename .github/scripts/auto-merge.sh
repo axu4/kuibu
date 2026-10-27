@@ -6,7 +6,8 @@
 #   - CI 跑完时（workflow_run）传 head SHA，由它反查 PR。
 # 依赖环境变量：GH_TOKEN、GITHUB_REPOSITORY。
 #
-# 只在以下条件都满足时合并：PR 打开、不是草稿、来自本仓库分支（仓库公开，
+# 只在以下条件都满足时合并：PR 打开、不是草稿、目标分支是默认分支（叠在别的 PR
+# 上的不合，否则会合进别的功能分支、还在那里打 tag）、来自本仓库分支（仓库公开，
 # 别人只能从 fork 提 PR，这些不会被自动合并）、该 head 提交上最新一次 CI 已成功。
 # 不想被自动合并的 PR 开成草稿即可。
 # 合并时用 --match-head-commit 锁定已通过 CI 的提交，防止期间又有新推送。
@@ -27,10 +28,11 @@ if [ -z "$pr" ]; then
 fi
 
 info="$(gh pr view "$pr" --repo "$repo" \
-  --json number,title,state,isDraft,headRefOid,isCrossRepository)"
+  --json number,title,state,isDraft,headRefOid,isCrossRepository,baseRefName)"
 state="$(jq -r '.state' <<<"$info")"
 draft="$(jq -r '.isDraft' <<<"$info")"
 cross="$(jq -r '.isCrossRepository' <<<"$info")"
+base="$(jq -r '.baseRefName' <<<"$info")"
 sha="$(jq -r '.headRefOid' <<<"$info")"
 title="$(jq -r '.title' <<<"$info")"
 if [ "$state" != "OPEN" ] || [ "$draft" = "true" ]; then
@@ -39,6 +41,11 @@ if [ "$state" != "OPEN" ] || [ "$draft" = "true" ]; then
 fi
 if [ "$cross" = "true" ]; then
   echo "PR #$pr 来自 fork，不自动合并。"
+  exit 0
+fi
+default="$(gh repo view "$repo" --json defaultBranchRef --jq '.defaultBranchRef.name')"
+if [ "$base" != "$default" ]; then
+  echo "PR #$pr 合并目标是 $base（叠在别的 PR 上），等它的基础 PR 合进 $default 后再处理。"
   exit 0
 fi
 if [ -n "$head_sha" ] && [ "$head_sha" != "$sha" ]; then
