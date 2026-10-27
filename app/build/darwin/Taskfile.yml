@@ -175,7 +175,24 @@ tasks:
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
+      - task: build:cli
+        vars:
+          OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Helpers/kuibu'
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
+
+  build:cli:
+    summary: 构建命令行 kuibu（根模块 cmd/kuibu），随 .app 分发到 Contents/Helpers/
+    internal: true
+    cmds:
+      - mkdir -p "$(dirname "{{.OUTPUT}}")"
+      # CLI 在根模块里，切到仓库根目录构建；输出路径先转成绝对路径。
+      - |
+        out="$(cd "$(dirname "{{.OUTPUT}}")" && pwd)/$(basename "{{.OUTPUT}}")"
+        cd .. && go build -trimpath -buildvcs=false -ldflags="-w -s{{if .EXTRA_LDFLAGS}} {{.EXTRA_LDFLAGS}}{{end}}" -o "$out" ./cmd/kuibu
+    env:
+      GOOS: darwin
+      CGO_ENABLED: 0
+      GOARCH: '{{.ARCH | default ARCH}}'
 
   codesign:adhoc:
     summary: Ad-hoc signs the app bundle (macOS only)

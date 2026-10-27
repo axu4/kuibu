@@ -57,14 +57,14 @@ git push origin v0.2.0
 ## workflow 做了什么
 
 1. **计算版本**：从 tag 去掉 `v` 前缀得到 `VERSION`，并校验 `MAJOR.MINOR.PATCH[-prerelease]` 格式。
-2. **构建 App**：`wails3 package` 打包 `.app`。版本号通过环境变量 `KUIBU_LDFLAGS` 注入——`app/build/darwin/Taskfile.yml` 的 `EXTRA_LDFLAGS` 变量（`sh:` 动态变量）读取它并拼进生产构建的 `-ldflags`，最终等价于 `-ldflags "-w -s -X github.com/axu4/kuibu/internal/version.Version=$VERSION"`。
+2. **构建 App**：`wails3 package` 打包 `.app`。版本号通过环境变量 `KUIBU_LDFLAGS` 注入——`app/build/darwin/Taskfile.yml` 的 `EXTRA_LDFLAGS` 变量（`sh:` 动态变量）读取它并拼进生产构建的 `-ldflags`，最终等价于 `-ldflags "-w -s -X github.com/axu4/kuibu/internal/version.Version=$VERSION"`。同一份 ldflags 也用来构建命令行程序，放进 `.app/Contents/Helpers/kuibu`（设置里「安装命令行工具」会把 `/usr/local/bin/kuibu` 软链到它，App 自更新时一起升级）。
 3. **改 Info.plist**：用 `PlistBuddy` 把 `CFBundleShortVersionString` / `CFBundleVersion` 改成 `$VERSION`，再 `codesign --force --deep -s -` 重签并 `codesign --verify --deep --strict` 校验。
 4. **打包**：
    - 把 `.app` 改名为 `跬步.app`（CFBundleName 已经是「跬步」）。
    - `ditto -c -k --keepParent` 打成 `kuibu-macos-arm64.zip`。
    - `hdiutil create` 打成 `kuibu-macos-arm64.dmg`，dmg 里放 `跬步.app` 和指向 `/Applications` 的软链。
 5. **构建 CLI**：`CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build`，同样注入版本号，`codesign -s -` ad-hoc 签名，产出 `kuibu-darwin-arm64`。
-6. **校验**：`shasum -a 256` 生成 `SHA256SUMS`；冒烟检查 `./kuibu-darwin-arm64 version` 输出包含 `$VERSION`、Info.plist 版本等于 `$VERSION`。
+6. **校验**：`shasum -a 256` 生成 `SHA256SUMS`；冒烟检查 `./kuibu-darwin-arm64 version` 与 App 自带的 `Contents/Helpers/kuibu version` 输出包含 `$VERSION`、Info.plist 版本等于 `$VERSION`。
 7. **发布**：`gh release create` 创建 Release（标题「跬步 $TAG」，`--generate-notes` 自动生成变更说明）；如果 Release 已存在则 `gh release upload --clobber` 覆盖资产。
 
 ## 资产命名约定
@@ -75,7 +75,7 @@ git push origin v0.2.0
 | --- | --- |
 | `kuibu-macos-arm64.zip` | macOS App 更新包，内含 `跬步.app` |
 | `kuibu-macos-arm64.dmg` | 安装镜像，拖到 `/Applications` 即可 |
-| `kuibu-darwin-arm64` | 无 GUI 的 CLI 二进制 |
+| `kuibu-darwin-arm64` | 无 GUI 的 CLI 二进制（只用 CLI、不装 App 时用；装了 App 的话 App 里已自带） |
 | `SHA256SUMS` | 上面三个文件的 SHA-256 校验和 |
 
 在线更新（`internal/update`）依赖的约定资产是 `kuibu-macos-arm64.zip` 与 `SHA256SUMS`，不要改名。
