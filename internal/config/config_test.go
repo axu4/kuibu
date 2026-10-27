@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/axu4/kuibu/internal/store"
 )
 
 // testEnv 返回一个只认识 vars 的 env 函数，避免读取进程真实环境变量。
@@ -329,5 +331,80 @@ func TestLoadOldConfigWithoutQuickNoteShortcut(t *testing.T) {
 	}
 	if want := DefaultQuickNoteShortcut; got != want {
 		t.Errorf("QuickNoteShortcut = %q，期望默认值 %q", got, want)
+	}
+}
+
+func TestEnsureWorkspaceCreatesFallback(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+	fallback := filepath.Join(t.TempDir(), "Documents", "跬步")
+
+	dir, created, err := EnsureWorkspace(testEnv(vars), fallback)
+	if err != nil {
+		t.Fatalf("EnsureWorkspace 返回错误: %v", err)
+	}
+	if !created || dir != fallback {
+		t.Fatalf("EnsureWorkspace = (%q, %v)，期望 (%q, true)", dir, created, fallback)
+	}
+	if _, err := os.Stat(filepath.Join(fallback, ".kuibu", "config.json")); err != nil {
+		t.Fatalf("默认工作台未初始化: %v", err)
+	}
+	// 写入了用户配置：下次启动直接用它。
+	got, err := Locate(testEnv(vars))
+	if err != nil || got != fallback {
+		t.Fatalf("Locate = (%q, %v)，期望 %q", got, err, fallback)
+	}
+
+	// 再次调用走已配置分支，不再新建。
+	dir, created, err = EnsureWorkspace(testEnv(vars), fallback)
+	if err != nil || created || dir != fallback {
+		t.Fatalf("第二次 EnsureWorkspace = (%q, %v, %v)", dir, created, err)
+	}
+}
+
+func TestEnsureWorkspaceReusesExistingFallback(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+	fallback := filepath.Join(t.TempDir(), "跬步")
+	if _, err := store.Init(fallback); err != nil {
+		t.Fatalf("初始化工作台失败: %v", err)
+	}
+
+	dir, created, err := EnsureWorkspace(testEnv(vars), fallback)
+	if err != nil || created || dir != fallback {
+		t.Fatalf("EnsureWorkspace = (%q, %v, %v)，期望沿用已有工作台", dir, created, err)
+	}
+}
+
+func TestEnsureWorkspaceKeepsConfigured(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+	if err := SaveDefaultWorkspace(testEnv(vars), "/tmp/configured"); err != nil {
+		t.Fatalf("写入默认工作台失败: %v", err)
+	}
+	fallback := filepath.Join(t.TempDir(), "跬步")
+
+	dir, created, err := EnsureWorkspace(testEnv(vars), fallback)
+	if err != nil || created || dir != "/tmp/configured" {
+		t.Fatalf("EnsureWorkspace = (%q, %v, %v)，期望用已配置目录", dir, created, err)
+	}
+	if _, err := os.Stat(fallback); !os.IsNotExist(err) {
+		t.Fatalf("已配置时不应创建默认目录: %v", err)
+	}
+}
+
+func TestEnsureWorkspaceRefusesNonEmptyFallback(t *testing.T) {
+	vars := map[string]string{}
+	newConfigDir(t, vars)
+	fallback := t.TempDir()
+	if err := os.WriteFile(filepath.Join(fallback, "别人的文件.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := EnsureWorkspace(testEnv(vars), fallback); err == nil {
+		t.Fatal("非空且不是工作台的目录应返回错误")
+	}
+	if got, _ := Locate(testEnv(vars)); got != "" {
+		t.Fatalf("失败时不应写入配置，Locate = %q", got)
 	}
 }

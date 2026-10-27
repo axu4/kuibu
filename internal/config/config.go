@@ -248,3 +248,45 @@ func Locate(env func(string) string) (string, error) {
 	}
 	return DefaultWorkspace(env)
 }
+
+// FallbackWorkspaceName 是首次启动自动创建的工作台目录名，放在「文稿」下。
+const FallbackWorkspaceName = "跬步"
+
+// FallbackWorkspaceDir 返回首次启动时自动创建的默认工作台目录：~/Documents/跬步。
+func FallbackWorkspaceDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("定位用户主目录失败: %w", err)
+	}
+	return filepath.Join(home, "Documents", FallbackWorkspaceName), nil
+}
+
+// EnsureWorkspace 返回 App 启动时要打开的工作台目录。
+//
+// 已通过 KUIBU_WORKSPACE 或用户配置指定时原样返回（created 为 false）。
+// 都没有时使用 fallback：不存在或为空目录就初始化为工作台，已经是工作台
+// 就直接沿用，然后写入用户配置作为默认工作台；之后用户仍可在 App 里更换。
+// fallback 已存在且非空、又不是工作台时返回错误，不动用户的文件。
+func EnsureWorkspace(env func(string) string, fallback string) (dir string, created bool, err error) {
+	dir, err = Locate(env)
+	if err != nil || dir != "" {
+		return dir, false, err
+	}
+	if _, err := store.Open(fallback); err != nil {
+		if !errors.Is(err, store.ErrNotWorkspace) {
+			return "", false, err
+		}
+		if _, err := store.Init(fallback); err != nil {
+			return "", false, fmt.Errorf("创建默认工作台失败: %w", err)
+		}
+		created = true
+	}
+	abs, err := filepath.Abs(fallback)
+	if err != nil {
+		return "", false, fmt.Errorf("解析工作台路径失败: %w", err)
+	}
+	if err := SaveDefaultWorkspace(env, abs); err != nil {
+		return "", false, err
+	}
+	return abs, created, nil
+}
