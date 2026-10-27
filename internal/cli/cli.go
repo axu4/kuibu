@@ -60,7 +60,9 @@ const usageText = `用法:
   report group show|edit|finalize|unfinalize|submit  组报查看、修改、定稿、带入 SE
   report product generate [--week W] ... SE 按产品线汇总组长定稿（不带 --yes 只预览，退出 8）
   report product show [--product p]|edit|finalize|unfinalize  产品报查看、修改、定稿
-  report export group|product [--format f] [--out file]  导出定稿（md|feishu-html|text；未定稿退出 7）
+  report month generate|show|edit|finalize|unfinalize [--month M] [--level group|product]  组月报 / 产品月报
+  report add|status --month M            组长月报归档 / 提交状态（收集日 report config --month-day）
+  report export group|product|month-group|month-product [--format f] [--out file]  导出定稿（未定稿退出 7）
   template list|show|edit <名称>         报告模板（templates/<名称>.md）
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索

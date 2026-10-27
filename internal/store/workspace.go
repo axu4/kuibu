@@ -35,6 +35,8 @@ type config struct {
 	Version int `json:"version"`
 	// ReportWeekday 是周报日（1=周一…7=周日），缺省或 0 视为 4（周四）。
 	ReportWeekday int `json:"reportWeekday,omitempty"`
+	// ReportMonthDay 是月报收集日（1-31，超过当月天数按月末），缺省或 0 视为 28。
+	ReportMonthDay int `json:"reportMonthDay,omitempty"`
 }
 
 // Workspace 代表一个已打开的工作台目录。

@@ -217,7 +217,8 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | `report review [set\|suggest] <week> <person>` / `report carry <week> <person>` | 对照上周计划、对齐率、顺延 |
 | `report group generate\|show\|edit\|finalize\|unfinalize\|submit` | 组报：合并组员定稿、产品线 × 类别、定稿后带入 SE |
 | `report product generate\|show\|edit\|finalize\|unfinalize` | SE 产品 / 项目周报：按产品线汇总组长定稿 |
-| `report export group\|product [--format md\|feishu-html\|text] [--out file]` | 导出定稿报告，未定稿退出 7 |
+| `report export group\|product\|month-group\|month-product [--format md\|feishu-html\|text] [--out file]` | 导出定稿报告，未定稿退出 7 |
+| `report month generate\|show\|edit\|finalize [--month M] [--level group\|product]` / `report add\|status --month M` | 月报：组月报、产品月报、组长月报收集 |
 | `template list\|show\|edit <名称>` | 报告模板（`templates/<名称>.md`） |
 | `tree [--root <id>]` | 缩进大纲打印笔记树，孤儿/环节点带标记 |
 | `search <query> [--limit n]` | 全文检索，输出 id、标题、片段 |

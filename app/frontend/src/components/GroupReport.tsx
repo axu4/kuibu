@@ -25,7 +25,26 @@ interface ReportApi {
   submit?: () => Promise<unknown>;
 }
 
-function reportApi(kind: "group" | "product", week: string): ReportApi {
+export type ReportKind = "group" | "product" | "month-group" | "month-product";
+
+function reportApi(kind: ReportKind, week: string): ReportApi {
+  if (kind === "month-group" || kind === "month-product") {
+    const level = kind === "month-group" ? "group" : "product";
+    return {
+      noun: kind === "month-group" ? "组月报" : "产品月报",
+      template: level,
+      intro:
+        kind === "month-group"
+          ? "合并本月各周已定稿的组报，结构同组报。缺周或未定稿会先提示。"
+          : "合并各组长月报（归一定稿）与本月各周已定稿的产品报，按产品线分章。",
+      get: () => ReportService.MonthReport(week, level),
+      save: (body) => ReportService.SaveMonth(week, level, body),
+      prepare: (a, f) => ReportService.PrepareMonth(week, level, a, f),
+      generate: (a, f) => ReportService.GenerateMonth(week, level, a, f),
+      finalize: () => ReportService.FinalizeMonth(week, level),
+      unfinalize: () => ReportService.UnfinalizeMonth(week, level),
+    };
+  }
   if (kind === "product") {
     return {
       noun: "产品报",
@@ -56,8 +75,8 @@ function reportApi(kind: "group" | "product", week: string): ReportApi {
 }
 
 interface GroupReportProps {
-  /** group = 框架组长的组报；product = SE 的产品报。 */
-  kind?: "group" | "product";
+  /** group = 组报；product = 产品报；month-* = 对应的月报（week 传月份）。 */
+  kind?: ReportKind;
   week: string;
   refreshTick: number;
   onClose: () => void;
@@ -160,7 +179,7 @@ export function GroupReport({
       setPlan({ preview: p.preview, allowMissing, force });
     } catch (err) {
       const msg = readableError(err);
-      if (!allowMissing && msg.includes("未定稿")) {
+      if (!allowMissing && (msg.includes("未定稿") || msg.includes("缺失"))) {
         setAsk({ text: msg.replace(/（确认先不纳入.*）/, ""), allowMissing: true, force });
       } else if (!force && msg.includes("--force")) {
         setAsk({ text: msg.replace(/；?确认要覆盖请加 --force/, ""), allowMissing, force: true });
@@ -346,7 +365,7 @@ export function GroupReport({
                   className="link-btn"
                   onClick={() => void prepare(ask.allowMissing, ask.force)}
                 >
-                  {ask.allowMissing && ask.text.includes("未定稿") ? "仍然生成（标注未纳入）" : "仍要重新生成"}
+                  {ask.allowMissing && !ask.force ? "仍然生成（标注未纳入）" : "仍要重新生成"}
                 </button>
               </div>
             )}

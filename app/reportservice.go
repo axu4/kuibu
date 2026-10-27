@@ -423,6 +423,11 @@ func (s *ReportService) Preview(text, level, week, person string) ([]ReportPrevi
 	if err != nil {
 		return nil, err
 	}
+	// 组长月报：按组长层级识别人员，再按月份归档。
+	month := ""
+	if level == store.ReportLevelLeadMonth {
+		month, level, week = week, store.ReportLevelLead, ""
+	}
 	items, err := core.PreviewReports(ws, core.PreviewInput{
 		Text:   text,
 		Level:  level,
@@ -435,7 +440,18 @@ func (s *ReportService) Preview(text, level, week, person string) ([]ReportPrevi
 	}
 	out := make([]ReportPreview, 0, len(items))
 	for _, it := range items {
-		out = append(out, toReportPreview(it))
+		p := toReportPreview(it)
+		if month != "" {
+			p.Week, p.Level, p.Late = month, store.ReportLevelLeadMonth, false
+			p.Overwrite = false
+			if p.PersonID != "" {
+				p.Overwrite, _ = ws.ReportExists(month, store.ReportLevelLeadMonth, p.PersonID)
+			}
+			if deadline, err := ws.MonthDeadline(month); err == nil {
+				p.Late = !s.clock().Before(deadline)
+			}
+		}
+		out = append(out, p)
 	}
 	return out, nil
 }
@@ -449,6 +465,14 @@ func (s *ReportService) Submit(items []SubmitItem) ([]ReportData, error) {
 	now := s.clock()
 	results := make([]ReportData, 0, len(items))
 	for _, it := range items {
+		if it.Level == store.ReportLevelLeadMonth {
+			report, err := ws.SubmitMonthReport(it.Person, it.Week, it.Text, store.ReportSourcePaste, now)
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, toReportData(report))
+			continue
+		}
 		report, err := ws.SubmitReport(store.SubmitReportInput{
 			Person: it.Person,
 			Week:   it.Week,

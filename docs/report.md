@@ -237,6 +237,26 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 - **front matter**：同组报，`sources` 为纳入的组长 ID，`missing` 为未纳入的组；组长定稿内容变化后标「来源已更新」。
 - `report product show --product <产品线>` 只输出那一章。
 
+## 月报（reports/<YYYY-MM>/）
+
+月报结构同周报，只引用定稿。核心逻辑在 `internal/core/month.go`。
+
+- **月与周**：一周按**周报日**（默认周四）所在月份归属，跨年同理（如 2026-W01 的周四是 2026-01-01，归 2026-01）。`WeeksOfMonth` / `MonthOfWeek` 有跨月、跨年单测。
+- **收集日**：组长月报每月 `reportMonthDay` 日收（工作台配置，缺省 28；`report config --month-day N`），超过当月天数按月末，**不因周末顺延**；晚于收集日 24:00 算迟交。
+- **目录**（与周目录并列，周列表只认 `YYYY-Www` 目录，不会混入）：
+
+  ```
+  reports/2026-10/
+  ├── lead-month/<组长 id>.md             # 组长月报原文（粘贴归档，覆盖进 .history）
+  ├── lead-month-normalized/<组长 id>.md  # 组长月报归一稿（结构同组报）
+  ├── group/<组长 id>.md                  # 组月报
+  └── product/product.md                  # 产品月报
+  ```
+
+- **组月报**（框架组长）：合并当月各周**定稿组报**，结构同组报；缺周 / 未定稿默认返回 `7` 并列出，`--allow-missing` 才生成并标注。来源是各周，周组报定稿内容变化后标「来源已更新」。
+- **产品月报**（SE）：合并各组长月报（归一定稿）+ 当月各周定稿产品报，按产品线分章；缺的同样列出。
+- 生命周期、`9` / `7`、外发预览确认同周报；索引复用 `reports` 表（week 列存 `2026-10`），`report list` 默认不混入。
+
 ## 导出定稿
 
 组报、产品报定稿后可以导出（核心逻辑 `internal/core/export.go`，CLI 与 App 共用）。
@@ -244,7 +264,7 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 - **只认定稿**：未定稿导出 / 复制一律返回 `7 NOT_FINAL`；App 里「导出 Markdown」「复制为飞书格式」在未定稿时置灰。导出内容是定稿正文，不含 front matter。
 - **格式**：`md`（原文）、`feishu-html`（HTML）、`text`（纯文本：标题只留文字，列表用「•」与两格缩进，链接写成「文字（地址）」）。
 - **Markdown → HTML** 由自写的小转换器完成（不引入第三方库），覆盖标题、嵌套 / 有序列表、引用、段落、加粗、斜体、行内代码、链接，并转义 HTML。只服务于本项目生成的报告，不追求完整 CommonMark。
-- **文件名**：`<组名>-组报-<周>.md`、`产品报-<周>.md`。
+- **文件名**：`<组名>-组报-<周>.md`、`产品报-<周>.md`、`<组名>-组月报-<月>.md`、`产品月报-<月>.md`。
 - **复制为飞书格式**：前端用 `navigator.clipboard.write` 同时写 `text/html` 与 `text/plain`，飞书粘贴取 HTML；WKWebView 不支持时退回纯文本并提示。只进剪贴板，不发送到任何地方。
 
 ## ISO 周与周报日
@@ -328,7 +348,11 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 | `report group submit [--week W] [--group g]` | 定稿组报带入 SE tab（组长本人 lead 层级）；未定稿返回 7 |
 | `report product generate [--week W] [--template t] [--allow-missing] [--yes \| --dry-run] [--force]` | SE 按产品线汇总组长定稿；有组长未定稿返回 7；不带 `--yes` 只预览，退出 8 |
 | `report product show [--product p]\|edit\|finalize\|unfinalize [--week W]` | 查看（可只看一章）/ 修改 / 定稿 / 取消定稿产品报 |
-| `report export group\|product [--week W] [--group g] [--format md\|feishu-html\|text] [--out file]` | 导出定稿，不给 `--out` 输出到 stdout；未定稿返回 7 |
+| `report export group\|product\|month-group\|month-product [--week W \| --month M] [--group g] [--format md\|feishu-html\|text] [--out file]` | 导出定稿，不给 `--out` 输出到 stdout；未定稿返回 7 |
+| `report month generate\|show\|edit\|finalize\|unfinalize [--month M] [--level group\|product] [--allow-missing] [--yes \| --dry-run] [--force]` | 组月报（group）/ 产品月报（product） |
+| `report add --month M` / `report status --month M` | 组长月报归档 / 提交状态 |
+| `report normalize --month M --all` | 归一组长月报（finalize / draft 用 `<月份> <人> --level lead-month`） |
+| `report config [--weekday N] [--month-day N]` | 周报日 / 月报收集日 |
 | `template list\|show\|edit <名称>` | 报告模板（`templates/<名称>.md`，edit 读 stdin） |
 
 ### 示例

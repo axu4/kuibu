@@ -440,7 +440,10 @@ func GroupSourceChanged(ws *store.Workspace, d *store.Draft) bool {
 		}
 		return fd.Body, nil
 	}
-	if d.Kind == store.ProductDirName {
+	switch {
+	case store.ValidMonth(d.Week):
+		body = func(id string) (string, error) { return monthSourceBody(ws, d, id) }
+	case d.Kind == store.ProductDirName:
 		body = func(id string) (string, error) { return leadFinalBody(ws, d.Week, id) }
 	}
 	h, ok := sourcesHash(d.Sources, body)

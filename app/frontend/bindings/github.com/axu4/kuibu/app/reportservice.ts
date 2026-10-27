@@ -76,6 +76,13 @@ export function FinalizeGroup(week: string, group: string): $CancellablePromise<
 }
 
 /**
+ * FinalizeMonth 月报定稿。
+ */
+export function FinalizeMonth(month: string, level: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3228625837, month, level);
+}
+
+/**
  * FinalizeProduct 产品报定稿。
  */
 export function FinalizeProduct(week: string): $CancellablePromise<$models.GroupData> {
@@ -87,6 +94,13 @@ export function FinalizeProduct(week: string): $CancellablePromise<$models.Group
  */
 export function GenerateGroup(week: string, group: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(1741464091, week, group, allowMissing, force);
+}
+
+/**
+ * GenerateMonth 发送并保存月报草稿。只能由外发确认弹窗的「确认发送」调用。
+ */
+export function GenerateMonth(month: string, level: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(2426869174, month, level, allowMissing, force);
 }
 
 /**
@@ -125,6 +139,20 @@ export function Groups(): $CancellablePromise<string[] | null> {
 }
 
 /**
+ * Month 返回月份信息。ref 为 ""/this/last/next/YYYY-MM/日期。
+ */
+export function Month(ref: string): $CancellablePromise<$models.ReportMonth> {
+    return $Call.ByID(369912539, ref);
+}
+
+/**
+ * MonthReport 返回组月报（level=group）或产品月报（level=product）；还没生成时 Exists 为 false。
+ */
+export function MonthReport(month: string, level: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(2798529061, month, level);
+}
+
+/**
  * MovePerson 转组：给出新组（可选新产品线）与生效日期，默认今天。
  */
 export function MovePerson(id: string, group: string, productLines: string[] | null, $from: string): $CancellablePromise<$models.PersonData> {
@@ -151,6 +179,13 @@ export function People(includeInactive: boolean): $CancellablePromise<$models.Pe
  */
 export function PrepareGroup(week: string, group: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupPlanData> {
     return $Call.ByID(1076187389, week, group, allowMissing, force);
+}
+
+/**
+ * PrepareMonth 生成月报外发预览，不发请求。
+ */
+export function PrepareMonth(month: string, level: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupPlanData> {
+    return $Call.ByID(3792162348, month, level, allowMissing, force);
 }
 
 /**
@@ -231,6 +266,13 @@ export function SaveGroup(week: string, group: string, body: string): $Cancellab
 }
 
 /**
+ * SaveMonth 保存月报人工修改。
+ */
+export function SaveMonth(month: string, level: string, body: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(381783708, month, level, body);
+}
+
+/**
  * SaveProduct 保存产品报人工修改。
  */
 export function SaveProduct(week: string, body: string): $CancellablePromise<$models.GroupData> {
@@ -252,6 +294,13 @@ export function SetPersonActive(id: string, active: boolean): $CancellablePromis
 }
 
 /**
+ * SetReportMonthDay 修改月报收集日。
+ */
+export function SetReportMonthDay(day: number): $CancellablePromise<number> {
+    return $Call.ByID(3784496107, day);
+}
+
+/**
  * SetReportWeekday 修改工作台配置的周报日。
  */
 export function SetReportWeekday(weekday: number): $CancellablePromise<number> {
@@ -263,6 +312,13 @@ export function SetReportWeekday(weekday: number): $CancellablePromise<number> {
  */
 export function SetReview(week: string, person: string, planID: string, status: string, matches: string[] | null, note: string): $CancellablePromise<core$0.ReviewResult> {
     return $Call.ByID(1504546449, week, person, planID, status, matches, note);
+}
+
+/**
+ * ShiftMonth 返回相对 month 偏移 delta 个月的月份信息。
+ */
+export function ShiftMonth(month: string, delta: number): $CancellablePromise<$models.ReportMonth> {
+    return $Call.ByID(2818192133, month, delta);
 }
 
 /**
@@ -312,6 +368,13 @@ export function UnfinalizeDraft(week: string, person: string, level: string): $C
  */
 export function UnfinalizeGroup(week: string, group: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(1328501597, week, group);
+}
+
+/**
+ * UnfinalizeMonth 月报取消定稿。
+ */
+export function UnfinalizeMonth(month: string, level: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(4044476556, month, level);
 }
 
 /**

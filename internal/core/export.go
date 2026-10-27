@@ -56,8 +56,28 @@ func ExportFinal(ws *store.Workspace, kind, week, group string) (*ExportDoc, err
 			FileName: fmt.Sprintf("产品报-%s.md", week),
 			Body:     d.Body,
 		}, nil
+	case "month-group":
+		lead, groupName, err := MonthLead(ws, week, group)
+		if err != nil {
+			return nil, err
+		}
+		d, err := ws.FinalDraftKind(store.GroupDirName, week, lead.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &ExportDoc{
+			Title:    fmt.Sprintf("%s 组月报 %s", groupName, week),
+			FileName: fmt.Sprintf("%s-组月报-%s.md", safeFileName(groupName), week),
+			Body:     d.Body,
+		}, nil
+	case "month-product":
+		d, err := ws.FinalDraftKind(store.ProductDirName, week, store.ProductReportID)
+		if err != nil {
+			return nil, err
+		}
+		return &ExportDoc{Title: "产品月报 " + week, FileName: fmt.Sprintf("产品月报-%s.md", week), Body: d.Body}, nil
 	}
-	return nil, fmt.Errorf("%w: 未知报告类型 %q（group|product）", store.ErrInvalid, kind)
+	return nil, fmt.Errorf("%w: 未知报告类型 %q（group|product|month-group|month-product）", store.ErrInvalid, kind)
 }
 
 // Render 按格式输出正文。

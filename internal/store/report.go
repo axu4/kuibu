@@ -21,6 +21,8 @@ const (
 	ReportLevelMember = "member"
 	// ReportLevelLead 表示组长交给 SE。
 	ReportLevelLead = "lead"
+	// ReportLevelLeadMonth 表示组长月报（每月收集日交给 SE），目录在 reports/<YYYY-MM>/ 下。
+	ReportLevelLeadMonth = "lead-month"
 
 	// ReportSourcePaste 表示粘贴归档。
 	ReportSourcePaste = "paste"
@@ -200,7 +202,7 @@ var knownReportFrontMatterKeys = map[string]bool{
 
 // ValidReportLevel 判断周报层级是否合法。
 func ValidReportLevel(level string) bool {
-	return level == ReportLevelMember || level == ReportLevelLead
+	return level == ReportLevelMember || level == ReportLevelLead || level == ReportLevelLeadMonth
 }
 
 // ValidReportSource 判断周报来源是否合法。
@@ -276,7 +278,7 @@ func (w *Workspace) WriteReport(in NewReport) (*Report, error) {
 	if !ValidReportLevel(in.Level) {
 		return nil, fmt.Errorf("%w: 非法周报层级 %q", ErrInvalid, in.Level)
 	}
-	if _, _, err := WeekRange(in.Week); err != nil {
+	if err := validPeriodFor(in.Level, in.Week); err != nil {
 		return nil, err
 	}
 	source := in.Source
@@ -496,7 +498,8 @@ func (w *Workspace) ListReportWeeks() ([]string, error) {
 	}
 	var weeks []string
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		// 只认 ISO 周目录，月目录（YYYY-MM）不混进周列表。
+		if !e.IsDir() || !isoWeekPattern.MatchString(e.Name()) {
 			continue
 		}
 		weeks = append(weeks, e.Name())
@@ -549,12 +552,29 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 	if !ValidReportLevel(level) {
 		return nil, fmt.Errorf("%w: 非法周报层级 %q", ErrInvalid, level)
 	}
-	if _, _, err := WeekRange(week); err != nil {
-		return nil, err
-	}
-	monday, _, err := WeekRange(week)
-	if err != nil {
-		return nil, err
+	// monday 是判断所属组 / 产品线的参照日；月报用当月 1 日。
+	var monday, deadline time.Time
+	if level == ReportLevelLeadMonth {
+		start, err := MonthStart(week)
+		if err != nil {
+			return nil, err
+		}
+		monday = start
+		if deadline, err = w.MonthDeadline(week); err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		if monday, _, err = WeekRange(week); err != nil {
+			return nil, err
+		}
+		weekday, err := w.ReportWeekday()
+		if err != nil {
+			return nil, err
+		}
+		if deadline, err = WeekDeadline(week, weekday); err != nil {
+			return nil, err
+		}
 	}
 
 	people, err := w.ListPersons()
@@ -587,17 +607,8 @@ func (w *Workspace) ReportStatus(week, level, group, productLine string, now tim
 		return &st
 	}
 
-	weekday, err := w.ReportWeekday()
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := WeekDeadline(week, weekday)
-	if err != nil {
-		return nil, err
-	}
-
 	wantRole := RoleMember
-	if level == ReportLevelLead {
+	if level == ReportLevelLead || level == ReportLevelLeadMonth {
 		wantRole = RoleLead
 	}
 

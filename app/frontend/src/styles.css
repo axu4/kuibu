@@ -2570,6 +2570,8 @@ body.quicknote-body {
 }
 
 .report-head-meta {
+  display: flex;
+  align-items: center;
   margin-top: 6px;
   color: var(--ink-3);
   font-size: 12.5px;
@@ -3478,4 +3480,10 @@ body.quicknote-body {
 .menu button:disabled {
   opacity: 0.4;
   pointer-events: none;
+}
+
+/* ---------- 周报：周 / 月切换 ---------- */
+
+.period-switch {
+  margin: 0 10px 0 0;
 }

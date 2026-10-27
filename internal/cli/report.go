@@ -33,7 +33,7 @@ type reportJSON struct {
 // runReport 分发 report 子命令。
 func runReport(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry/group/product/export")
+		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry/group/product/export/month")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -67,6 +67,8 @@ func runReport(ctx context.Context, args []string, common *commonFlags, stdin io
 		return reportProduct(ctx, rest, common, stdin, stdout, stderr, env)
 	case "export":
 		return reportExport(rest, common, stdout, stderr, env)
+	case "month":
+		return reportMonth(ctx, rest, common, stdin, stdout, stderr, env)
 	default:
 		return usagef("未知 report 子命令 %q", sub)
 	}
@@ -107,12 +109,17 @@ func reportAdd(args []string, common *commonFlags, stdin io.Reader, stdout, stde
 	dryRun := fs.Bool("dry-run", false, "只输出预览，不写入")
 	file := fs.String("file", "", "从文件读取原文")
 	stdinFlag := fs.Bool("stdin", false, "从标准输入读取原文（默认）")
+	month := fs.String("month", "", "组长月报的月份（如 2026-10）；给出时按组长月报归档")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
 	}
 	if len(pos) > 0 {
 		return usagef("report add 不接受位置参数: %s", strings.Join(pos, " "))
+	}
+	if *month != "" {
+		// 组长月报：识别人员沿用组长层级的规则，按月份归档。
+		*level = store.ReportLevelLead
 	}
 	if *file != "" && *stdinFlag {
 		return usagef("--file 与 --stdin 不能同时使用")
@@ -210,9 +217,24 @@ func reportAdd(args []string, common *commonFlags, stdin io.Reader, stdout, stde
 		}
 	}
 
+	monthStr := ""
+	if *month != "" {
+		if monthStr, err = store.ParseMonth(*month, now); err != nil {
+			return err
+		}
+	}
 	reports := make([]*store.Report, 0, len(preview))
 	for _, p := range preview {
 		if p.Duplicate {
+			continue
+		}
+		if monthStr != "" {
+			r, err := ws.SubmitMonthReport(p.PersonID, monthStr, p.Text, store.ReportSourceCLI, now)
+			if err != nil {
+				return err
+			}
+			upsertReportIndex(ws, r.Week, r.Level, r.Person, stderr)
+			reports = append(reports, r)
 			continue
 		}
 		headerDate := ""
@@ -378,6 +400,7 @@ func reportStatus(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	level := fs.String("level", store.ReportLevelMember, "层级: member|lead")
 	group := fs.String("group", "", "按组过滤")
 	product := fs.String("product", "", "按产品线过滤")
+	monthFlag := fs.String("month", "", "组长月报的月份（如 2026-10），给出时统计组长月报")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -398,6 +421,13 @@ func reportStatus(args []string, common *commonFlags, stdout, stderr io.Writer, 
 			return err
 		}
 		week = w
+	}
+	if visited["month"] {
+		m, err := store.ParseMonth(*monthFlag, now)
+		if err != nil {
+			return err
+		}
+		week, *level = m, store.ReportLevelLeadMonth
 	}
 
 	ws, err := resolveWorkspace(common, env)
@@ -486,6 +516,7 @@ func reportConfig(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	fs := newFlagSet("report config")
 	addCommonFlags(fs, common)
 	weekday := fs.Int("weekday", 0, "周报日 1-7（1=周一…7=周日）")
+	monthDay := fs.Int("month-day", 0, "月报收集日 1-31（超过当月天数按月末，不因周末顺延）")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -507,22 +538,34 @@ func reportConfig(args []string, common *commonFlags, stdout, stderr io.Writer, 
 			return err
 		}
 	}
+	if visited["month-day"] {
+		if err := ws.SetReportMonthDay(*monthDay); err != nil {
+			return err
+		}
+	}
 	wd, err := ws.ReportWeekday()
+	if err != nil {
+		return err
+	}
+	md, err := ws.ReportMonthDay()
 	if err != nil {
 		return err
 	}
 
 	if common.json {
-		return writeJSON(stdout, map[string]int{"weekday": wd})
+		return writeJSON(stdout, map[string]int{"weekday": wd, "monthDay": md})
 	}
-	fmt.Fprintf(stdout, "周报日: %s（%d）\n", weekdayLabel(wd), wd)
+	fmt.Fprintf(stdout, "周报日: %s（%d）\n月报收集日: 每月 %d 日\n", weekdayLabel(wd), wd, md)
 	return nil
 }
 
 // levelLabel 返回层级中文名。
 func levelLabel(level string) string {
-	if level == store.ReportLevelLead {
+	switch level {
+	case store.ReportLevelLead:
 		return "lead（组长）"
+	case store.ReportLevelLeadMonth:
+		return "lead-month（组长月报）"
 	}
 	return "member（组员）"
 }

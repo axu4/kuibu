@@ -446,6 +446,31 @@ export interface ReportData {
 }
 
 /**
+ * ReportMonth 是一个月的信息。
+ */
+export interface ReportMonth {
+    /**
+     * Month 是月份编号，形如 2026-10。
+     */
+    "month": string;
+
+    /**
+     * CollectDay 是组长月报收集日（1-31）。
+     */
+    "collectDay": number;
+
+    /**
+     * Weeks 是按周报日归属本月的周。
+     */
+    "weeks": string[] | null;
+
+    /**
+     * IsCurrent 表示是否是当前月。
+     */
+    "isCurrent": boolean;
+}
+
+/**
  * ReportPerson 是提交状态里的一个人。
  */
 export interface ReportPerson {
