@@ -146,3 +146,70 @@ func TestPreviewReportsDuplicate(t *testing.T) {
 		t.Errorf("第 2 份不应标记为重复: %+v", preview[1])
 	}
 }
+
+func TestPreviewReportsStripsHeaderWhenPersonLocked(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+
+	p, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 锁定人员时，头行只是元信息，不并入正文。
+	preview, err := PreviewReports(ws, PreviewInput{
+		Text:   "【周报】张三 2026-10-26\n本周完成 A\n下周计划 B\n",
+		Person: p.ID,
+		Now:    now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preview) != 1 {
+		t.Fatalf("预览份数 = %d", len(preview))
+	}
+	if want := "本周完成 A\n下周计划 B"; preview[0].Text != want {
+		t.Errorf("锁定人员后正文 = %q，期望 %q", preview[0].Text, want)
+	}
+	if !preview[0].HasHeader {
+		t.Error("HasHeader 应保留，用来告诉用户识别到了头行")
+	}
+
+	// 不锁定人员时正文原样保留（头行是切分多份的依据）。
+	preview, err = PreviewReports(ws, PreviewInput{
+		Text: "【周报】张三 2026-10-26\n本周完成 A\n",
+		Now:  now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "【周报】张三 2026-10-26\n本周完成 A"; preview[0].Text != want {
+		t.Errorf("未锁定时正文 = %q，期望 %q", preview[0].Text, want)
+	}
+
+	// 只有头行、没有正文时保留原样，不写入空内容。
+	preview, err = PreviewReports(ws, PreviewInput{
+		Text:   "【周报】张三 2026-10-26",
+		Person: p.ID,
+		Now:    now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview[0].Text != "【周报】张三 2026-10-26" {
+		t.Errorf("只有头行时正文 = %q，应保留原样", preview[0].Text)
+	}
+
+	// 头行前有空行也能剥掉。
+	preview, err = PreviewReports(ws, PreviewInput{
+		Text:   "\n\n【周报】张三 2026/10/26\n本周完成 A",
+		Person: p.ID,
+		Now:    now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "本周完成 A"; preview[0].Text != want {
+		t.Errorf("头行前有空行时正文 = %q，期望 %q", preview[0].Text, want)
+	}
+}

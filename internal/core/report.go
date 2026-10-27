@@ -83,6 +83,21 @@ func ParseBatch(text string) []BatchItem {
 	return items
 }
 
+// stripReportHeader 去掉开头的【周报】头行，返回正文；正文为空时返回空字符串。
+func stripReportHeader(text string) string {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if _, _, _, ok := parseReportHeader(line); !ok {
+			return trimBlankLines(lines[i:])
+		}
+		return trimBlankLines(lines[i+1:])
+	}
+	return ""
+}
+
 // parseReportHeader 解析一行【周报】头，返回姓名、日期（YYYY-MM-DD）、日期是否非法。
 func parseReportHeader(line string) (name, date string, dateInvalid, ok bool) {
 	m := reportHeaderRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
@@ -195,6 +210,15 @@ func PreviewReports(ws *store.Workspace, in PreviewInput) ([]PreviewItem, error)
 
 	out := make([]PreviewItem, 0, len(items))
 	for _, it := range items {
+		text := it.Text
+		if in.Person != "" && it.HasHeader {
+			// 人员已由调用方锁定（例如在某人那一行点「粘贴」），头行只是
+			//「【周报】姓名 日期」这样的元信息，不再当正文归档；正文为空时
+			// 保留原样，免得丢掉唯一的一行内容。
+			if body := stripReportHeader(it.Text); body != "" {
+				text = body
+			}
+		}
 		pi := PreviewItem{
 			HasHeader:   it.HasHeader,
 			Name:        it.Name,
@@ -203,7 +227,7 @@ func PreviewReports(ws *store.Workspace, in PreviewInput) ([]PreviewItem, error)
 			Level:       level,
 			StartLine:   it.StartLine,
 			EndLine:     it.EndLine,
-			Text:        it.Text,
+			Text:        text,
 		}
 
 		// 周：外部指定优先于头行日期。

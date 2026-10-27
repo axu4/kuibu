@@ -16,12 +16,18 @@ import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import { ReportReview, alignmentText } from "./ReportReview";
 import { GroupReport } from "./GroupReport";
 import {
+  deadlineInfo,
   formatSubmittedAt,
+  loadReportDetailWidth,
+  REPORT_DETAIL_DEFAULT_WIDTH,
+  REPORT_DETAIL_MIN_WIDTH,
+  saveReportDetailWidth,
   groupLabel,
   groupProgressPercent,
   levelLabel,
   loadReportLevel,
   reportStatusLabel,
+  rowHint,
   saveReportLevel,
   weekdayLabel,
   weekRangeLabel,
@@ -61,11 +67,13 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReportData | null>(null);
   const [detailError, setDetailError] = useState(false);
-  const [paste, setPaste] = useState<{ personId: string } | null>(null);
+  const [paste, setPaste] = useState<{ personId: string; text: string } | null>(null);
   const [managerOpen, setManagerOpen] = useState(false);
   const [weekdayOpen, setWeekdayOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReportPerson | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  /** 刚归档的周报：用于「已归档 …」提示与撤销。 */
+  const [saved, setSaved] = useState<{ week: string; level: ReportLevel; personId: string; name: string } | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [period, setPeriod] = useState<"week" | "month">("week");
@@ -160,6 +168,15 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
     [loadStatus],
   );
 
+  /** 打开粘贴弹窗；personId 非空时锁定这个人，不再问「归给谁」。 */
+  const openPaste = useCallback((personId: string, text = "") => {
+    // 从行上或 ⌘V 进来时先收起右侧详情，别让抽屉叠在弹窗后面。
+    setSelectedId(null);
+    setDetail(null);
+    setDetailError(false);
+    setPaste({ personId, text });
+  }, []);
+
   const openRow = useCallback((entry: ReportPerson) => {
     setGroupOpen(false);
     setSelectedId(entry.personId);
@@ -171,6 +188,35 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
     setSelectedId(null);
     setDetail(null);
     setDetailError(false);
+  }, []);
+
+  // 选中某人后按 ⌘V：直接用剪贴板内容打开「粘贴 · 张三」，一步归档。
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+  const openPasteRef = useRef(openPaste);
+  openPasteRef.current = openPaste;
+  const pasteOpenRef = useRef(false);
+  pasteOpenRef.current = paste !== null;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "v") return;
+      if (e.altKey || e.shiftKey) return;
+      if (pasteOpenRef.current) return;
+      const personId = selectedIdRef.current;
+      if (!personId) return;
+      const target = e.target as HTMLElement | null;
+      // 正在输入框里粘贴时不要抢。
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+        return;
+      }
+      e.preventDefault();
+      void Clipboard.Text()
+        .then((value) => openPasteRef.current(personId, value ?? ""))
+        .catch(() => openPasteRef.current(personId, ""));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // 外部（含本服务自己写入）变化时刷新：周信息、状态与当前详情。
@@ -252,6 +298,26 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
     }
   }, []);
 
+  /** 撤销刚写入的周报（移入 .history，等同删除）。 */
+  const undoSaved = useCallback(async () => {
+    const target = saved;
+    setSaved(null);
+    if (!target) return;
+    try {
+      await ReportService.Delete(target.week, target.personId, target.level);
+      setToast(`已撤销「${target.name}」的周报`);
+    } catch (err) {
+      setToast(`撤销失败：${readableError(err)}`);
+    }
+  }, [saved]);
+
+  // 「已归档」提示挂 8 秒，够看清也够点撤销。
+  useEffect(() => {
+    if (!saved) return;
+    const timer = window.setTimeout(() => setSaved(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [saved]);
+
   const doDelete = useCallback(async () => {
     const target = deleteTarget;
     const w = weekRef.current;
@@ -315,6 +381,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
   const extra = useMemo(() => sortByName(status?.extra ?? []), [status]);
   const counts = status?.counts;
   const empty = status && (status.entries?.length ?? 0) === 0 && extra.length === 0;
+  const deadline = week ? deadlineInfo(week.start, week.reportDay) : null;
 
   if (period === "month") {
     return (
@@ -422,7 +489,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => setPaste({ personId: "" })}
+                onClick={() => openPaste("")}
               >
                 <Icon name="paste" size={14} />
                 粘贴周报
@@ -489,7 +556,9 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
                       entry={e}
                       showGroup={level === "lead"}
                       selected={selectedId === e.personId}
+                      overdue={deadline?.overdue ?? false}
                       onSelect={() => openRow(e)}
+                      onPaste={() => openPaste(e.personId)}
                     />
                   ))}
                 </div>
@@ -503,7 +572,9 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
                       entry={e}
                       showGroup={false}
                       selected={selectedId === e.personId}
+                      overdue={deadline?.overdue ?? false}
                       onSelect={() => openRow(e)}
+                      onPaste={() => openPaste(e.personId)}
                     />
                   ))}
                 </div>
@@ -534,7 +605,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
           refreshTick={refreshTick}
           onToast={setToast}
           onClose={closeDetail}
-          onRepaste={() => setPaste({ personId: selectedEntry.personId })}
+          onRepaste={() => openPaste(selectedEntry.personId)}
           onDelete={() => setDeleteTarget(selectedEntry)}
         />
       )}
@@ -544,11 +615,17 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
           week={week.week}
           level={level}
           presetPersonId={paste.personId}
+          initialText={paste.text}
           onClose={() => setPaste(null)}
           onDone={() => {
             setPaste(null);
             void loadStatus(week.week, level);
             setRefreshTick((t) => t + 1);
+            if (paste?.personId) {
+              const all = [...(statusRef.current?.entries ?? []), ...(statusRef.current?.extra ?? [])];
+              const name = all.find((e) => e.personId === paste.personId)?.name ?? "";
+              setSaved({ week: week.week, level, personId: paste.personId, name });
+            }
           }}
         />
       )}
@@ -585,6 +662,17 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
         </div>
       )}
 
+      {saved && (
+        <div className="toast is-action" role="status">
+          <span>
+            已归档{saved.name ? `「${saved.name}」` : ""}的周报 · {saved.week}
+          </span>
+          <button type="button" className="toast-action" onClick={() => void undoSaved()}>
+            撤销
+          </button>
+        </div>
+      )}
+
       {toast && (
         <div className="toast" role="alert" onClick={() => setToast(null)}>
           {toast}
@@ -598,41 +686,47 @@ interface ReportRowProps {
   entry: ReportPerson;
   showGroup: boolean;
   selected: boolean;
+  /** 已过截止时间：未交的人显示「逾期」。 */
+  overdue: boolean;
   onSelect: () => void;
+  /** 直接在行上粘贴（未交的人）：一次点击就进锁定了此人的粘贴框。 */
+  onPaste: () => void;
 }
 
-/** 一行人员状态：姓名、组（SE tab）、状态点与提交时间。 */
-function ReportRow({ entry, showGroup, selected, onSelect }: ReportRowProps) {
+/** 一行人员状态：状态点、姓名、组（SE tab）、状态字、提交时间；未交的行带「粘贴」。 */
+function ReportRow({ entry, showGroup, selected, overdue, onSelect, onPaste }: ReportRowProps) {
   return (
-    <button
-      type="button"
-      className={`report-row${selected ? " is-selected" : ""}`}
-      onClick={onSelect}
-    >
-      <span className="report-row-name">{entry.name}</span>
-      {showGroup && entry.group && <span className="report-row-group">{entry.group}</span>}
-      <span className={`report-row-status is-${entry.status}`}>
-        <span className="report-status-dot" />
-        {reportStatusLabel(entry.status)}
-      </span>
-      {entry.normalized && entry.normalized !== "none" && (
-        <span
-          className={`draft-badge is-${entry.normalized}${entry.sourceChanged ? " is-warn" : ""}`}
-          title={entry.sourceChanged ? "归一后原文又更新过" : undefined}
-        >
-          {entry.fromGroup ? "定稿（组报）" : entry.normalized === "final" ? "定稿" : "草稿"}
-          {entry.sourceChanged && " ·原文已更新"}
-        </span>
+    <div className={`report-row is-${entry.status}${selected ? " is-selected" : ""}`}>
+      <button type="button" className="report-row-main" onClick={onSelect}>
+        <span className={`report-status-dot is-${entry.status}`} aria-hidden="true" />
+        <span className="report-row-name">{entry.name}</span>
+        {showGroup && entry.group && <span className="report-row-group">{entry.group}</span>}
+        {entry.normalized && entry.normalized !== "none" && (
+          <span
+            className={`draft-badge is-${entry.normalized}${entry.sourceChanged ? " is-warn" : ""}`}
+            title={entry.sourceChanged ? "归一后原文又更新过" : undefined}
+          >
+            {entry.fromGroup ? "定稿（组报）" : entry.normalized === "final" ? "定稿" : "草稿"}
+            {entry.sourceChanged && " ·原文已更新"}
+          </span>
+        )}
+        {entry.alignment !== null && entry.alignment !== undefined && (
+          <span className="report-row-time" title="对照上周计划的对齐率">
+            对齐 {alignmentText(entry.alignment)}
+          </span>
+        )}
+        <span className={`report-row-state is-${entry.status}`}>{reportStatusLabel(entry.status)}</span>
+        {rowHint(entry.status, entry.submittedAt, overdue) && (
+          <span className="report-row-time">{rowHint(entry.status, entry.submittedAt, overdue)}</span>
+        )}
+      </button>
+      {entry.status === "missing" && (
+        <button type="button" className="report-row-paste" title="粘贴这个人的周报" onClick={onPaste}>
+          <Icon name="paste" size={13} />
+          粘贴
+        </button>
       )}
-      {entry.alignment !== null && entry.alignment !== undefined && (
-        <span className="report-row-time" title="对照上周计划的对齐率">
-          对齐 {alignmentText(entry.alignment)}
-        </span>
-      )}
-      {entry.submittedAt && (
-        <span className="report-row-time">{formatSubmittedAt(entry.submittedAt)}</span>
-      )}
-    </button>
+    </div>
   );
 }
 
@@ -668,13 +762,52 @@ function ReportDetailPanel({
   onDelete,
 }: ReportDetailPanelProps) {
   const [tab, setTab] = useState<"raw" | "draft" | "review">("raw");
+  // 面板宽度可拖动调整，记住上次的宽度。
+  const [width, setWidth] = useState<number>(loadReportDetailWidth);
   // 组长经组报带入的周报本身就是定稿，不需要归一。
   const canNormalize = entry.status !== "missing" && !entry.fromGroup;
   const canReview = canNormalize && level === "member";
   const showDraft = canNormalize && tab === "draft";
   const showReview = canReview && tab === "review";
+
+  useEffect(() => {
+    saveReportDetailWidth(width);
+  }, [width]);
+
+  // 拖动左边缘调宽度：向右拖变窄，向左拖变宽；最多占窗口的 85%。
+  const startResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = width;
+      const maxWidth = Math.max(REPORT_DETAIL_MIN_WIDTH, window.innerWidth * 0.85);
+      document.body.classList.add("is-resizing-x");
+      const onMove = (ev: MouseEvent) => {
+        const next = Math.min(maxWidth, Math.max(REPORT_DETAIL_MIN_WIDTH, startWidth + (startX - ev.clientX)));
+        setWidth(next);
+      };
+      const onUp = () => {
+        document.body.classList.remove("is-resizing-x");
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [width],
+  );
+
   return (
-    <section className={`report-detail${showReview ? " is-wide" : ""}`}>
+    <section className={`report-detail${showReview ? " is-wide" : ""}`} style={{ width }}>
+      <div
+        className="report-detail-resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="拖动调整宽度"
+        title="拖动调整宽度（双击恢复默认）"
+        onMouseDown={startResize}
+        onDoubleClick={() => setWidth(REPORT_DETAIL_DEFAULT_WIDTH)}
+      />
       <div className="report-detail-head">
         <div className="report-detail-head-main">
           <div className="report-detail-title">{entry.name}</div>
@@ -872,7 +1005,7 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReportData | null>(null);
   const [detailError, setDetailError] = useState(false);
-  const [paste, setPaste] = useState<{ personId: string } | null>(null);
+  const [paste, setPaste] = useState<{ personId: string; text: string } | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(level === "member");
   const [dayOpen, setDayOpen] = useState(false);
@@ -953,6 +1086,17 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
   }, [selected?.personId, selected?.status, refreshTick]);
 
   const counts = status?.counts;
+  // 月报收集日之后还没交的算逾期（收集日超过当月天数时按月末）。
+  const monthDayOverdue = useMemo(() => {
+    if (!month) return false;
+    const m = /^(\d{4})-(\d{2})$/.exec(month.month);
+    if (!m) return false;
+    const year = Number(m[1]);
+    const mon = Number(m[2]);
+    const lastDay = new Date(year, mon, 0).getDate();
+    const day = month.collectDay >= 1 ? Math.min(month.collectDay, lastDay) : lastDay;
+    return Date.now() >= new Date(year, mon - 1, day + 1).getTime();
+  }, [month]);
 
   return (
     <div className="report-view">
@@ -1049,7 +1193,7 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    onClick={() => setPaste({ personId: "" })}
+                    onClick={() => setPaste({ personId: "", text: "" })}
                   >
                     <Icon name="paste" size={14} />
                     粘贴月报
@@ -1078,10 +1222,12 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
                     entry={e}
                     showGroup
                     selected={selectedId === e.personId}
+                    overdue={monthDayOverdue}
                     onSelect={() => {
                       setPanelOpen(false);
                       setSelectedId(e.personId);
                     }}
+                    onPaste={() => setPaste({ personId: e.personId, text: "" })}
                   />
                 ))}
                 {status && entries.length === 0 && (
@@ -1122,7 +1268,7 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
           refreshTick={refreshTick}
           onToast={setToast}
           onClose={() => setSelectedId(null)}
-          onRepaste={() => setPaste({ personId: selected.personId })}
+          onRepaste={() => setPaste({ personId: selected.personId, text: "" })}
           onDelete={() => setToast("组长月报可重新粘贴覆盖，旧版自动保留在历史记录里")}
         />
       )}
@@ -1133,6 +1279,7 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
           level="lead"
           month
           presetPersonId={paste.personId}
+          initialText={paste.text}
           onClose={() => setPaste(null)}
           onDone={() => {
             setPaste(null);

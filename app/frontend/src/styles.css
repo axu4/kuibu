@@ -1185,6 +1185,28 @@ kbd {
   animation: toast-in 0.18s ease-out;
 }
 
+/* 带操作的提示（如「已归档 · 撤销」）：左侧文字、右侧按钮。 */
+.toast.is-action {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.toast-action {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.toast-action:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -2535,6 +2557,8 @@ body.quicknote-body {
   flex: 1;
   display: flex;
   min-height: 0;
+  /* 右侧详情是浮层，用绝对定位叠在上面，不参与挤压主内容。 */
+  position: relative;
 }
 
 .report-main {
@@ -2777,6 +2801,74 @@ body.quicknote-body {
 
 .report-row:hover {
   background: var(--hover);
+}
+
+/* 行主体是一个按钮，右侧另有「粘贴」按钮，两者并排但不嵌套。 */
+.report-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 42px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 未交的行右侧直接给「粘贴」：点一下就是「贴这个人的周报」，不用先进详情。 */
+.report-row-paste {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+
+.report-row:hover .report-row-paste,
+.report-row:focus-within .report-row-paste {
+  opacity: 1;
+}
+
+.report-row-paste:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 锁定了人员的粘贴弹窗：标题旁的一句话说明，省掉「归给谁」的问题。 */
+.report-paste-lock {
+  flex: 1;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.report-preview-person.is-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .report-row.is-selected {
@@ -3037,14 +3129,62 @@ body.quicknote-body {
 
 /* 右侧原文详情面板 */
 
+/* 详情抽屉浮在主内容之上：主列表宽度不变，不会被挤变形。 */
 .report-detail {
-  flex: 0 0 400px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* 宽度由组件按拖动结果内联设置，这里只兜底。 */
+  width: 420px;
+  max-width: 100%;
   border-left: 1px solid var(--line);
   background: var(--panel);
-  animation: slide-in 0.16s ease-out;
+  box-shadow: -12px 0 32px rgba(20, 30, 26, 0.08);
+  animation: slide-in 0.18s ease-out;
+}
+
+/* 左边缘的拖拽手柄：拖宽看长周报，双击恢复默认宽度。 */
+.report-detail-resize {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 8px;
+  height: 100%;
+  z-index: 1;
+  cursor: col-resize;
+}
+
+.report-detail-resize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 3px;
+  width: 2px;
+  height: 100%;
+  background: transparent;
+  transition: background 0.12s ease-out;
+}
+
+.report-detail-resize:hover::after,
+.report-detail-resize:active::after {
+  background: var(--accent-line);
+}
+
+/* 拖动过程中保持左右箭头光标，避免掠过其他元素时闪回。 */
+body.is-resizing-x,
+body.is-resizing-x * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* 抽屉浮在右侧时会盖住列表末尾，给主内容留出底部空间。 */
+.report-view:has(.report-detail) .report-scroll {
+  padding-bottom: 120px;
 }
 
 .report-detail-head {
