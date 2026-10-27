@@ -501,6 +501,36 @@ export interface ReportData {
 }
 
 /**
+ * ReportGroupCounts 是一个组的提交进度。
+ */
+export interface ReportGroupCounts {
+    /**
+     * Group 是组名，空组名由前端显示为「未分组」。
+     */
+    "group": string;
+
+    /**
+     * Expected 是该组应交人数。
+     */
+    "expected": number;
+
+    /**
+     * Submitted 是该组按时已交人数。
+     */
+    "submitted": number;
+
+    /**
+     * Late 是该组迟交人数。
+     */
+    "late": number;
+
+    /**
+     * Missing 是该组未交人数。
+     */
+    "missing": number;
+}
+
+/**
  * ReportMonth 是一个月的信息。
  */
 export interface ReportMonth {
@@ -699,6 +729,11 @@ export interface ReportStatusData {
      * Extra 是有提交但不在应交名单里的人。
      */
     "extra": ReportPerson[] | null;
+
+    /**
+     * Groups 是按组汇总的应交进度，只统计应交名单，未分组（空组名）排在最后。
+     */
+    "groups": ReportGroupCounts[] | null;
 }
 
 /**
@@ -979,6 +1014,11 @@ export interface TreeItem {
      * Title 是笔记标题。
      */
     "title": string;
+
+    /**
+     * Type 是笔记类型（note / folder / meeting 等），前端靠它区分目录与笔记。
+     */
+    "type": string;
 
     /**
      * Orphan 表示父笔记不存在，节点被当作根节点。

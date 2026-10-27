@@ -54,7 +54,7 @@ func newNoteJSON(n *store.Note, withBody bool) noteJSON {
 // runNote 分发 note 子命令。
 func runNote(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("note 需要子命令: new/list/show/edit/mv/rm/extract-todos")
+		return usagef("note 需要子命令: new/list/show/edit/mv/rm/extract-todos/migrate-folders")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -72,9 +72,43 @@ func runNote(ctx context.Context, args []string, common *commonFlags, stdin io.R
 		return noteRemove(ctx, rest, common, stdout, stderr, env)
 	case "extract-todos":
 		return noteExtractTodos(rest, common, stdout, stderr, env)
+	case "migrate-folders":
+		return noteMigrateFolders(rest, common, stdout, stderr, env)
 	default:
 		return usagef("未知 note 子命令 %q", sub)
 	}
+}
+
+// noteMigrateFolders 实现 note migrate-folders。
+//
+// 老工作台里父子关系只靠 parent 推导，任何笔记都能有子节点；引入目录模型后
+// 这些节点必须是目录。命令调用 store.MigrateFolders 就地补上 type=folder，
+// 可重复执行（没有需要迁移的节点时输出 0）。
+func noteMigrateFolders(args []string, common *commonFlags, stdout, stderr io.Writer, env func(string) string) error {
+	fs := newFlagSet("note migrate-folders")
+	addCommonFlags(fs, common)
+	pos, err := parseCommand(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("note migrate-folders 不接受位置参数: %s", strings.Join(pos, " "))
+	}
+
+	ws, err := resolveWorkspace(common, env)
+	if err != nil {
+		return err
+	}
+	converted, err := ws.MigrateFolders()
+	if err != nil {
+		return err
+	}
+
+	if common.json {
+		return writeJSON(stdout, map[string]int{"converted": converted})
+	}
+	fmt.Fprintf(stdout, "已把 %d 条笔记转为目录\n", converted)
+	return nil
 }
 
 // stringList 是可重复出现的字符串参数。
@@ -150,9 +184,12 @@ func (b *bodySource) read(stdin io.Reader) (string, error) {
 func noteNew(args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	fs := newFlagSet("note new")
 	addCommonFlags(fs, common)
-	title := fs.String("title", "", "标题")
-	parent := fs.String("parent", "", "父笔记 ID")
-	typ := fs.String("type", "note", "笔记类型")
+	title := fs.String("title", "", "标题，建目录时可省略")
+	parent := fs.String("parent", "", "父节点 ID，只能是目录")
+	typ := fs.String("type", "note", "笔记类型（folder 表示目录）")
+	// --folder 是 --type folder 的简写，-d 是它的短选项。
+	folder := fs.Bool("folder", false, "新建目录，等价于 --type folder")
+	fs.BoolVar(folder, "d", false, "新建目录（--folder 的简写）")
 	var tags stringList
 	fs.Var(&tags, "tag", "标签，可重复")
 	var src bodySource
@@ -164,13 +201,23 @@ func noteNew(args []string, common *commonFlags, stdin io.Reader, stdout, stderr
 	if len(pos) > 0 {
 		return usagef("note new 不接受位置参数: %s", strings.Join(pos, " "))
 	}
-	src.markSet(visitedSet(visitedFlags(fs)))
-	if strings.TrimSpace(*title) == "" {
-		return usagef("note new 需要 --title")
-	}
-	body, err := src.read(stdin)
+	visited := visitedSet(visitedFlags(fs))
+	src.markSet(visited)
+	noteType, err := noteNewType(*typ, *folder, visited["type"])
 	if err != nil {
 		return err
+	}
+	isFolder := noteType == store.FolderType
+	// 建目录不用正文，所以只有普通笔记才要求标题；目录标题为空时由 store 补默认目录名。
+	if strings.TrimSpace(*title) == "" && !isFolder {
+		return usagef("note new 需要 --title")
+	}
+	// 目录没有正文：建目录时忽略 --body/--file/--stdin（也不读 stdin，避免卡住）。
+	body := ""
+	if !isFolder {
+		if body, err = src.read(stdin); err != nil {
+			return err
+		}
 	}
 
 	ws, err := resolveWorkspace(common, env)
@@ -182,7 +229,7 @@ func noteNew(args []string, common *commonFlags, stdin io.Reader, stdout, stderr
 		Body:   body,
 		Parent: *parent,
 		Tags:   tags,
-		Type:   *typ,
+		Type:   noteType,
 	})
 	if err != nil {
 		return err
@@ -194,6 +241,25 @@ func noteNew(args []string, common *commonFlags, stdin io.Reader, stdout, stderr
 	}
 	fmt.Fprintln(stdout, note.ID)
 	return nil
+}
+
+// noteNewType 解析 note new 最终写入的笔记类型。
+//
+// --folder 与 --type 都能指定类型：--folder 等价于 --type folder，两者同时给且
+// 都指向目录时也照常创建；--folder 与非 folder 的 --type 一起给属于参数冲突，
+// 返回 USAGE。只给 --type 时按原样使用，空值退回默认类型 note。
+func noteNewType(typ string, folder, typeSet bool) (string, error) {
+	typ = strings.TrimSpace(typ)
+	if folder {
+		if !typeSet || typ == store.FolderType {
+			return store.FolderType, nil
+		}
+		return "", usagef("--folder 与 --type %s 冲突：目录的类型是 %s", typ, store.FolderType)
+	}
+	if typ == "" {
+		return "note", nil
+	}
+	return typ, nil
 }
 
 // noteList 实现 note list。
@@ -245,11 +311,22 @@ func noteList(args []string, common *commonFlags, stdout, stderr io.Writer, env 
 		return nil
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\t标题\t更新时间")
+	fmt.Fprintln(tw, "ID\t类型\t标题\t更新时间")
 	for _, n := range notes {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", n.ID, n.Title, formatLocal(n.Updated))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", n.ID, noteTypeLabel(n), n.Title, formatLocal(n.Updated))
 	}
 	return tw.Flush()
+}
+
+// noteTypeLabel 返回人类可读的笔记类型：目录显示「目录」，其余原样显示 type。
+func noteTypeLabel(n *store.Note) string {
+	if n.IsFolder() {
+		return "目录"
+	}
+	if n.Type == "" {
+		return "note"
+	}
+	return n.Type
 }
 
 // noteShow 实现 note show。

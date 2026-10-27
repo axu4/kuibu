@@ -25,12 +25,14 @@ const usageText = `用法:
 命令:
   init <dir> [--default]                 初始化工作台
   note new --title <t> [--parent <id>]   新建笔记
-  note list [--parent <id>] [--tag t]    列出笔记
+  note new --folder [--title <t>] [--parent <id>]  新建目录（= --type folder，-d 简写；忽略正文）
+  note list [--parent <id>] [--tag t]    列出笔记（含类型，目录显示「目录」）
   note show <id> [--meta-only]           查看笔记
   note edit <id> [--title t] ...         修改笔记
-  note mv <id> [--parent <id>|--root]    移动笔记
+  note mv <id> [--parent <id>|--root]    移动笔记（父节点只能是目录）
   note rm <id> [-r|--recursive]          删除笔记
   note extract-todos <id> [--dry-run]    把笔记里的「- [ ] …」行抽成待办（不重复）
+  note migrate-folders                   把有子笔记的普通笔记就地转为目录（升级老工作台，可重复执行）
   meeting open [--week W] | list         本周周会笔记（没有就建）/ 列出周会
   todo add <文本> [--due <值>]           快速录入待办
   todo list [--view v] [--status s] [--due d]  列出待办（--view today|week|all|done）
@@ -68,7 +70,7 @@ const usageText = `用法:
   calendar month [--month M] [--group g] [--perspective member|lead]  团队日历月视图（人 × 周）
   calendar day [--month M]                         团队日历日视图（月历格）
   template list|show|edit <名称>         报告模板（templates/<名称>.md）
-  tree [--root <id>]                     打印笔记树
+  tree [--root <id>]                     打印笔记树（目录带 [目录] 标记）
   search <query> [--limit n]             全文检索
   asset add <file>                       归档资源并输出相对路径
   index rebuild                          重建索引
@@ -79,6 +81,11 @@ const usageText = `用法:
   llm send [--model m] [--yes]           外发正文（stdin）；不带 --yes 只预览并退出 8
   version [--json]                       打印版本号
   help                                   打印本帮助
+
+笔记树:
+  树由每条笔记的 parent + order 推导，只有目录（type=folder）能包含笔记。新建子笔记时
+  --parent 必须指向目录，目录不能有正文。老工作台里「有子笔记但不是目录」的节点用
+  note migrate-folders 一键转换。
 
 工作台定位优先级:
   --workspace <dir> > 环境变量 KUIBU_WORKSPACE > 用户配置默认工作台 > 从当前目录向上查找

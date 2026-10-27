@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { TreeItem } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
 import { Menu } from "./Menu";
-import { dropMove, isSelfOrDescendant } from "../lib/tree";
+import type { MenuItem } from "./Menu";
+import { dropMove, effectiveZone, isFolder, isSelfOrDescendant } from "../lib/tree";
 import type { DropZone, MoveTarget } from "../lib/tree";
 
 /** 拖拽数据类型，只认树内拖动，避免和 Finder 拖文件混淆。 */
@@ -14,12 +15,16 @@ interface DropHint {
   zone: DropZone;
 }
 
-/** 由鼠标在行内的纵向位置决定放置方式：上 1/4 前面、下 1/4 后面、中间子节点。 */
-function zoneOf(e: React.DragEvent<HTMLElement>): DropZone {
+/** 鼠标在行内的纵向比例（0 顶 1 底）。 */
+function ratioOf(e: React.DragEvent<HTMLElement>): number {
   const rect = e.currentTarget.getBoundingClientRect();
-  const y = (e.clientY - rect.top) / rect.height;
-  if (y < 0.25) return "before";
-  if (y > 0.75) return "after";
+  return rect.height > 0 ? (e.clientY - rect.top) / rect.height : 0.5;
+}
+
+/** 由鼠标在行内的纵向位置决定放置方式：上 1/4 前面、下 1/4 后面、中间子节点。 */
+function zoneOf(ratio: number): DropZone {
+  if (ratio < 0.25) return "before";
+  if (ratio > 0.75) return "after";
   return "inside";
 }
 
@@ -29,9 +34,14 @@ interface TreeProps {
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  /** 在目录下新建笔记。 */
   onAddChild: (parent: string) => void;
-  /** 空树时的「新建笔记」。 */
+  /** 在目录下新建子目录。 */
+  onAddFolder: (parent: string) => void;
+  /** 在根层级新建笔记（空树的「新建笔记」）。 */
   onCreateRoot: () => void;
+  /** 在根层级新建目录。 */
+  onCreateFolderRoot: () => void;
   onRename: (item: TreeItem) => void;
   onDelete: (item: TreeItem) => void;
   /** 正在重命名的笔记 ID。 */
@@ -69,7 +79,9 @@ export function Tree(props: TreeProps) {
     onToggle,
     onSelect,
     onAddChild,
+    onAddFolder,
     onCreateRoot,
+    onCreateFolderRoot,
     onRename,
     onDelete,
     renamingId,
@@ -97,17 +109,27 @@ export function Tree(props: TreeProps) {
       }
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      const zone = zoneOf(e);
+      // 目录中间 = 成为子节点；笔记中间按上下半区算前后，和松手后的结果一致。
+      const target = findById(items, id);
+      if (!target) {
+        setHint(null);
+        return;
+      }
+      const ratio = ratioOf(e);
+      const zone = effectiveZone(target, zoneOf(ratio), ratio);
       setRootHint(false);
       if (hint?.id !== id || hint.zone !== zone) setHint({ id, zone });
     },
     onDrop: (e, id) => {
       e.preventDefault();
       e.stopPropagation();
-      const target = dragId ? dropMove(items, dragId, id, zoneOf(e)) : null;
+      const target = findById(items, id);
+      const ratio = ratioOf(e);
+      const zone = target ? effectiveZone(target, zoneOf(ratio), ratio) : "inside";
+      const move = dragId ? dropMove(items, dragId, id, zone) : null;
       setDragId(null);
       setHint(null);
-      if (target) onMove(target);
+      if (move) onMove(move);
     },
     onDragEnd: () => {
       setDragId(null);
@@ -124,6 +146,10 @@ export function Tree(props: TreeProps) {
           <button type="button" className="btn btn-ghost" onClick={onCreateRoot}>
             <Icon name="plus" size={14} />
             新建笔记
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onCreateFolderRoot}>
+            <Icon name="folder" size={14} />
+            新建目录
           </button>
         </div>
       </div>
@@ -161,6 +187,7 @@ export function Tree(props: TreeProps) {
           onToggle={onToggle}
           onSelect={onSelect}
           onAddChild={onAddChild}
+          onAddFolder={onAddFolder}
           onRename={onRename}
           onDelete={onDelete}
           onContextMenu={(e, target) => {
@@ -180,21 +207,65 @@ export function Tree(props: TreeProps) {
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
-          items={[
-            { label: "重命名", icon: "edit", onClick: () => onRename(menu.item) },
-            { label: "新建子笔记", icon: "plus", onClick: () => onAddChild(menu.item.id) },
-            { label: "删除…", icon: "trash", danger: true, onClick: () => onDelete(menu.item) },
-          ]}
+          items={rowMenuItems(menu.item, {
+            onRename,
+            onAddChild,
+            onAddFolder,
+            onDelete,
+          })}
         />
       )}
     </div>
   );
 }
 
+/** 右键菜单的调用方回调。 */
+interface RowActions {
+  onRename: (item: TreeItem) => void;
+  onAddChild: (parent: string) => void;
+  onAddFolder: (parent: string) => void;
+  onDelete: (item: TreeItem) => void;
+}
+
+/**
+ * 节点的右键菜单：目录下可以新建笔记 / 子目录，笔记没有新建子项。
+ */
+function rowMenuItems(item: TreeItem, actions: RowActions): MenuItem[] {
+  const items: MenuItem[] = [{ label: "重命名", icon: "edit", onClick: () => actions.onRename(item) }];
+  if (isFolder(item)) {
+    items.push(
+      { label: "新建笔记", icon: "note", onClick: () => actions.onAddChild(item.id) },
+      { label: "新建子目录", icon: "folder", onClick: () => actions.onAddFolder(item.id) },
+    );
+  }
+  items.push({ label: "删除…", icon: "trash", danger: true, onClick: () => actions.onDelete(item) });
+  return items;
+}
+
+/** 在树里按 ID 找节点。 */
+function findById(items: TreeItem[], id: string): TreeItem | null {
+  for (const item of items) {
+    if (item.id === id) {
+      return item;
+    }
+    const found = findById(item.children ?? [], id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
 interface TreeRowProps
   extends Omit<
     TreeProps,
-    "items" | "renamingId" | "onRenameSubmit" | "onRenameCancel" | "onCreateRoot" | "onMove"
+    | "items"
+    | "renamingId"
+    | "onRenameSubmit"
+    | "onRenameCancel"
+    | "onCreateRoot"
+    | "onCreateFolderRoot"
+    | "onMove"
   > {
   drag: DragHandlers;
   item: TreeItem;
@@ -214,6 +285,7 @@ function TreeRow(props: TreeRowProps) {
     onToggle,
     onSelect,
     onAddChild,
+    onAddFolder,
     onRename,
     onDelete,
     onContextMenu,
@@ -225,17 +297,20 @@ function TreeRow(props: TreeRowProps) {
 
   const children = item.children ?? [];
   const hasChildren = children.length > 0;
+  const folder = isFolder(item);
   const isOpen = expanded.has(item.id);
   const isSelected = selectedId === item.id;
   const isRenaming = renamingId === item.id;
   const dropZone = drag.hint?.id === item.id ? drag.hint.zone : null;
+  // 只有目录有展开箭头（空目录也保留位置，保证缩进对齐）。
+  const showCaret = folder;
 
   return (
     <>
       <div
         className={`tree-row${isSelected ? " is-selected" : ""}${
           drag.dragId === item.id ? " is-dragging" : ""
-        }${dropZone ? ` is-drop-${dropZone}` : ""}`}
+        }${dropZone ? ` is-drop-${dropZone}` : ""}${folder ? " is-folder" : ""}`}
         style={{ paddingLeft: 4 + depth * 16 }}
         draggable={!isRenaming}
         onDragStart={(e) => {
@@ -252,7 +327,7 @@ function TreeRow(props: TreeRowProps) {
       >
         <button
           type="button"
-          className={`tree-caret${hasChildren ? "" : " is-hidden"}${isOpen ? " is-open" : ""}`}
+          className={`tree-caret${showCaret ? "" : " is-hidden"}${isOpen ? " is-open" : ""}`}
           aria-label={isOpen ? "折叠" : "展开"}
           onClick={(e) => {
             e.stopPropagation();
@@ -270,6 +345,11 @@ function TreeRow(props: TreeRowProps) {
           />
         ) : (
           <>
+            {folder && (
+              <span className="tree-kind" aria-hidden>
+                <Icon name={isOpen ? "folderOpen" : "folder"} size={14} />
+              </span>
+            )}
             <span className="tree-label" title={item.title}>
               {item.title}
             </span>
@@ -300,17 +380,20 @@ function TreeRow(props: TreeRowProps) {
             >
               <Icon name="more" size={14} className="icon-bold" />
             </button>
-            <button
-              type="button"
-              className="tree-action"
-              title="新建子笔记"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddChild(item.id);
-              }}
-            >
-              <Icon name="plus" size={14} />
-            </button>
+            {/* 只有目录能装子项，笔记不显示「+」。 */}
+            {folder && (
+              <button
+                type="button"
+                className="tree-action"
+                title="新建子笔记"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddChild(item.id);
+                }}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+            )}
           </span>
         )}
       </div>
@@ -327,6 +410,7 @@ function TreeRow(props: TreeRowProps) {
             onToggle={onToggle}
             onSelect={onSelect}
             onAddChild={onAddChild}
+            onAddFolder={onAddFolder}
             onRename={onRename}
             onDelete={onDelete}
             onContextMenu={onContextMenu}

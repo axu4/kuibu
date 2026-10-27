@@ -27,7 +27,7 @@ func TestEnsureInboxCreatesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("首次 EnsureInbox 失败: %v", err)
 	}
-	if first.Title != InboxTitle || first.Type != InboxType || first.Parent != "" || first.Body != "" {
+	if first.Title != InboxTitle || first.Type != store.FolderType || first.Parent != "" || first.Body != "" {
 		t.Fatalf("收件箱字段不对: %+v", first)
 	}
 
@@ -45,12 +45,12 @@ func TestEnsureInboxCreatesOnce(t *testing.T) {
 	}
 	count := 0
 	for _, n := range notes {
-		if n.Type == InboxType {
+		if n.IsFolder() {
 			count++
 		}
 	}
 	if count != 1 {
-		t.Errorf("inbox 笔记数量 = %d，期望 1", count)
+		t.Errorf("收件箱目录数量 = %d，期望 1", count)
 	}
 }
 
@@ -61,8 +61,8 @@ func TestEnsureInboxIgnoresSameTitleDifferentType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("创建同名普通笔记失败: %v", err)
 	}
-	if user.Type == InboxType {
-		t.Fatalf("普通笔记类型不应是 %q", InboxType)
+	if user.IsFolder() {
+		t.Fatalf("普通笔记不应是目录")
 	}
 
 	inbox, err := EnsureInbox(w)
@@ -72,8 +72,8 @@ func TestEnsureInboxIgnoresSameTitleDifferentType(t *testing.T) {
 	if inbox.ID == user.ID {
 		t.Fatalf("EnsureInbox 误用了同名的普通笔记 %q", user.ID)
 	}
-	if inbox.Type != InboxType {
-		t.Errorf("Type = %q，期望 %q", inbox.Type, InboxType)
+	if inbox.Type != store.FolderType {
+		t.Errorf("Type = %q，期望 %q", inbox.Type, store.FolderType)
 	}
 }
 
@@ -197,5 +197,33 @@ func TestTitle(t *testing.T) {
 				t.Errorf("Title(%q) = %q，期望 %q", tc.text, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestEnsureInboxUpgradesLegacyInbox 确认老工作台里 type=inbox 的收件箱
+// 会被就地升级成目录，已有条目继续挂得住。
+func TestEnsureInboxUpgradesLegacyInbox(t *testing.T) {
+	w := newWorkspace(t)
+
+	legacy, err := w.Create(store.NewNote{Title: InboxTitle, Type: InboxType})
+	if err != nil {
+		t.Fatalf("创建老收件箱失败: %v", err)
+	}
+	inbox, err := EnsureInbox(w)
+	if err != nil {
+		t.Fatalf("EnsureInbox 失败: %v", err)
+	}
+	if inbox.ID != legacy.ID {
+		t.Errorf("EnsureInbox 应复用老收件箱 %q，得到 %q", legacy.ID, inbox.ID)
+	}
+	if !inbox.IsFolder() {
+		t.Errorf("老收件箱未升级成目录，Type = %q", inbox.Type)
+	}
+	if inbox.Title != InboxTitle {
+		t.Errorf("Title = %q，期望 %q", inbox.Title, InboxTitle)
+	}
+
+	if _, err := Save(w, "升个级试试", time.Now()); err != nil {
+		t.Fatalf("升级后 Save 失败: %v", err)
 	}
 }

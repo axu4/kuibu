@@ -16,6 +16,9 @@ import (
 )
 
 // InboxType 是随手记收件箱笔记的类型。
+//
+// 引入目录模型后收件箱是目录（store.FolderType），新的收件箱一律写成目录；
+// 这个常量只用于识别老工作台里 type=inbox 的收件箱，保留导出避免破坏既有引用。
 const InboxType = "inbox"
 
 // InboxTitle 是随手记收件箱的默认标题。
@@ -29,8 +32,9 @@ const maxTitleRunes = 40
 
 // EnsureInbox 返回工作台根节点中的随手记收件箱，不存在时自动创建。
 //
-// 根节点中存在多条 Type 为 InboxType 的笔记时，取 Order 最小、再按 ID
-// 排序的第一个。只认 Type，不认标题，避免误用用户手建的同名笔记。
+// 收件箱是笔记树里的目录节点（Type 为 store.FolderType），随手记作为它的
+// 子笔记存放——只有目录能包含子节点。老工作台里的收件箱是 type=inbox 的
+// 普通笔记，这里会把选中的收件箱就地升级成目录（ID、标题、已有条目不变）。
 func EnsureInbox(ws *store.Workspace) (*store.Note, error) {
 	if ws == nil {
 		return nil, fmt.Errorf("%w: 工作台为空", store.ErrInvalid)
@@ -42,7 +46,11 @@ func EnsureInbox(ws *store.Workspace) (*store.Note, error) {
 
 	var candidates []*store.Note
 	for _, n := range notes {
-		if n.Parent == "" && n.Type == InboxType {
+		if n.Parent != "" {
+			continue
+		}
+		// 新收件箱是目录；老收件箱按 type=inbox 识别。
+		if (n.Type == store.FolderType && n.Title == InboxTitle) || n.Type == InboxType {
 			candidates = append(candidates, n)
 		}
 	}
@@ -53,12 +61,12 @@ func EnsureInbox(ws *store.Workspace) (*store.Note, error) {
 			}
 			return candidates[i].ID < candidates[j].ID
 		})
-		return candidates[0], nil
+		return ws.EnsureFolder(candidates[0].ID)
 	}
 
 	return ws.Create(store.NewNote{
 		Title: InboxTitle,
-		Type:  InboxType,
+		Type:  store.FolderType,
 		Body:  "",
 	})
 }
