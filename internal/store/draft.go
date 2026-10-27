@@ -59,6 +59,8 @@ type Draft struct {
 	HumanEdited bool
 	// Body 是归一后的 Markdown 正文。
 	Body string
+	// Review 是「对照上周计划」的结果，只存在 front matter，不影响定稿状态。
+	Review *DraftReview
 	// Extra 保存 front matter 中未识别的字段。
 	Extra map[string]any
 
@@ -69,6 +71,58 @@ type Draft struct {
 var knownDraftKeys = map[string]bool{
 	"person": true, "name": true, "week": true, "status": true, "sourceHash": true,
 	"model": true, "generatedAt": true, "editedAt": true, "finalizedAt": true, "humanEdited": true,
+	"review": true,
+}
+
+// 对照状态。
+const (
+	ReviewDone     = "done"
+	ReviewPartial  = "partial"
+	ReviewDelayed  = "delayed"
+	ReviewCanceled = "canceled"
+)
+
+// ValidReviewStatus 判断对照状态是否合法。
+func ValidReviewStatus(s string) bool {
+	switch s {
+	case ReviewDone, ReviewPartial, ReviewDelayed, ReviewCanceled:
+		return true
+	}
+	return false
+}
+
+// ReviewItem 是上周一条计划的对照结果。
+type ReviewItem struct {
+	// Plan 是上周计划条目 id。
+	Plan string `yaml:"plan" json:"plan"`
+	// Status 是 done / partial / delayed / canceled。
+	Status string `yaml:"status" json:"status"`
+	// Matches 是对应的本周完成项 id。
+	Matches []string `yaml:"matches,omitempty" json:"matches"`
+	// Note 是备注。
+	Note string `yaml:"note,omitempty" json:"note"`
+	// Source 是 ai（AI 建议，未经人工确认）或 human。
+	Source string `yaml:"source,omitempty" json:"source"`
+}
+
+// DraftReview 是本周归一稿上记录的对照结果。
+type DraftReview struct {
+	Items []ReviewItem `yaml:"items" json:"items"`
+	// Carried 是已顺延到本周「下周计划」的上周计划 id。
+	Carried []string `yaml:"carried,omitempty" json:"carried"`
+}
+
+// SaveDraftReview 只更新归一稿 front matter 的对照结果，不改正文与定稿状态。
+func (w *Workspace) SaveDraftReview(week, personID string, review DraftReview) (*Draft, error) {
+	d, err := w.ReadDraft(week, personID)
+	if err != nil {
+		return nil, err
+	}
+	d.Review = &review
+	if err := w.writeDraft(d); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // SourceHash 返回原文正文的 sha256（十六进制）。
@@ -356,6 +410,11 @@ func ReadDraftFile(path string) (*Draft, error) {
 					d.FinalizedAt = decodeTime(val)
 				case "humanEdited":
 					_ = val.Decode(&d.HumanEdited)
+				case "review":
+					var rv DraftReview
+					if err := val.Decode(&rv); err == nil {
+						d.Review = &rv
+					}
 				default:
 					var v any
 					if err := val.Decode(&v); err == nil {
@@ -389,6 +448,11 @@ func (w *Workspace) writeDraft(d *Draft) error {
 	appendFrontMatterKey(root, "finalizedAt", stringNode(optTime(d.FinalizedAt)))
 	if err := appendFrontMatterValue(root, "humanEdited", d.HumanEdited); err != nil {
 		return err
+	}
+	if d.Review != nil && (len(d.Review.Items) > 0 || len(d.Review.Carried) > 0) {
+		if err := appendFrontMatterValue(root, "review", d.Review); err != nil {
+			return err
+		}
 	}
 	if err := appendExtraFrontMatter(root, d.Extra, d.extraNodes, knownDraftKeys); err != nil {
 		return err
