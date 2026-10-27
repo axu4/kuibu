@@ -13,6 +13,7 @@ import { ReportPaste } from "./ReportPaste";
 import { PeopleManager } from "./PeopleManager";
 import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import { ReportReview, alignmentText } from "./ReportReview";
+import { GroupReport } from "./GroupReport";
 import {
   formatSubmittedAt,
   levelLabel,
@@ -54,6 +55,7 @@ export function ReportView() {
   const [deleteTarget, setDeleteTarget] = useState<ReportPerson | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   // 外部变化后用于强制重载当前详情（status 没变时，effect 依赖可能不触发）。
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -144,6 +146,7 @@ export function ReportView() {
   );
 
   const openRow = useCallback((entry: ReportPerson) => {
+    setGroupOpen(false);
     setSelectedId(entry.personId);
     setDetail(null);
     setDetailError(false);
@@ -375,6 +378,19 @@ export function ReportView() {
               </span>
             </div>
             <div className="report-actions">
+              {level === "member" && (
+                <button
+                  type="button"
+                  className={`btn${groupOpen ? " is-on" : ""}`}
+                  onClick={() => {
+                    setSelectedId(null);
+                    setGroupOpen((v) => !v);
+                  }}
+                >
+                  <Icon name="report" size={14} />
+                  组报
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-primary"
@@ -447,7 +463,16 @@ export function ReportView() {
         </div>
       </section>
 
-      {selectedEntry && week && (
+      {groupOpen && level === "member" && week && (
+        <GroupReport
+          week={week.week}
+          refreshTick={refreshTick}
+          onClose={() => setGroupOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
+      {!groupOpen && selectedEntry && week && (
         <ReportDetailPanel
           entry={selectedEntry}
           report={detail}
