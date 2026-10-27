@@ -127,8 +127,11 @@ func TestCLIWorkflow(t *testing.T) {
 	e := newTestEnv(t)
 	e.initWorkspace()
 
-	// 根笔记。
-	rootJSON := e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "根笔记", "--tag", "工作", "--body", "跬步笔记支持中文全文检索。", "--json")
+	// 目录：只有目录节点能包含子笔记。
+	dirID := idOf(t, e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "目录", "--type", "folder"))
+
+	// 根笔记，挂在目录下。
+	rootJSON := e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "根笔记", "--tag", "工作", "--body", "跬步笔记支持中文全文检索。", "--parent", dirID, "--json")
 	root := rootJSON.jsonOut(t)
 	rootID, _ := root["id"].(string)
 	if rootID == "" {
@@ -141,28 +144,34 @@ func TestCLIWorkflow(t *testing.T) {
 		t.Errorf("body = %v", root["body"])
 	}
 
-	// 子笔记（纯文本模式输出 ID）。
-	childID := idOf(t, e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "子笔记", "--parent", rootID))
+	// 子笔记（纯文本模式输出 ID），与根笔记同级。
+	childID := idOf(t, e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "子笔记", "--parent", dirID))
 
-	// list 人类模式包含两行。
+	// 往普通笔记下建笔记应被拒绝。
+	underNote := e.run("", "note", "new", "--workspace", e.workspace, "--title", "笔记里的笔记", "--parent", rootID, "--json")
+	if underNote.code != 1 || underNote.jsonErrorCode(t) != "INVALID" {
+		t.Errorf("往笔记下建笔记结果 = %+v，期望 INVALID/1", underNote)
+	}
+
+	// list 人类模式包含各行。
 	list := e.mustRun("", "note", "list", "--workspace", e.workspace)
-	if !strings.Contains(list.stdout, "根笔记") || !strings.Contains(list.stdout, "子笔记") {
+	if !strings.Contains(list.stdout, "目录") || !strings.Contains(list.stdout, "根笔记") || !strings.Contains(list.stdout, "子笔记") {
 		t.Errorf("list 输出缺少笔记:\n%s", list.stdout)
 	}
 	if !strings.Contains(list.stdout, "ID") || !strings.Contains(list.stdout, "更新时间") {
 		t.Errorf("list 输出缺少表头:\n%s", list.stdout)
 	}
 
-	// list JSON 数组。
+	// list JSON 数组：目录 + 两条笔记。
 	listJSON := e.mustRun("", "note", "list", "--workspace", e.workspace, "--json")
-	if got := len(listJSON.jsonArray(t)); got != 2 {
-		t.Errorf("list JSON 条数 = %d，期望 2", got)
+	if got := len(listJSON.jsonArray(t)); got != 3 {
+		t.Errorf("list JSON 条数 = %d，期望 3", got)
 	}
 
 	// list --parent 过滤。
-	onlyRoot := e.mustRun("", "note", "list", "--workspace", e.workspace, "--parent", rootID)
-	if strings.Contains(onlyRoot.stdout, "根笔记") || !strings.Contains(onlyRoot.stdout, "子笔记") {
-		t.Errorf("--parent 过滤不正确:\n%s", onlyRoot.stdout)
+	inDir := e.mustRun("", "note", "list", "--workspace", e.workspace, "--parent", dirID)
+	if !strings.Contains(inDir.stdout, "根笔记") || !strings.Contains(inDir.stdout, "子笔记") || strings.Contains(inDir.stdout, "目录") {
+		t.Errorf("--parent 过滤不正确:\n%s", inDir.stdout)
 	}
 
 	// list --tag 过滤。
@@ -229,9 +238,15 @@ func TestCLIWorkflow(t *testing.T) {
 		t.Errorf("mv --root 后 parent = %v", moved["parent"])
 	}
 
-	// mv：再挂回根笔记，然后尝试成环。
-	e.mustRun("", "note", "mv", childID, "--parent", rootID, "--workspace", e.workspace)
-	cycle := e.run("", "note", "mv", rootID, "--parent", childID, "--json", "--workspace", e.workspace)
+	// mv：再挂回目录下（只有目录能当父节点），把笔记拖进笔记则被拒绝。
+	e.mustRun("", "note", "mv", childID, "--parent", dirID, "--workspace", e.workspace)
+	intoNote := e.run("", "note", "mv", childID, "--parent", rootID, "--json", "--workspace", e.workspace)
+	if intoNote.code != 1 || intoNote.jsonErrorCode(t) != "INVALID" {
+		t.Errorf("把笔记移到笔记下结果 = %+v，期望 INVALID/1", intoNote)
+	}
+
+	// mv：目录移到自身上面报成环。
+	cycle := e.run("", "note", "mv", dirID, "--parent", dirID, "--json", "--workspace", e.workspace)
 	if cycle.code != 1 {
 		t.Errorf("成环 mv 退出码 = %d，期望 1", cycle.code)
 	}
@@ -247,41 +262,46 @@ func TestCLIWorkflow(t *testing.T) {
 		t.Errorf("tree 中缺少第二根:\n%s", tree.stdout)
 	}
 
-	// tree 人类模式带缩进与 ID。
-	if !strings.Contains(tree.stdout, "- 根笔记（改）  ("+rootID+")") {
+	// tree 人类模式带缩进与 ID：根笔记与子笔记都挂在目录下，缩进一级。
+	if !strings.Contains(tree.stdout, "\n  - 根笔记（改）  ("+rootID+")") {
 		t.Errorf("tree 输出格式不正确:\n%s", tree.stdout)
 	}
 	if !strings.Contains(tree.stdout, "\n  - 子笔记  ("+childID+")") {
 		t.Errorf("tree 子节点缩进不正确:\n%s", tree.stdout)
 	}
 
-	// tree JSON 嵌套结构。
+	// tree JSON 嵌套结构：目录是根节点，下面挂两条笔记。
 	treeJSON := e.mustRun("", "tree", "--json", "--workspace", e.workspace).jsonArray(t)
 	if len(treeJSON) != 2 {
 		t.Fatalf("tree JSON 根节点数 = %d，期望 2", len(treeJSON))
 	}
-	var foundRoot bool
+	var foundDir bool
 	for _, raw := range treeJSON {
 		node, _ := raw.(map[string]any)
-		if node["id"] != rootID {
+		if node["id"] != dirID {
 			continue
 		}
-		foundRoot = true
+		foundDir = true
 		children, _ := node["children"].([]any)
-		if len(children) != 1 {
-			t.Fatalf("根笔记子节点数 = %d，期望 1", len(children))
+		if len(children) != 2 {
+			t.Fatalf("目录子节点数 = %d，期望 2", len(children))
 		}
-		child, _ := children[0].(map[string]any)
-		if child["id"] != childID {
-			t.Errorf("子节点 id = %v，期望 %s", child["id"], childID)
+		ids := map[string]bool{}
+		for _, rawChild := range children {
+			child, _ := rawChild.(map[string]any)
+			id, _ := child["id"].(string)
+			ids[id] = true
+		}
+		if !ids[rootID] || !ids[childID] {
+			t.Errorf("目录子节点 = %v，期望包含 %s 与 %s", ids, rootID, childID)
 		}
 	}
-	if !foundRoot {
-		t.Errorf("tree JSON 未包含根笔记")
+	if !foundDir {
+		t.Errorf("tree JSON 未包含目录")
 	}
 
-	// tree --root 只输出子树。
-	subtree := e.mustRun("", "tree", "--root", rootID, "--json", "--workspace", e.workspace).jsonArray(t)
+	// tree --root 只输出子树（目录下两条笔记）。
+	subtree := e.mustRun("", "tree", "--root", dirID, "--json", "--workspace", e.workspace).jsonArray(t)
 	if len(subtree) != 1 {
 		t.Errorf("tree --root 根节点数 = %d，期望 1", len(subtree))
 	}
@@ -326,15 +346,24 @@ func TestCLIWorkflow(t *testing.T) {
 		t.Errorf("asset add JSON path = %v，期望 %q", assetJSON["path"], rel)
 	}
 
+	// 目录移到自己的子目录下报成环。
+	subDirID := idOf(t, e.mustRun("", "note", "new", "--workspace", e.workspace, "--title", "子目录", "--type", "folder", "--parent", dirID))
+	descendantCycle := e.run("", "note", "mv", dirID, "--parent", subDirID, "--json", "--workspace", e.workspace)
+	if descendantCycle.code != 1 || descendantCycle.jsonErrorCode(t) != "CYCLE" {
+		t.Errorf("目录移到后代下结果 = %+v，期望 CYCLE/1", descendantCycle)
+	}
+
 	// rm 无 -r 有子节点被拒。
-	rmDenied := e.run("", "note", "rm", rootID, "--json", "--workspace", e.workspace)
+	rmDenied := e.run("", "note", "rm", dirID, "--json", "--workspace", e.workspace)
 	if rmDenied.code != 1 || rmDenied.jsonErrorCode(t) != "HAS_CHILDREN" {
 		t.Errorf("非递归删除结果 = %+v，期望 HAS_CHILDREN/1", rmDenied)
 	}
-	// 递归删除成功。
-	e.mustRun("", "note", "rm", rootID, "-r", "--workspace", e.workspace)
-	if res := e.run("", "note", "show", rootID, "--json", "--workspace", e.workspace); res.code != 1 || res.jsonErrorCode(t) != "NOT_FOUND" {
-		t.Errorf("删除后 show 结果 = %+v，期望 NOT_FOUND/1", res)
+	// 递归删除成功：目录连同下面的笔记、子目录一起消失。
+	e.mustRun("", "note", "rm", dirID, "-r", "--workspace", e.workspace)
+	for _, id := range []string{dirID, rootID, childID, subDirID} {
+		if res := e.run("", "note", "show", id, "--json", "--workspace", e.workspace); res.code != 1 || res.jsonErrorCode(t) != "NOT_FOUND" {
+			t.Errorf("删除后 show %s 结果 = %+v，期望 NOT_FOUND/1", id, res)
+		}
 	}
 
 	// index rebuild。

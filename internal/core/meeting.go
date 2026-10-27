@@ -56,11 +56,16 @@ func OpenMeeting(ws *store.Workspace, week string) (*store.Note, bool, error) {
 		}
 	}
 	if folder == "" {
-		f, err := ws.Create(store.NewNote{Title: MeetingFolderTitle})
+		f, err := ws.Create(store.NewNote{Title: MeetingFolderTitle, Type: store.FolderType})
 		if err != nil {
 			return nil, false, err
 		}
 		folder = f.ID
+	} else {
+		// 只有目录能包含子节点：老工作台的「周会」节点可能是普通笔记，就地转成目录。
+		if _, err := ws.EnsureFolder(folder); err != nil {
+			return nil, false, err
+		}
 	}
 	weekday, err := ws.MeetingWeekday()
 	if err != nil {

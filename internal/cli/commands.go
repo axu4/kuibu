@@ -60,8 +60,10 @@ func runInit(args []string, common *commonFlags, stdout, stderr io.Writer, env f
 
 // treeJSON 是 tree --json 的嵌套结构。
 type treeJSON struct {
-	ID       string     `json:"id"`
-	Title    string     `json:"title"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Type 是节点类型，目录为 "folder"，其余为普通笔记类型。
+	Type     string     `json:"type"`
 	Orphan   bool       `json:"orphan"`
 	Cycle    bool       `json:"cycle"`
 	Children []treeJSON `json:"children"`
@@ -69,9 +71,14 @@ type treeJSON struct {
 
 // toTreeJSON 递归转换树节点。
 func toTreeJSON(n *store.TreeNode) treeJSON {
+	typ := n.Note.Type
+	if typ == "" {
+		typ = "note"
+	}
 	out := treeJSON{
 		ID:       n.Note.ID,
 		Title:    n.Note.Title,
+		Type:     typ,
 		Orphan:   n.Orphan,
 		Cycle:    n.Cycle,
 		Children: make([]treeJSON, 0, len(n.Children)),
@@ -152,6 +159,9 @@ func printTree(b *strings.Builder, n *store.TreeNode, depth int) {
 	b.WriteString("  (")
 	b.WriteString(n.Note.ID)
 	b.WriteString(")")
+	if n.Note.IsFolder() {
+		b.WriteString(" [目录]")
+	}
 	if n.Orphan {
 		b.WriteString(" [孤儿]")
 	}

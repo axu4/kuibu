@@ -34,6 +34,8 @@ type TreeItem struct {
 	ID string `json:"id"`
 	// Title 是笔记标题。
 	Title string `json:"title"`
+	// Type 是笔记类型（note / folder / meeting 等），前端靠它区分目录与笔记。
+	Type string `json:"type"`
 	// Orphan 表示父笔记不存在，节点被当作根节点。
 	Orphan bool `json:"orphan"`
 	// Cycle 表示节点因父子环被降为根节点。
@@ -308,18 +310,36 @@ func (s *WorkspaceService) Get(id string) (NoteData, error) {
 }
 
 // Create 新建一条笔记，parent 为空表示根节点，返回新笔记。
+//
+// parent 非空时必须是目录（type=folder），往笔记下建笔记会返回 ErrInvalid。
 func (s *WorkspaceService) Create(title, parent string) (NoteData, error) {
 	title = strings.TrimSpace(title)
 	if title == "" {
 		title = "未命名笔记"
 	}
+	return s.createNote(store.NewNote{Title: title, Parent: parent})
+}
+
+// CreateFolder 在 parent 下新建一个目录，parent 为空表示根层级。
+//
+// 只有目录能包含子节点，笔记下不能建子目录；目录没有正文。
+func (s *WorkspaceService) CreateFolder(title, parent string) (NoteData, error) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		title = store.FolderTitle
+	}
+	return s.createNote(store.NewNote{Title: title, Parent: parent, Type: store.FolderType})
+}
+
+// createNote 按 NewNote 建笔记并转成前端结构。
+func (s *WorkspaceService) createNote(in store.NewNote) (NoteData, error) {
 	s.mu.Lock()
 	ws := s.ws
 	s.mu.Unlock()
 	if ws == nil {
 		return NoteData{}, errNotOpen()
 	}
-	note, err := ws.Create(store.NewNote{Title: title, Parent: parent})
+	note, err := ws.Create(in)
 	if err != nil {
 		return NoteData{}, err
 	}
@@ -327,6 +347,8 @@ func (s *WorkspaceService) Create(title, parent string) (NoteData, error) {
 }
 
 // SaveBody 保存笔记正文。
+//
+// 目录没有正文：对目录调用时直接返回 ErrInvalid（store 层也会拒绝）。
 func (s *WorkspaceService) SaveBody(id, body string) error {
 	s.mu.Lock()
 	ws := s.ws
@@ -334,7 +356,14 @@ func (s *WorkspaceService) SaveBody(id, body string) error {
 	if ws == nil {
 		return errNotOpen()
 	}
-	_, err := ws.UpdateBody(id, body)
+	note, err := ws.Get(id)
+	if err != nil {
+		return err
+	}
+	if note.IsFolder() {
+		return fmt.Errorf("%w: 目录没有正文", store.ErrInvalid)
+	}
+	_, err = ws.UpdateBody(id, body)
 	return err
 }
 
@@ -386,6 +415,13 @@ func (s *WorkspaceService) open(dir string) error {
 	ws, err := store.Open(dir)
 	if err != nil {
 		return err
+	}
+	// 老工作台里任何笔记都可以有子节点，打开时把这些节点就地迁移成目录，
+	// 之后「只有目录能包含笔记」的规则才成立。失败只记日志，不影响打开。
+	if n, err := ws.MigrateFolders(); err != nil {
+		log.Printf("kuibu: 迁移目录失败（不影响打开工作台）: %v", err)
+	} else if n > 0 {
+		log.Printf("kuibu: 已把 %d 条有子笔记的笔记迁移成目录", n)
 	}
 	idx, err := index.Open(ws)
 	if err != nil {
@@ -494,6 +530,7 @@ func toTreeItems(nodes []*store.TreeNode) []TreeItem {
 		out = append(out, TreeItem{
 			ID:       n.Note.ID,
 			Title:    n.Note.Title,
+			Type:     n.Note.Type,
 			Orphan:   n.Orphan,
 			Cycle:    n.Cycle,
 			Children: toTreeItems(n.Children),

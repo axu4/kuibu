@@ -79,11 +79,11 @@ func TestMoveReorderSameParent(t *testing.T) {
 
 func TestMoveAcrossParents(t *testing.T) {
 	w := mustInit(t)
-	root1, err := w.Create(NewNote{Title: "r1"})
+	root1, err := w.Create(NewNote{Title: "r1", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	root2, err := w.Create(NewNote{Title: "r2"})
+	root2, err := w.Create(NewNote{Title: "r2", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,11 +132,11 @@ func TestMoveAcrossParents(t *testing.T) {
 
 func TestMoveCycleRejected(t *testing.T) {
 	w := mustInit(t)
-	root, err := w.Create(NewNote{Title: "root"})
+	root, err := w.Create(NewNote{Title: "root", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := w.Create(NewNote{Title: "child", Parent: root.ID})
+	child, err := w.Create(NewNote{Title: "child", Parent: root.ID, Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,11 +217,11 @@ func TestMoveOnlyRewritesChangedOrders(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	w := mustInit(t)
-	root, err := w.Create(NewNote{Title: "root"})
+	root, err := w.Create(NewNote{Title: "root", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := w.Create(NewNote{Title: "child", Parent: root.ID})
+	child, err := w.Create(NewNote{Title: "child", Parent: root.ID, Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,15 +271,15 @@ func TestDeleteLeaf(t *testing.T) {
 
 func TestTree(t *testing.T) {
 	w := mustInit(t)
-	root1, err := w.Create(NewNote{Title: "r1"})
+	root1, err := w.Create(NewNote{Title: "r1", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	root2, err := w.Create(NewNote{Title: "r2"})
+	root2, err := w.Create(NewNote{Title: "r2", Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := w.Create(NewNote{Title: "a", Parent: root1.ID})
+	a, err := w.Create(NewNote{Title: "a", Parent: root1.ID, Type: FolderType})
 	if err != nil {
 		t.Fatal(err)
 	}

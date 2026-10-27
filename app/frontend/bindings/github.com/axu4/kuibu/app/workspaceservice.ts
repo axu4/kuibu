@@ -33,9 +33,20 @@ export function ChooseWorkspace(): $CancellablePromise<$models.WorkspaceInfo> {
 
 /**
  * Create 新建一条笔记，parent 为空表示根节点，返回新笔记。
+ * 
+ * parent 非空时必须是目录（type=folder），往笔记下建笔记会返回 ErrInvalid。
  */
 export function Create(title: string, parent: string): $CancellablePromise<$models.NoteData> {
     return $Call.ByID(437707596, title, parent);
+}
+
+/**
+ * CreateFolder 在 parent 下新建一个目录，parent 为空表示根层级。
+ * 
+ * 只有目录能包含子节点，笔记下不能建子目录；目录没有正文。
+ */
+export function CreateFolder(title: string, parent: string): $CancellablePromise<$models.NoteData> {
+    return $Call.ByID(585698680, title, parent);
 }
 
 /**
@@ -105,6 +116,8 @@ export function SaveAsset(name: string, data: string): $CancellablePromise<strin
 
 /**
  * SaveBody 保存笔记正文。
+ * 
+ * 目录没有正文：对目录调用时直接返回 ErrInvalid（store 层也会拒绝）。
  */
 export function SaveBody(id: string, body: string): $CancellablePromise<void> {
     return $Call.ByID(4152380757, id, body);

@@ -18,7 +18,9 @@ type Meta struct {
 	ID string `json:"id"`
 	// Title 是笔记标题。
 	Title string `json:"title"`
-	// Type 是笔记类型。
+	// Type 是笔记类型，原样取自 front matter（"note"、"folder"、"meeting" 等）。
+	// 索引不区分目录与笔记：type=folder 的目录与普通笔记一样参与建索引、
+	// 父子查询与全文检索，只是它没有正文。
 	Type string `json:"type"`
 	// Parent 是父笔记 ID，空字符串表示根节点。
 	Parent string `json:"parent"`
