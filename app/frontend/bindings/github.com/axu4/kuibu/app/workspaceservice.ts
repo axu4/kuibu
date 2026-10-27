@@ -15,6 +15,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as core$0 from "../internal/core/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
 
 /**
@@ -49,6 +53,13 @@ export function Delete(id: string, recursive: boolean): $CancellablePromise<void
 }
 
 /**
+ * ExtractTodos 按勾选的键创建待办（source = 笔记 ID），返回新建条数。已抽过的行不重复。
+ */
+export function ExtractTodos(noteID: string, keys: string[] | null): $CancellablePromise<number> {
+    return $Call.ByID(2545091014, noteID, keys);
+}
+
+/**
  * Get 按 ID 返回笔记元数据与正文。
  */
 export function Get(id: string): $CancellablePromise<$models.NoteData> {
@@ -63,6 +74,13 @@ export function Move(id: string, parent: string, pos: number): $CancellablePromi
 }
 
 /**
+ * OpenMeeting 打开本周周会笔记（没有就在「周会」节点下新建），返回笔记。
+ */
+export function OpenMeeting(): $CancellablePromise<$models.NoteData> {
+    return $Call.ByID(1272934817);
+}
+
+/**
  * Rename 修改笔记标题。
  */
 export function Rename(id: string, title: string): $CancellablePromise<void> {
@@ -74,6 +92,13 @@ export function Rename(id: string, title: string): $CancellablePromise<void> {
  */
 export function SaveBody(id: string, body: string): $CancellablePromise<void> {
     return $Call.ByID(4152380757, id, body);
+}
+
+/**
+ * TodoCandidates 预览笔记里可抽成待办的「- [ ] …」行；已抽过的带 todoId。
+ */
+export function TodoCandidates(noteID: string): $CancellablePromise<core$0.TodoCandidate[] | null> {
+    return $Call.ByID(2724998634, noteID);
 }
 
 /**

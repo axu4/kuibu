@@ -3487,3 +3487,50 @@ body.quicknote-body {
 .period-switch {
   margin: 0 10px 0 0;
 }
+
+/* ---------- 从笔记抽待办 ---------- */
+
+.sidebar-section-spacer {
+  flex: 1;
+}
+
+.extract-todos {
+  width: 520px;
+}
+
+.extract-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 50vh;
+  margin-bottom: 14px;
+  overflow: auto;
+}
+
+.extract-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.extract-item:hover {
+  background: var(--hover);
+}
+
+.extract-item.is-done {
+  color: var(--ink-3);
+}
+
+.extract-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.extract-mark {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}

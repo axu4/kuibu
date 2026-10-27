@@ -19,6 +19,7 @@ import { ReportView } from "./components/ReportView";
 import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
+import { ExtractTodos } from "./components/ExtractTodos";
 import { loadMainView, saveMainView } from "./lib/todo";
 import type { MainView } from "./lib/todo";
 
@@ -425,6 +426,24 @@ export default function App() {
     });
   }, []);
 
+  const [extractFor, setExtractFor] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** 打开本周周会笔记（没有就在「周会」节点下新建）。 */
+  const openMeeting = useCallback(async () => {
+    try {
+      await saveNow();
+      const meeting = await WorkspaceService.OpenMeeting();
+      const items = await WorkspaceService.Tree();
+      setTree(items ?? []);
+      expandTo(meeting.id, items ?? []);
+      await openNote(meeting.id);
+    } catch (err) {
+      setError(`打开周会失败：${String(err)}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openNote, saveNow]);
+
   /** 新建笔记：直接建一条「未命名笔记」并聚焦标题，省掉弹窗。 */
   const createNote = useCallback(
     async (parent: string) => {
@@ -724,6 +743,16 @@ export default function App() {
           <>
             <div className="sidebar-section">
               <span>全部笔记</span>
+              <span className="sidebar-section-spacer" />
+              <button
+                type="button"
+                className="icon-btn"
+                title="本周周会"
+                disabled={!workspace}
+                onClick={() => void openMeeting()}
+              >
+                <Icon name="calendar" size={14} />
+              </button>
               <button
                 type="button"
                 className="icon-btn"
@@ -863,6 +892,13 @@ export default function App() {
                 <MoreMenu
                   items={[
                     { label: "重命名", icon: "edit", onClick: () => titleRef.current?.select() },
+                    {
+                      label: "从此笔记抽待办",
+                      icon: "todo",
+                      onClick: () => {
+                        void saveNow().then(() => setExtractFor(note.data.id));
+                      },
+                    },
                     {
                       label: "新建子笔记",
                       icon: "plus",
@@ -1025,6 +1061,21 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {extractFor && (
+        <ExtractTodos
+          noteId={extractFor}
+          onClose={() => setExtractFor(null)}
+          onDone={(n) => {
+            setExtractFor(null);
+            setNotice(n > 0 ? `已创建 ${n} 条待办，可在待办里查看` : "没有新建待办");
+          }}
+        />
+      )}
+      {notice && (
+        <div className="toast" role="alert" onClick={() => setNotice(null)}>
+          {notice}
         </div>
       )}
     </div>

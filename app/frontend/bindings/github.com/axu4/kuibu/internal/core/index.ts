@@ -7,5 +7,6 @@ export type {
     NormalizeSkip,
     PlanReview,
     ReviewCounts,
-    ReviewResult
+    ReviewResult,
+    TodoCandidate
 } from "./models.js";

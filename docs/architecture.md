@@ -98,7 +98,7 @@ order: 0
 | --- | --- | --- |
 | `id` | string | 笔记标识，等于文件名去掉 `.md`。写回时总以文件名为准，front matter 里的 `id` 读入时被忽略 |
 | `title` | string | 标题；缺失时取正文第一个 `# ` 标题，再退化到文件名（ID） |
-| `type` | string | 笔记类型，默认 `note`；为 `todo`、`weekly` 等预留 |
+| `type` | string | 笔记类型，默认 `note`；`meeting` 为周会笔记（另有 `week`、`date`，见 [meeting.md](meeting.md)）；`todo`、`weekly` 等预留 |
 | `created` | RFC3339 string | 创建时间，保留原时区；缺失时取文件 mtime |
 | `updated` | RFC3339 string | 最后更新时间，由 `store` 在每次写回时刷新 |
 | `tags` | string[] | 标签列表，空时写 `[]` 而非 `null` |
