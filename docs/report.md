@@ -15,9 +15,13 @@
         │   └── <personId>.md
         ├── lead/                 # 组长交给 SE
         │   └── <personId>.md
+        ├── member-normalized/    # 组员周报的 AI 归一稿（草稿 / 定稿）
+        │   └── <personId>.md
         └── .history/             # 覆盖 / 删除前的历史，不参与索引
-            └── member/
-                └── <personId>-<旧 submittedAt 紧凑格式>.md
+            ├── member/
+            │   └── <personId>-<旧 submittedAt 紧凑格式>.md
+            └── member-normalized/
+                └── <personId>-<旧 editedAt 或 generatedAt>.md
 ```
 
 老工作台可能没有 `people/` 与 `reports/` 目录，`store.Init` 会创建 `people/`，
@@ -116,6 +120,45 @@ headerDate: "2026-10-29"
 本周完成了核心库周报模块。
 ```
 
+## 归一稿（reports/<周>/member-normalized/<personId>.md）
+
+组员写法五花八门，组长没法直接合并。归一稿用 AI 把每份原文整理成统一结构，
+**AI 产物只算草稿**，人工审阅、修改、定稿后才能被下一级引用和导出。
+
+生命周期：原文（只读）→ AI 草稿 → 人工修改 → 定稿。
+
+```markdown
+---
+person: "20261026-100000-9b3a"
+name: "张三"
+week: "2026-W44"
+status: "draft"            # draft | final
+sourceHash: "9f86d0…"      # 生成时原文正文的 sha256
+model: "DeepSeek"          # 生成用的模型名称
+generatedAt: "2026-10-29T10:00:00+08:00"
+editedAt: ""               # 最近一次人工修改，未改过为空
+finalizedAt: ""            # 定稿时间，未定稿为空
+humanEdited: false
+---
+## 本周完成
+- 【产品线A】完成接口联调
+## 下周计划
+- 【产品线A】压测
+## 风险与求助
+- 无
+```
+
+规则：
+
+- **结构**：三节标题固定；每条以【领域】开头，领域自由，提示词给出该组员的产品线作为候选；同一事项去重合并。提示词模板在 `internal/core/prompts/normalize.md`。
+- **解析失败不丢内容**：模型输出缺少「本周完成 / 下周计划」标题时，整段作为草稿正文保存并提示人工整理；外层代码围栏会被去掉。
+- **外发确认**：组员原文发给外部大模型前必须预览确认（见 [llm.md](llm.md)）。CLI 不带 `--yes` 退出码 8 且不发请求。
+- **不覆盖人工修改**：归一稿已人工修改（`humanEdited: true`）或已定稿时，再次 AI 生成返回 `9 HUMAN_EDITS_EXIST`；加 `--force` 才覆盖，覆盖前旧版移入 `.history/member-normalized/`。未改过的 AI 草稿可直接重新生成。
+- **定稿后只读**：要修改先「取消定稿」（`report unfinalize`），否则报 `FINALIZED`。
+- **原文已更新**：原文重新提交后 `sourceHash` 与当前原文不一致，`report status`、`draft show` 与 App 标出「原文已更新」；已定稿的归一稿保持不动，由组长决定是否重新生成。
+- **下一级只认定稿**：核心库 `Workspace.FinalDraft` 对未定稿的归一稿返回 `ErrNotFinal`，CLI 退出码 `7 NOT_FINAL`。
+- **索引**：归一稿与原文共用 `reports` 表和全文索引，`level` 记为 `member-normalized`，ID 为 `<周>/member-normalized/<personId>`；`report list` 不指定 `--level` 时不混入归一稿。
+
 ## ISO 周与周报日
 
 - 周编号 `YYYY-WNN`，周一到周日；跨年按 `time.ISOWeek` 规则。例如
@@ -184,6 +227,10 @@ headerDate: "2026-10-29"
 | `report status [--week W] [--level L] [--group g] [--product p]` | 提交状态与汇总计数 |
 | `report rm <week> <person> [--level L]` | 删除周报（移入 `.history`） |
 | `report config [--weekday 1-7]` | 查看 / 修改周报日 |
+| `report normalize [--week W] (--person p... \| --all) [--model m] [--dry-run \| --yes] [--force]` | AI 归一组员周报为草稿；不带 `--yes` 只输出完整预览并退出 8；`--all` 跳过已修改 / 已定稿的人并最终退出 9 |
+| `report draft show <week> <person>` | 查看归一稿（`--json` 含 `sourceChanged`） |
+| `report draft edit <week> <person> [--file f]` | 保存人工修改（默认读 stdin），标记 `humanEdited` |
+| `report finalize <week> <person>` / `report unfinalize <week> <person>` | 定稿 / 取消定稿 |
 
 ### 示例
 

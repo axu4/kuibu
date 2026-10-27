@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as core$0 from "../internal/core/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as llm$0 from "../internal/llm/models.js";
 
 /**
@@ -51,6 +54,24 @@ export interface CheckResult {
 }
 
 /**
+ * DraftData 是一份组员周报归一稿。Exists 为 false 表示还没有生成。
+ */
+export interface DraftData {
+    "exists": boolean;
+    "person": string;
+    "name": string;
+    "week": string;
+    "status": string;
+    "sourceChanged": boolean;
+    "humanEdited": boolean;
+    "model": string;
+    "generatedAt": string;
+    "editedAt": string;
+    "finalizedAt": string;
+    "body": string;
+}
+
+/**
  * LLMList 是「AI 模型」设置区的列表，密钥只给掩码。
  */
 export interface LLMList {
@@ -68,6 +89,26 @@ export interface LLMModelInput {
     "model": string;
     "apiKey": string;
     "makeDefault": boolean;
+}
+
+/**
+ * NormalizePlan 是批量归一的外发预览：前端用 SendPreview 弹窗展示，用户确认后
+ * 再调 Normalize。
+ */
+export interface NormalizePlan {
+    "preview": llm$0.Preview;
+    "persons": string[] | null;
+    "skipped": core$0.NormalizeSkip[] | null;
+}
+
+/**
+ * NormalizeResultData 是一个人的归一结果。
+ */
+export interface NormalizeResultData {
+    "person": string;
+    "name": string;
+    "warning": string;
+    "error": string;
 }
 
 /**
@@ -398,6 +439,16 @@ export interface ReportPerson {
      * SubmittedAt 是最近一次提交时间（RFC3339），missing 时为空。
      */
     "submittedAt": string;
+
+    /**
+     * Normalized 是归一稿状态 none / draft / final，组长层级为空。
+     */
+    "normalized": string;
+
+    /**
+     * SourceChanged 表示归一后原文又被重新提交。
+     */
+    "sourceChanged": boolean;
 }
 
 /**

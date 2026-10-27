@@ -3,5 +3,6 @@
 
 export type {
     ModelInfo,
-    Preset
+    Preset,
+    Preview
 } from "./models.js";

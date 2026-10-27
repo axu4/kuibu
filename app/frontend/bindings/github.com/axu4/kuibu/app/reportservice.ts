@@ -32,10 +32,24 @@ export function Delete(week: string, person: string, level: string): $Cancellabl
 }
 
 /**
+ * FinalizeDraft 定稿。
+ */
+export function FinalizeDraft(week: string, person: string): $CancellablePromise<$models.DraftData> {
+    return $Call.ByID(1102720980, week, person);
+}
+
+/**
  * Get 返回一份周报的原文与元数据。person 可为 ID 或姓名/别名。
  */
 export function Get(week: string, person: string, level: string): $CancellablePromise<$models.ReportData> {
     return $Call.ByID(1881490313, week, person, level);
+}
+
+/**
+ * GetDraft 返回某人某周的归一稿；还没生成时 Exists 为 false。
+ */
+export function GetDraft(week: string, person: string): $CancellablePromise<$models.DraftData> {
+    return $Call.ByID(3702025472, week, person);
 }
 
 /**
@@ -53,10 +67,25 @@ export function MovePerson(id: string, group: string, productLines: string[] | n
 }
 
 /**
+ * Normalize 发送并保存草稿。只能由外发确认弹窗的「确认发送」调用：persons 必须是
+ * PrepareNormalize 预览过的那批人，内容与预览一致。
+ */
+export function Normalize(week: string, persons: string[] | null, model: string, force: boolean): $CancellablePromise<$models.NormalizeResultData[] | null> {
+    return $Call.ByID(4102727546, week, persons, model, force);
+}
+
+/**
  * People 返回组员列表；includeInactive 为 false 时只返回在职人员。
  */
 export function People(includeInactive: boolean): $CancellablePromise<$models.PersonData[] | null> {
     return $Call.ByID(3110293188, includeInactive);
+}
+
+/**
+ * PrepareNormalize 生成归一的外发预览，不发任何请求。persons 为空表示本周已交的全部组员。
+ */
+export function PrepareNormalize(week: string, persons: string[] | null, model: string, force: boolean): $CancellablePromise<$models.NormalizePlan> {
+    return $Call.ByID(761055329, week, persons, model, force);
 }
 
 /**
@@ -78,6 +107,13 @@ export function ProductLines(): $CancellablePromise<string[] | null> {
  */
 export function ReportWeekday(): $CancellablePromise<number> {
     return $Call.ByID(3941892249);
+}
+
+/**
+ * SaveDraft 保存人工修改。已定稿时报错，需先取消定稿。
+ */
+export function SaveDraft(week: string, person: string, body: string): $CancellablePromise<$models.DraftData> {
+    return $Call.ByID(1407001769, week, person, body);
 }
 
 /**
@@ -113,6 +149,13 @@ export function Status(week: string, level: string, group: string, productLine: 
  */
 export function Submit(items: $models.SubmitItem[] | null): $CancellablePromise<$models.ReportData[] | null> {
     return $Call.ByID(4156269495, items);
+}
+
+/**
+ * UnfinalizeDraft 取消定稿。
+ */
+export function UnfinalizeDraft(week: string, person: string): $CancellablePromise<$models.DraftData> {
+    return $Call.ByID(2928535609, week, person);
 }
 
 /**

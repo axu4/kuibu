@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
 import { MoreMenu } from "./Menu";
 import { ReportPaste } from "./ReportPaste";
 import { PeopleManager } from "./PeopleManager";
+import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import {
   formatSubmittedAt,
   levelLabel,
@@ -51,6 +52,7 @@ export function ReportView() {
   const [weekdayOpen, setWeekdayOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ReportPerson | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
   // 外部变化后用于强制重载当前详情（status 没变时，effect 依赖可能不触发）。
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -382,6 +384,15 @@ export function ReportView() {
               </button>
               <MoreMenu
                 items={[
+                  ...(level === "member"
+                    ? [
+                        {
+                          label: "批量归一本周已交",
+                          icon: "bolt" as const,
+                          onClick: () => setBatchOpen(true),
+                        },
+                      ]
+                    : []),
                   { label: "复制催交话术", icon: "copy", onClick: () => void copyReminder() },
                   { label: "管理名单", icon: "person", onClick: () => setManagerOpen(true) },
                   { label: "设置周报日", icon: "calendar", onClick: () => setWeekdayOpen(true) },
@@ -441,6 +452,9 @@ export function ReportView() {
           report={detail}
           failed={detailError}
           week={week}
+          level={level}
+          refreshTick={refreshTick}
+          onToast={setToast}
           onClose={closeDetail}
           onRepaste={() => setPaste({ personId: selectedEntry.personId })}
           onDelete={() => setDeleteTarget(selectedEntry)}
@@ -459,6 +473,10 @@ export function ReportView() {
             setRefreshTick((t) => t + 1);
           }}
         />
+      )}
+
+      {batchOpen && week && (
+        <BatchNormalize week={week.week} onClose={() => setBatchOpen(false)} onToast={setToast} />
       )}
 
       {managerOpen && <PeopleManager onClose={() => setManagerOpen(false)} />}
@@ -514,6 +532,15 @@ function ReportRow({ entry, showGroup, selected, onSelect }: ReportRowProps) {
         <span className="report-status-dot" />
         {reportStatusLabel(entry.status)}
       </span>
+      {entry.normalized && entry.normalized !== "none" && (
+        <span
+          className={`draft-badge is-${entry.normalized}${entry.sourceChanged ? " is-warn" : ""}`}
+          title={entry.sourceChanged ? "归一后原文又更新过" : undefined}
+        >
+          {entry.normalized === "final" ? "定稿" : "草稿"}
+          {entry.sourceChanged && " ·原文已更新"}
+        </span>
+      )}
       {entry.submittedAt && (
         <span className="report-row-time">{formatSubmittedAt(entry.submittedAt)}</span>
       )}
@@ -526,21 +553,33 @@ interface ReportDetailPanelProps {
   report: ReportData | null;
   failed: boolean;
   week: ReportWeek;
+  level: ReportLevel;
+  refreshTick: number;
+  onToast: (text: string) => void;
   onClose: () => void;
   onRepaste: () => void;
   onDelete: () => void;
 }
 
-/** 右侧详情面板：姓名、周、提交时间与原文（只读，保留换行）。 */
+/**
+ * 右侧详情面板：姓名、周、提交时间与原文（只读，保留换行）。
+ * 组员周报已交时多一个「归一稿」子 tab。
+ */
 function ReportDetailPanel({
   entry,
   report,
   failed,
   week,
+  level,
+  refreshTick,
+  onToast,
   onClose,
   onRepaste,
   onDelete,
 }: ReportDetailPanelProps) {
+  const [tab, setTab] = useState<"raw" | "draft">("raw");
+  const canNormalize = level === "member" && entry.status !== "missing";
+  const showDraft = canNormalize && tab === "draft";
   return (
     <section className="report-detail">
       <div className="report-detail-head">
@@ -556,41 +595,75 @@ function ReportDetailPanel({
         </button>
       </div>
 
-      <div className="report-detail-actions">
-        {report ? (
-          <>
-            <button type="button" className="btn" onClick={onRepaste}>
-              <Icon name="paste" size={14} />
-              重新粘贴
+      {canNormalize && (
+        <div className="report-detail-tabs">
+          <div className="segmented">
+            <button
+              type="button"
+              className={`segmented-btn${tab === "raw" ? " is-active" : ""}`}
+              onClick={() => setTab("raw")}
+            >
+              原文
             </button>
-            <button type="button" className="btn" onClick={onDelete}>
-              <Icon name="trash" size={14} />
-              删除
-            </button>
-          </>
-        ) : entry.status !== "missing" ? (
-          <button type="button" className="btn" onClick={onRepaste}>
-            <Icon name="paste" size={14} />
-            重新粘贴
-          </button>
-        ) : null}
-      </div>
-
-      <div className="report-detail-body">
-        {report ? (
-          <pre className="report-body">{report.body}</pre>
-        ) : entry.status === "missing" ? (
-          <div className="report-empty">
-            <p>还没交这周的周报。</p>
-            <button type="button" className="btn btn-primary" onClick={onRepaste}>
-              <Icon name="paste" size={14} />
-              粘贴
+            <button
+              type="button"
+              className={`segmented-btn${tab === "draft" ? " is-active" : ""}`}
+              onClick={() => setTab("draft")}
+            >
+              归一稿
             </button>
           </div>
-        ) : (
-          <div className="report-empty">{failed ? "读取周报失败。" : "正在读取周报…"}</div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {showDraft ? (
+        <div className="report-detail-body">
+          <ReportDraft
+            week={week.week}
+            personId={entry.personId}
+            refreshTick={refreshTick}
+            onToast={onToast}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="report-detail-actions">
+            {report ? (
+              <>
+                <button type="button" className="btn" onClick={onRepaste}>
+                  <Icon name="paste" size={14} />
+                  重新粘贴
+                </button>
+                <button type="button" className="btn" onClick={onDelete}>
+                  <Icon name="trash" size={14} />
+                  删除
+                </button>
+              </>
+            ) : entry.status !== "missing" ? (
+              <button type="button" className="btn" onClick={onRepaste}>
+                <Icon name="paste" size={14} />
+                重新粘贴
+              </button>
+            ) : null}
+          </div>
+
+          <div className="report-detail-body">
+            {report ? (
+              <pre className="report-body">{report.body}</pre>
+            ) : entry.status === "missing" ? (
+              <div className="report-empty">
+                <p>还没交这周的周报。</p>
+                <button type="button" className="btn btn-primary" onClick={onRepaste}>
+                  <Icon name="paste" size={14} />
+                  粘贴
+                </button>
+              </div>
+            ) : (
+              <div className="report-empty">{failed ? "读取周报失败。" : "正在读取周报…"}</div>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
