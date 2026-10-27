@@ -186,7 +186,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | 退出码 | 含义 |
 | --- | --- |
 | 0 | 成功 |
-| 1 | 参数错误、笔记不存在、成环、仍有子节点等（JSON `code` 区分 `USAGE` / `NOT_FOUND` / `CYCLE` / `HAS_CHILDREN` / `ALREADY_INIT` / `INVALID` / `INTERNAL`） |
+| 1 | 参数错误、笔记不存在、成环、仍有子节点、父节点不是目录等（JSON `code` 区分 `USAGE` / `NOT_FOUND` / `CYCLE` / `HAS_CHILDREN` / `ALREADY_INIT` / `INVALID` / `INTERNAL`） |
 | 7 | `NOT_FINAL`：引用/导出了未定稿内容 |
 | 8 | `NEEDS_CONFIRM`：需人工确认 |
 | 9 | `HUMAN_EDITS_EXIST`：存在人工修改，拒绝覆盖 |
@@ -199,12 +199,14 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | 命令 | 说明 |
 | --- | --- |
 | `init <dir> [--default]` | 初始化工作台并建立索引；`--default` 写入用户配置作为默认工作台 |
-| `note new --title <t> [--parent <id>] [--tag a ...] [--type note] [--body <text>\|--file <path>\|--stdin]` | 新建笔记，打印 ID（JSON 输出完整元数据） |
-| `note list [--parent <id>] [--tag t]` | 表格式列出 id、标题、更新时间 |
+| `note new --title <t> [--parent <id>] [--tag a ...] [--type note] [--body <text>\|--file <path>\|--stdin]` | 新建笔记，打印 ID（JSON 输出完整元数据）；`--parent` 只能指向目录 |
+| `note new --folder [--title <t>] [--parent <id>] [-d]` | 新建目录，等价于 `--type folder`；目录没有正文，给了正文参数也忽略（标题可省略，缺省「未命名目录」） |
+| `note list [--parent <id>] [--tag t]` | 表格式列出 id、类型、标题、更新时间（目录的类型列显示「目录」） |
 | `note show <id> [--meta-only]` | 输出标题行与正文；JSON 输出元数据 + body |
-| `note edit <id> [--title t] [--tag t ...] [--body <text>\|--file <path>\|--stdin]` | 修改笔记，至少给一个修改项 |
-| `note mv <id> [--parent <id>\|--root] [--pos n]` | 改父节点与位置，`--pos` 缺省为末尾 |
+| `note edit <id> [--title t] [--tag t ...] [--body <text>\|--file <path>\|--stdin]` | 修改笔记，至少给一个修改项；给目录加正文返回 `INVALID` |
+| `note mv <id> [--parent <id>\|--root] [--pos n]` | 改父节点与位置，`--pos` 缺省为末尾；父节点必须是目录 |
 | `note rm <id> [-r\|--recursive]` | 删除笔记，有子节点时必须递归 |
+| `note migrate-folders` | 把「有子笔记但不是目录」的笔记就地转成目录（升级老工作台），可重复执行；JSON 输出 `{"converted":N}` |
 | `todo add <文本> [--due <值>]` | 快速录入待办，日期/时间/标签自动解析 |
 | `todo list [--status s] [--due d] [--tree]` | 列出待办，支持状态/到期/标签/检索过滤与树形显示 |
 | `todo show/done/reopen/start/cancel/edit/sub/link/unlink/attach/detach/mv/rm` | 待办详情、状态、子任务、链接、附件、移动与删除 |
@@ -225,7 +227,7 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 | `report export group\|product\|month-group\|month-product [--format md\|feishu-html\|text] [--out file]` | 导出定稿报告，未定稿退出 7 |
 | `report month generate\|show\|edit\|finalize [--month M] [--level group\|product]` / `report add\|status --month M` | 月报：组月报、产品月报、组长月报收集 |
 | `template list\|show\|edit <名称>` | 报告模板（`templates/<名称>.md`） |
-| `tree [--root <id>]` | 缩进大纲打印笔记树，孤儿/环节点带标记 |
+| `tree [--root <id>]` | 缩进大纲打印笔记树，目录带 `[目录]` 标记，孤儿/环节点带标记；JSON 每个节点带 `type` |
 | `search <query> [--limit n]` | 全文检索，输出 id、标题、片段 |
 | `asset add <file>` | 归档资源并打印可直接写入 Markdown 的相对路径 |
 | `index rebuild` | 重建索引并打印统计 |
@@ -239,8 +241,13 @@ App 启动时按 `KUIBU_WORKSPACE` > 用户配置默认工作台（`KUIBU_CONFIG
 # 初始化并设为默认工作台
 kuibu init ~/Notes/kuibu --default
 
-# 新建笔记（正文来自标准输入）
-echo "今天完成了 CLI 骨架。" | kuibu note new --title "今日记录" --tag 工作 --stdin
+# 新建目录（只有目录能包含笔记），再在目录下新建笔记
+DIR=$(kuibu note new --folder --title "项目")
+echo "今天完成了 CLI 骨架。" | kuibu note new --title "今日记录" --tag 工作 --parent "$DIR" --stdin
+
+# 升级老工作台：把有子笔记的普通笔记就地转成目录（可重复执行）
+kuibu note migrate-folders
+# 已把 2 条笔记转为目录
 
 # 列出根节点下的笔记，JSON 输出
 kuibu note list --parent "" --json
@@ -254,9 +261,10 @@ kuibu note rm 20240101-120000-abcd -r
 
 # 树与检索
 kuibu tree
-# - 今日记录  (20240101-120000-abcd)
+# - 项目  (20240101-120000-aaaa) [目录]
+#   - 今日记录  (20240101-120000-abcd)
 kuibu tree --json
-# [{"id":"20240101-120000-abcd","title":"今日记录","orphan":false,"cycle":false,"children":[]}]
+# [{"id":"20240101-120000-aaaa","title":"项目","type":"folder","orphan":false,"cycle":false,"children":[{"id":"20240101-120000-abcd","title":"今日记录","type":"note","orphan":false,"cycle":false,"children":[]}]}]
 kuibu search "CLI 骨架" --limit 5
 # 20240101-120000-abcd  今日记录
 #     今天完成了 [CLI 骨架]。

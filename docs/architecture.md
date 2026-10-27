@@ -260,6 +260,8 @@ source: ""
 - **孤儿**：`parent` 指向不存在的笔记时，节点作为根节点返回并标记 `orphan`（CLI `tree` 会带标记）。
 - **环**：外部手改可能造出父子环。`Tree` 用「沿 parent 链向上走 + 记录路径位置」找出环上节点，把它们降为根节点并标记 `cycle`，不会死循环。
 - 删除有子节点的笔记需要 `-r/--recursive`，否则返回 `HAS_CHILDREN`；递归删除按 BFS 收集全部后代。
+- **目录 + 叶子笔记**：只有 `type=folder` 的目录能包含子节点，目录不能有正文。`Create` / `Move` 在父节点非空时校验它是目录，否则返回 `INVALID`（父节点不存在返回 `NOT_FOUND`）；创建目录时带正文、或给目录写入正文同样返回 `INVALID`。随手记收件箱、周会节点也是目录（老收件箱 `type=inbox` 由 `quicknote.EnsureInbox` 就地升级）。
+- **迁移**：`Workspace.MigrateFolders()` 把「有子节点但不是目录」的笔记就地改成 `type=folder`（ID、标题、顺序、子节点、正文都不变），幂等。CLI 侧对应 `kuibu note migrate-folders`，JSON 输出 `{"converted":N}`；App 打开工作台时也会自动跑一次。
 
 选择理由：
 
@@ -267,6 +269,14 @@ source: ""
 2. **无索引也能读**：删掉 `index.db` 后仅靠 front matter 就能完整重建树。
 3. **移动代价低**：只改一个字段 + 少量同级重编号，不移动/重命名文件，避免链接、外部引用、同步工具失效。
 4. **天然可扩展**：树结构对 `todo`、周报等所有类型统一适用，无需按类型分表。
+
+### CLI 里的目录（`internal/cli`）
+
+- `kuibu note new --folder [--title t] [--parent id]`（`-d` 为简写）等价于 `--type folder`；建目录时忽略 `--body/--file/--stdin`（也不读 stdin），标题可省略、空标题由 store 补成「未命名目录」。`--folder` 与非 `folder` 的 `--type` 同时给出属于参数冲突，按 `USAGE` 退出。
+- `note list` 人类模式多一列「类型」，目录显示「目录」，其余显示原始 `type`；`note list --json` 本就带 `type` 字段，目录为 `"folder"`。
+- `tree` 人类模式给目录行加 ` [目录]`（在 `(id)` 之后、`[孤儿]`/`[环]` 之前），`tree --json` 每个节点带 `type`。
+- `note mv --parent` 只能指向目录：指向普通笔记返回 `INVALID`，指向自己的后代返回 `CYCLE`。
+- 以上错误都沿用既有退出码 `1`，不新增退出码。
 
 ### App 里移动笔记
 

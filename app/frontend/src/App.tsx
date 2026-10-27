@@ -21,7 +21,7 @@ import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
 import { ExtractTodos } from "./components/ExtractTodos";
-import { keyMove } from "./lib/tree";
+import { FOLDER_TYPE, isFolder, keyMove } from "./lib/tree";
 import type { MoveTarget } from "./lib/tree";
 import { loadMainView, saveMainView } from "./lib/todo";
 import type { MainView } from "./lib/todo";
@@ -105,6 +105,18 @@ function findItem(items: TreeItem[], id: string): TreeItem | null {
     }
   }
   return null;
+}
+
+/** 树里找不到节点时（例如树还没刷新）用笔记元数据拼一个，供删除确认等使用。 */
+function fallbackItem(data: NoteData): TreeItem {
+  return {
+    id: data.id,
+    title: data.title,
+    type: data.type,
+    orphan: false,
+    cycle: false,
+    children: [],
+  };
 }
 
 export default function App() {
@@ -388,6 +400,8 @@ export default function App() {
   // 打开的笔记变化时同步标题输入框；新建的笔记直接选中标题等待输入。
   const noteTitle = note?.data.title ?? "";
   const noteId = note?.data.id ?? "";
+  // 当前打开的是目录：目录没有正文，右侧显示目录视图而不是编辑器。
+  const folder = note?.data.type === FOLDER_TYPE;
   useEffect(() => {
     setTitleDraft(noteTitle);
   }, [noteId, noteTitle]);
@@ -462,7 +476,13 @@ export default function App() {
         await refreshTree();
       } catch (err) {
         const msg = String(err);
-        setError(msg.includes("成环") ? "不能把笔记移到它自己或它的子笔记下面" : `移动笔记失败：${msg}`);
+        if (msg.includes("成环")) {
+          setError("不能把笔记移到它自己或它的子笔记下面");
+        } else if (msg.includes("只有目录")) {
+          setError("只有目录能包含笔记，不能把笔记放进另一条笔记");
+        } else {
+          setError(`移动笔记失败：${msg}`);
+        }
       }
     },
     [refreshTree],
@@ -490,7 +510,7 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [moveNote, selectedId, tree, view]);
 
-  /** 新建笔记：直接建一条「未命名笔记」并聚焦标题，省掉弹窗。 */
+  /** 新建笔记：直接建一条「未命名笔记」并聚焦标题，省掉弹窗。parent 必须为空或是目录。 */
   const createNote = useCallback(
     async (parent: string) => {
       try {
@@ -504,6 +524,25 @@ export default function App() {
         await openNote(created.id);
       } catch (err) {
         setError(`新建笔记失败：${String(err)}`);
+      }
+    },
+    [openNote, refreshTree, saveNow],
+  );
+
+  /** 新建目录：直接建一个「未命名目录」并聚焦标题；目录没有正文，右侧是目录视图。 */
+  const createFolder = useCallback(
+    async (parent: string) => {
+      try {
+        await saveNow();
+        const created = await WorkspaceService.CreateFolder("", parent);
+        if (parent) {
+          setExpanded((prev) => new Set(prev).add(parent));
+        }
+        await refreshTree();
+        focusTitleRef.current = true;
+        await openNote(created.id);
+      } catch (err) {
+        setError(`新建目录失败：${String(err)}`);
       }
     },
     [openNote, refreshTree, saveNow],
@@ -659,7 +698,7 @@ export default function App() {
     [saveNow, view],
   );
 
-  // 全局快捷键：⌘S 立即保存，⌘1/⌘2 切换视图，笔记视图下 ⌘N 新建笔记。
+  // 全局快捷键：⌘S 立即保存，⌘1/⌘2 切换视图，笔记视图下 ⌘N 新建笔记（选中目录时建在目录里）。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) {
@@ -674,12 +713,13 @@ export default function App() {
         switchView(MAIN_VIEWS[Number(key) - 1].key);
       } else if (key === "n" && view === "notes" && workspace) {
         e.preventDefault();
-        void createNote("");
+        // 选中目录时在目录里建，否则建在根层级。
+        void createNote(selectedItem && isFolder(selectedItem) ? selectedItem.id : "");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [createNote, saveNow, switchView, view, workspace]);
+  }, [createNote, saveNow, selectedItem, switchView, view, workspace]);
 
 
   /** 面包屑：当前笔记的祖先标题。 */
@@ -808,6 +848,15 @@ export default function App() {
               >
                 <Icon name="plus" size={14} />
               </button>
+              <button
+                type="button"
+                className="icon-btn"
+                title="新建目录"
+                disabled={!workspace}
+                onClick={() => void createFolder("")}
+              >
+                <Icon name="folder" size={14} />
+              </button>
             </div>
             {workspace ? (
               <Tree
@@ -821,7 +870,12 @@ export default function App() {
                   expandTo(parent, tree);
                   void createNote(parent);
                 }}
+                onAddFolder={(parent) => {
+                  expandTo(parent, tree);
+                  void createFolder(parent);
+                }}
                 onCreateRoot={() => void createNote("")}
+                onCreateFolderRoot={() => void createFolder("")}
                 onRename={(item) => setRenamingId(item.id)}
                 onDelete={requestDelete}
                 renamingId={renamingId}
@@ -950,52 +1004,68 @@ export default function App() {
                   ))}
                   <span className="breadcrumb-current">{note.data.title}</span>
                 </div>
-                <span className={`save-state is-${status}`}>
-                  <span className="save-dot" />
-                  {statusText}
-                </span>
-                <button
-                  type="button"
-                  className={`icon-btn${mode === "source" ? " is-on" : ""}`}
-                  title={mode === "source" ? "切回所见即所得" : "查看 Markdown 源码"}
-                  onClick={() => setMode(mode === "source" ? "wysiwyg" : "source")}
-                >
-                  <Icon name="code" />
-                </button>
+                {!folder && (
+                  <span className={`save-state is-${status}`}>
+                    <span className="save-dot" />
+                    {statusText}
+                  </span>
+                )}
+                {/* 目录没有正文，不提供源码模式。 */}
+                {!folder && (
+                  <button
+                    type="button"
+                    className={`icon-btn${mode === "source" ? " is-on" : ""}`}
+                    title={mode === "source" ? "切回所见即所得" : "查看 Markdown 源码"}
+                    onClick={() => setMode(mode === "source" ? "wysiwyg" : "source")}
+                  >
+                    <Icon name="code" />
+                  </button>
+                )}
                 <MoreMenu
-                  items={[
-                    { label: "重命名", icon: "edit", onClick: () => titleRef.current?.select() },
-                    {
-                      label: "从此笔记抽待办",
-                      icon: "todo",
-                      onClick: () => {
-                        void saveNow().then(() => setExtractFor(note.data.id));
-                      },
-                    },
-                    {
-                      label: "新建子笔记",
-                      icon: "plus",
-                      onClick: () => {
-                        expandTo(note.data.id, tree);
-                        void createNote(note.data.id);
-                      },
-                    },
-                    {
-                      label: "删除…",
-                      icon: "trash",
-                      danger: true,
-                      onClick: () => {
-                        const item = selectedItem ?? {
-                          id: note.data.id,
-                          title: note.data.title,
-                          orphan: false,
-                          cycle: false,
-                          children: [],
-                        };
-                        requestDelete(item);
-                      },
-                    },
-                  ]}
+                  items={
+                    folder
+                      ? [
+                          { label: "重命名", icon: "edit", onClick: () => titleRef.current?.select() },
+                          {
+                            label: "新建笔记",
+                            icon: "note",
+                            onClick: () => {
+                              expandTo(note.data.id, tree);
+                              void createNote(note.data.id);
+                            },
+                          },
+                          {
+                            label: "新建子目录",
+                            icon: "folder",
+                            onClick: () => {
+                              expandTo(note.data.id, tree);
+                              void createFolder(note.data.id);
+                            },
+                          },
+                          {
+                            label: "删除…",
+                            icon: "trash",
+                            danger: true,
+                            onClick: () => requestDelete(selectedItem ?? fallbackItem(note.data)),
+                          },
+                        ]
+                      : [
+                          { label: "重命名", icon: "edit", onClick: () => titleRef.current?.select() },
+                          {
+                            label: "从此笔记抽待办",
+                            icon: "todo",
+                            onClick: () => {
+                              void saveNow().then(() => setExtractFor(note.data.id));
+                            },
+                          },
+                          {
+                            label: "删除…",
+                            icon: "trash",
+                            danger: true,
+                            onClick: () => requestDelete(selectedItem ?? fallbackItem(note.data)),
+                          },
+                        ]
+                  }
                 />
               </div>
 
@@ -1045,7 +1115,7 @@ export default function App() {
                     ref={titleRef}
                     className="page-title"
                     value={titleDraft}
-                    placeholder="未命名笔记"
+                    placeholder={folder ? "未命名目录" : "未命名笔记"}
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onBlur={commitTitle}
                     onKeyDown={(e) => {
@@ -1055,11 +1125,13 @@ export default function App() {
                       if (e.key === "Enter") {
                         e.preventDefault();
                         e.currentTarget.blur();
-                        // 回车后进入正文继续写。
-                        const editable = document.querySelector<HTMLElement>(
-                          ".page .ProseMirror, .page .source-editor",
-                        );
-                        editable?.focus();
+                        // 回车后进入正文继续写（目录没有正文）。
+                        if (!folder) {
+                          const editable = document.querySelector<HTMLElement>(
+                            ".page .ProseMirror, .page .source-editor",
+                          );
+                          editable?.focus();
+                        }
                       } else if (e.key === "Escape") {
                         e.preventDefault();
                         setTitleDraft(note.data.title);
@@ -1067,27 +1139,49 @@ export default function App() {
                       }
                     }}
                   />
-                  <div className="page-meta">
-                    {note.data.updated && <span>更新于 {formatTime(note.data.updated)}</span>}
-                    {selectedItem && (selectedItem.children?.length ?? 0) > 0 && (
-                      <span>{selectedItem.children?.length} 条子笔记</span>
-                    )}
-                  </div>
-                  {mode === "wysiwyg" ? (
-                    <Editor
-                      key={`${note.data.id}-${note.revision}`}
-                      noteId={note.data.id}
-                      initialBody={body}
-                      onChange={onBodyChange}
-                      fileDrop
+                  {/* 目录没有正文，只显示里面有什么，并提供「在此新建笔记」。 */}
+                  {folder ? (
+                    <FolderView
+                      item={selectedItem}
+                      onAddNote={() => {
+                        // 与笔记里「新建子笔记」同一手感：先展到该目录，再建并选中新笔记。
+                        expandTo(note.data.id, tree);
+                        void createNote(note.data.id);
+                      }}
+                      onAddFolder={() => {
+                        expandTo(note.data.id, tree);
+                        void createFolder(note.data.id);
+                      }}
+                      onOpenChild={(id) => {
+                        expandTo(note.data.id, tree);
+                        void selectNote(id);
+                      }}
                     />
                   ) : (
-                    <textarea
-                      className="source-editor"
-                      value={body}
-                      spellCheck={false}
-                      onChange={(e) => onBodyChange(e.target.value)}
-                    />
+                    <>
+                      <div className="page-meta">
+                        {note.data.updated && <span>更新于 {formatTime(note.data.updated)}</span>}
+                        {selectedItem && (selectedItem.children?.length ?? 0) > 0 && (
+                          <span>{selectedItem.children?.length} 条子笔记</span>
+                        )}
+                      </div>
+                      {mode === "wysiwyg" ? (
+                        <Editor
+                          key={`${note.data.id}-${note.revision}`}
+                          noteId={note.data.id}
+                          initialBody={body}
+                          onChange={onBodyChange}
+                          fileDrop
+                        />
+                      ) : (
+                        <textarea
+                          className="source-editor"
+                          value={body}
+                          spellCheck={false}
+                          onChange={(e) => onBodyChange(e.target.value)}
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1118,9 +1212,9 @@ export default function App() {
       {modal.kind === "delete" && (
         <div className="modal-mask" onMouseDown={() => setModal({ kind: "none" })}>
           <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-            <h2>删除「{modal.item.title}」？</h2>
+            <h2>删除{isFolder(modal.item) ? "目录" : "笔记"}「{modal.item.title}」？</h2>
             <p>
-              它下面还有 {modal.childCount} 条子笔记，会一起删除，删除后无法恢复。
+              {isFolder(modal.item) ? "目录" : "它"}下面还有 {modal.childCount} 项内容，会一起删除，删除后无法恢复。
             </p>
             <div className="modal-buttons">
               <button type="button" className="btn" onClick={() => setModal({ kind: "none" })}>
@@ -1151,6 +1245,57 @@ export default function App() {
         <div className="toast" role="alert" onClick={() => setNotice(null)}>
           {notice}
         </div>
+      )}
+    </div>
+  );
+}
+
+interface FolderViewProps {
+  /** 树里的目录节点，拿子项列表用；还没刷新时为 null。 */
+  item: TreeItem | null;
+  /** 在此新建笔记。 */
+  onAddNote: () => void;
+  /** 在此新建子目录。 */
+  onAddFolder: () => void;
+  /** 打开子节点。 */
+  onOpenChild: (id: string) => void;
+}
+
+/**
+ * 目录视图：目录没有正文，这里只列出里面的内容，并给出「在此新建笔记」。
+ */
+function FolderView({ item, onAddNote, onAddFolder, onOpenChild }: FolderViewProps) {
+  const children = item?.children ?? [];
+  return (
+    <div className="folder-view">
+      <p className="folder-hint">
+        {children.length === 0
+          ? "这个目录还是空的，可以往里放笔记或子目录。"
+          : `共 ${children.length} 项：${children.filter((c) => isFolder(c)).length} 个子目录、${
+              children.filter((c) => !isFolder(c)).length
+            } 条笔记。`}
+      </p>
+      <div className="folder-actions">
+        <button type="button" className="btn btn-primary" onClick={onAddNote}>
+          <Icon name="plus" size={14} />
+          在此新建笔记
+        </button>
+        <button type="button" className="btn" onClick={onAddFolder}>
+          <Icon name="folder" size={14} />
+          新建子目录
+        </button>
+      </div>
+      {children.length > 0 && (
+        <ul className="folder-list">
+          {children.map((child) => (
+            <li key={child.id}>
+              <button type="button" className="folder-entry" onClick={() => onOpenChild(child.id)}>
+                <Icon name={isFolder(child) ? "folder" : "note"} size={14} />
+                <span className="folder-entry-title">{child.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

@@ -1016,6 +1016,11 @@ export interface TreeItem {
     "title": string;
 
     /**
+     * Type 是笔记类型（note / folder / meeting 等），前端靠它区分目录与笔记。
+     */
+    "type": string;
+
+    /**
      * Orphan 表示父笔记不存在，节点被当作根节点。
      */
     "orphan": boolean;

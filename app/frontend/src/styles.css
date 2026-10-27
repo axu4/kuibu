@@ -587,6 +587,22 @@ kbd {
   color: var(--ink);
 }
 
+.tree-kind {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: 2px;
+  color: var(--ink-3);
+}
+
+.tree-row.is-folder .tree-label {
+  font-weight: 500;
+}
+
+.tree-row.is-selected .tree-kind {
+  color: var(--accent);
+}
+
 .tree-label {
   flex: 1;
   min-width: 0;
@@ -909,6 +925,61 @@ kbd {
 
 .editor-scroll {
   min-height: 100%;
+}
+
+/* ---------- 目录视图 ---------- */
+
+.folder-view {
+  margin-top: 6px;
+}
+
+.folder-hint {
+  margin: 0 0 14px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.folder-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-entry {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+}
+
+.folder-entry:hover {
+  background: var(--hover);
+}
+
+.folder-entry .icon {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+
+.folder-entry-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .page .editor-scroll {
@@ -2483,7 +2554,12 @@ body.quicknote-body {
 .report-head,
 .report-toolbar,
 .report-list,
-.report-group-stats {
+.report-group-stats,
+.report-progress,
+.report-block,
+.report-quiet,
+.report-reveal,
+.report-foot-note {
   max-width: 760px;
   margin-left: auto;
   margin-right: auto;
@@ -2526,9 +2602,30 @@ body.quicknote-body {
 .report-head-meta {
   display: flex;
   align-items: center;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
   color: var(--ink-3);
   font-size: 12.5px;
+}
+
+.report-build {
+  white-space: nowrap;
+}
+
+/* 截止提醒：还没到截止时用克制的灰，过了截止才变红。 */
+.report-deadline {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.report-deadline.is-overdue {
+  background: var(--seal-soft);
+  color: var(--seal);
 }
 
 .report-tabs {
@@ -2666,7 +2763,7 @@ body.quicknote-body {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 40px;
+  min-height: 42px;
   padding: 0 10px;
   border: none;
   border-radius: 9px;
@@ -2675,31 +2772,36 @@ body.quicknote-body {
   text-align: left;
   font-family: inherit;
   font-size: inherit;
-  cursor: default;
-}
-
-.report-row::after {
-  content: "";
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
-  height: 1px;
-  background: var(--line);
-  opacity: 0.6;
+  cursor: pointer;
 }
 
 .report-row:hover {
   background: var(--hover);
 }
 
-.report-row:hover::after,
-.report-row.is-selected::after {
-  opacity: 0;
-}
-
 .report-row.is-selected {
   background: var(--accent-soft);
+}
+
+/* 只有「待催交」那组行之间画分隔线，已交的那组更像一份清单。 */
+.report-block .report-section + .report-section {
+  margin-top: 6px;
+}
+
+.report-status-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-4);
+}
+
+.report-status-dot.is-submitted {
+  background: var(--accent);
+}
+
+.report-status-dot.is-late {
+  background: var(--amber);
 }
 
 .report-row-name {
@@ -2711,6 +2813,10 @@ body.quicknote-body {
   font-size: 14px;
 }
 
+.report-row.is-missing .report-row-name {
+  font-weight: 500;
+}
+
 .report-row-group {
   flex: 0 0 auto;
   color: var(--ink-3);
@@ -2718,39 +2824,31 @@ body.quicknote-body {
   white-space: nowrap;
 }
 
-.report-row-status {
+.report-row-state {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
   font-size: 12px;
+  white-space: nowrap;
 }
 
-.report-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.report-row-status.is-submitted {
-  color: var(--accent);
-}
-
-.report-row-status.is-late {
-  color: var(--seal);
-}
-
-.report-row-status.is-missing {
+.report-row-state.is-submitted {
   color: var(--ink-3);
+}
+
+.report-row-state.is-late {
+  color: var(--amber);
+}
+
+.report-row-state.is-missing {
+  color: var(--seal);
 }
 
 .report-row-time {
   flex: 0 0 auto;
+  min-width: 62px;
   color: var(--ink-3);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -2769,6 +2867,172 @@ body.quicknote-body {
 
 .report-empty p {
   margin: 0;
+}
+
+/* 提交进度卡片：一眼看到「还差几个人」，催交与粘贴都在这里 */
+
+.report-progress {
+  margin-top: 6px;
+  margin-bottom: 22px;
+  padding: 16px 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+.report-progress-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-progress-num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.report-progress-num b {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-progress-bar {
+  height: 6px;
+  margin: 12px 0 14px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow: hidden;
+}
+
+.report-progress-bar span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.2s ease-out;
+}
+
+.report-progress-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.report-tag {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.report-tag.is-missing {
+  background: var(--seal-soft);
+  color: var(--seal);
+}
+
+.report-tag.is-late {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.report-tag.is-done {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.report-progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+/* 待催交 / 已交 分块 */
+
+.report-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 22px;
+}
+
+.report-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-block-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 10px;
+  margin-bottom: 2px;
+}
+
+.report-block-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.report-block-sub {
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.report-block-sub.is-overdue {
+  color: var(--seal);
+}
+
+.report-quiet {
+  margin: 8px auto 24px;
+  padding: 18px 0;
+  color: var(--ink-3);
+  text-align: center;
+  font-size: 13px;
+}
+
+.report-reveal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 34px;
+  margin: 0 auto 10px;
+  width: 100%;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.report-reveal:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.report-foot-note {
+  padding: 0 10px 24px;
+  color: var(--ink-4);
+  font-size: 11.5px;
+  text-align: center;
 }
 
 /* 右侧原文详情面板 */

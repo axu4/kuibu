@@ -98,12 +98,21 @@ func (w *Workspace) notePath(id string) string {
 	return filepath.Join(w.NotesDir(), id+noteExt)
 }
 
-// Create 新建一条笔记。order 自动放在同级末尾；父笔记不存在时返回 ErrNotFound。
+// Create 新建一条笔记。order 自动放在同级末尾。
+//
+// 父子规则见「目录」模型：只有目录（type=folder）能作为父节点。in.Parent 非空
+// 时父笔记必须存在（否则 ErrNotFound）且是目录（否则 ErrInvalid）；新笔记本身
+// 是目录时不能带正文（否则 ErrInvalid）。
 func (w *Workspace) Create(in NewNote) (*Note, error) {
-	if in.Parent != "" {
-		if _, err := w.Get(in.Parent); err != nil {
-			return nil, err
-		}
+	typ := in.Type
+	if typ == "" {
+		typ = defaultNoteType
+	}
+	if err := validateNoteBody(typ, in.Body); err != nil {
+		return nil, err
+	}
+	if err := w.validateNoteParent(in.Parent); err != nil {
+		return nil, err
 	}
 
 	metas, err := w.listMetas()
@@ -119,12 +128,8 @@ func (w *Workspace) Create(in NewNote) (*Note, error) {
 
 	// 时间截断到秒，保证写回 RFC3339 后往返一致。
 	now := time.Now().Truncate(time.Second)
-	typ := in.Type
-	if typ == "" {
-		typ = defaultNoteType
-	}
 	note := &Note{
-		Title:   in.Title,
+		Title:   folderTitleIfFolder(typ, in.Title),
 		Type:    typ,
 		Created: now,
 		Updated: now,
@@ -184,12 +189,17 @@ func (w *Workspace) UpdateBody(id, body string) (*Note, error) {
 }
 
 // Update 用 fn 修改笔记元数据或正文，自动刷新 updated 后写回。
-// 笔记 ID 不允许通过 fn 修改。
+//
+// 笔记 ID 不允许通过 fn 修改。目录节点不能有正文：把目录的正文改成非空内容
+// 时返回 ErrInvalid；原本就没有改动正文（例如只改标题）或把正文清空则照常
+// 写回——迁移来的老目录可能带着正文，不能因为它存在就拒绝改名等操作。
 func (w *Workspace) Update(id string, fn func(*Note)) (*Note, error) {
 	note, err := w.Get(id)
 	if err != nil {
 		return nil, err
 	}
+	origBody := note.Body
+	origType := note.Type
 	if fn != nil {
 		fn(note)
 	}
@@ -197,6 +207,21 @@ func (w *Workspace) Update(id string, fn func(*Note)) (*Note, error) {
 	note.Updated = time.Now().Truncate(time.Second)
 	if note.Type == "" {
 		note.Type = defaultNoteType
+	}
+	if note.Type == FolderType && note.Body != origBody {
+		if err := validateNoteBody(note.Type, note.Body); err != nil {
+			return nil, err
+		}
+	}
+	// 把仍有子节点的目录改成其它类型会让子节点失去合法父节点，直接拒绝。
+	if origType == FolderType && note.Type != FolderType {
+		metas, err := w.listMetas()
+		if err != nil {
+			return nil, err
+		}
+		if len(childrenOf(metas, id)) > 0 {
+			return nil, fmt.Errorf("%w: 目录 %q 仍有子节点，不能改成 %q", ErrInvalid, id, note.Type)
+		}
 	}
 	if err := w.writeNote(note); err != nil {
 		return nil, err
@@ -209,6 +234,9 @@ func (w *Workspace) Update(id string, fn func(*Note)) (*Note, error) {
 // newParent 为空表示根层级；position 为负或超出子列表长度时追加到末尾。
 // 移动后对受影响的同级列表重新编号 order（0,1,2…），只重写 order 变化的
 // 文件。移到自己或自己的后代下面时返回 ErrCycle。
+//
+// 只有目录能作为父节点：newParent 非空时必须是已存在的目录，否则返回
+// ErrNotFound / ErrInvalid（例如把笔记拖进笔记里）。
 func (w *Workspace) Move(id, newParent string, position int) error {
 	metas, err := w.listMetas()
 	if err != nil {
@@ -228,8 +256,16 @@ func (w *Workspace) Move(id, newParent string, position int) error {
 			return fmt.Errorf("%w: 父笔记 %s", ErrNotFound, newParent)
 		}
 	}
+	// 成环检查先于「父必须是目录」检查：移动到自己的后代下即使目标不是目录，
+	// 也先报 ErrCycle，语义更准确。
 	if newParent == id || w.isDescendant(byID, newParent, id) {
 		return fmt.Errorf("%w: 不能移动到 %q 下", ErrCycle, newParent)
+	}
+	if newParent != "" {
+		parent := byID[newParent]
+		if !parent.IsFolder() {
+			return fmt.Errorf("%w: 只有目录可以包含笔记，%q 是笔记（type=%s），不能作为父节点", ErrInvalid, newParent, noteKindLabel(parent))
+		}
 	}
 
 	oldParent := moving.Parent
@@ -388,7 +424,12 @@ func readNoteFile(path string) (*Note, error) {
 		note.Type = defaultNoteType
 	}
 	if note.Title == "" {
-		note.Title = deriveTitle(note.Body, id)
+		// 目录没有正文，# 标题推导不出来，统一用默认目录名。
+		if note.IsFolder() {
+			note.Title = FolderTitle
+		} else {
+			note.Title = deriveTitle(note.Body, id)
+		}
 	}
 	if note.Extra == nil {
 		note.Extra = map[string]any{}
