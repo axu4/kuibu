@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# 按已合并 PR 上的 release:* 标签打 tag，并触发 Release 工作流。
+# PR 合并后按标题（或 release:* 标签）打 tag，并触发 Release 工作流。
 #
 # 用法：release-from-pr.sh <PR 号>
 # 依赖环境变量：GH_TOKEN（contents/actions/pull-requests 写权限）、GITHUB_REPOSITORY。
 # 需要在完整历史（fetch-depth: 0，含 tags）的仓库里运行。
 #
 # 规则：
-#   - PR 必须已合并；没有 release:* 标签就什么都不做。
-#   - 同时有多个 release:* 标签时取最大的（major > minor > patch）。
+#   - PR 必须已合并。
+#   - 发版级别默认由标题决定（见 bump-from-title.sh：docs/ci/chore 等不发版，
+#     feat 发 minor，xxx!: 发 major，其他发 patch）。
+#   - PR 上有 release:* 标签时以标签为准（多个取最大），用来覆盖标题判断。
 #   - 新版本 = 最新正式 tag（vX.Y.Z，忽略 -rc 等预发布）按标签递增。
 #   - 合并提交上已经有 v* tag 时直接退出，保证重跑不会重复发版。
 #   - tag 打在 PR 的合并提交上，而不是 main 的最新提交。
@@ -19,10 +21,11 @@ pr="${1:?用法：release-from-pr.sh <PR 号>}"
 repo="${GITHUB_REPOSITORY:?缺少 GITHUB_REPOSITORY}"
 here="$(cd "$(dirname "$0")" && pwd)"
 
-info="$(gh pr view "$pr" --repo "$repo" --json state,mergeCommit,labels)"
+info="$(gh pr view "$pr" --repo "$repo" --json state,title,mergeCommit,labels)"
 state="$(jq -r '.state' <<<"$info")"
 sha="$(jq -r '.mergeCommit.oid // empty' <<<"$info")"
 labels="$(jq -r '.labels[].name' <<<"$info")"
+title="$(jq -r '.title' <<<"$info")"
 
 if [ "$state" != "MERGED" ] || [ -z "$sha" ]; then
   echo "PR #$pr 尚未合并（$state），不发版。"
@@ -36,10 +39,16 @@ for level in major minor patch; do
     break
   fi
 done
+by="标签"
 if [ -z "$bump" ]; then
-  echo "PR #$pr 没有 release:* 标签，不发版。"
+  bump="$("$here/bump-from-title.sh" "$title")"
+  by="标题"
+fi
+if [ -z "$bump" ]; then
+  echo "PR #$pr 标题「$title」属于文档 / CI / 杂项，不发版。"
   exit 0
 fi
+echo "PR #$pr 按${by}发 $bump 版。"
 
 # 两个发版 PR 几乎同时合并时可能算出同一个版本号：tag 已存在会推送失败，
 # 这时重新拉取 tags 再算一次，最多试 3 次。
