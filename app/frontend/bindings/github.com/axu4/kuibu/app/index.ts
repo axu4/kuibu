@@ -17,6 +17,7 @@ export {
 };
 
 export type {
+    CarryResult,
     CheckResult,
     DraftData,
     LLMList,

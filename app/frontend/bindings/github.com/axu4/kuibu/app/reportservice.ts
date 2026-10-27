@@ -15,7 +15,21 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as core$0 from "../internal/core/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as llm$0 from "../internal/llm/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
+
+/**
+ * Carry 把「部分 / 延期」的计划顺延到本周下周计划；ids 为空表示全部。
+ */
+export function Carry(week: string, person: string, ids: string[] | null): $CancellablePromise<$models.CarryResult> {
+    return $Call.ByID(1077767922, week, person, ids);
+}
 
 /**
  * CreatePerson 新增一名组员。
@@ -89,6 +103,13 @@ export function PrepareNormalize(week: string, persons: string[] | null, model: 
 }
 
 /**
+ * PrepareReviewSuggest 生成 AI 对照建议的外发预览，不发请求。
+ */
+export function PrepareReviewSuggest(week: string, person: string, model: string): $CancellablePromise<llm$0.Preview> {
+    return $Call.ByID(2252784728, week, person, model);
+}
+
+/**
  * Preview 解析粘贴文本并按在职人员匹配，返回每份的预览结果（只读不写）。
  */
 export function Preview(text: string, level: string, week: string, person: string): $CancellablePromise<$models.ReportPreview[] | null> {
@@ -110,6 +131,20 @@ export function ReportWeekday(): $CancellablePromise<number> {
 }
 
 /**
+ * Review 返回「对照上周计划」。上周没有定稿时返回 NOT_FINAL 错误。
+ */
+export function Review(week: string, person: string): $CancellablePromise<core$0.ReviewResult> {
+    return $Call.ByID(64332055, week, person);
+}
+
+/**
+ * ReviewSuggest 发送并写入 AI 建议。只能由外发确认弹窗的「确认发送」调用。
+ */
+export function ReviewSuggest(week: string, person: string, model: string): $CancellablePromise<core$0.ReviewResult> {
+    return $Call.ByID(256109043, week, person, model);
+}
+
+/**
  * SaveDraft 保存人工修改。已定稿时报错，需先取消定稿。
  */
 export function SaveDraft(week: string, person: string, body: string): $CancellablePromise<$models.DraftData> {
@@ -128,6 +163,13 @@ export function SetPersonActive(id: string, active: boolean): $CancellablePromis
  */
 export function SetReportWeekday(weekday: number): $CancellablePromise<number> {
     return $Call.ByID(538617143, weekday);
+}
+
+/**
+ * SetReview 人工设置一条上周计划的状态与对应项；status 为空表示清除。
+ */
+export function SetReview(week: string, person: string, planID: string, status: string, matches: string[] | null, note: string): $CancellablePromise<core$0.ReviewResult> {
+    return $Call.ByID(1504546449, week, person, planID, status, matches, note);
 }
 
 /**

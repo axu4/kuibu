@@ -12,6 +12,7 @@ import { MoreMenu } from "./Menu";
 import { ReportPaste } from "./ReportPaste";
 import { PeopleManager } from "./PeopleManager";
 import { BatchNormalize, ReportDraft } from "./ReportDraft";
+import { ReportReview, alignmentText } from "./ReportReview";
 import {
   formatSubmittedAt,
   levelLabel,
@@ -541,6 +542,11 @@ function ReportRow({ entry, showGroup, selected, onSelect }: ReportRowProps) {
           {entry.sourceChanged && " ·原文已更新"}
         </span>
       )}
+      {entry.alignment !== null && entry.alignment !== undefined && (
+        <span className="report-row-time" title="对照上周计划的对齐率">
+          对齐 {alignmentText(entry.alignment)}
+        </span>
+      )}
       {entry.submittedAt && (
         <span className="report-row-time">{formatSubmittedAt(entry.submittedAt)}</span>
       )}
@@ -577,11 +583,12 @@ function ReportDetailPanel({
   onRepaste,
   onDelete,
 }: ReportDetailPanelProps) {
-  const [tab, setTab] = useState<"raw" | "draft">("raw");
+  const [tab, setTab] = useState<"raw" | "draft" | "review">("raw");
   const canNormalize = level === "member" && entry.status !== "missing";
   const showDraft = canNormalize && tab === "draft";
+  const showReview = canNormalize && tab === "review";
   return (
-    <section className="report-detail">
+    <section className={`report-detail${showReview ? " is-wide" : ""}`}>
       <div className="report-detail-head">
         <div className="report-detail-head-main">
           <div className="report-detail-title">{entry.name}</div>
@@ -612,11 +619,27 @@ function ReportDetailPanel({
             >
               归一稿
             </button>
+            <button
+              type="button"
+              className={`segmented-btn${tab === "review" ? " is-active" : ""}`}
+              onClick={() => setTab("review")}
+            >
+              对照上周
+            </button>
           </div>
         </div>
       )}
 
-      {showDraft ? (
+      {showReview ? (
+        <div className="report-detail-body">
+          <ReportReview
+            week={week.week}
+            personId={entry.personId}
+            refreshTick={refreshTick}
+            onToast={onToast}
+          />
+        </div>
+      ) : showDraft ? (
         <div className="report-detail-body">
           <ReportDraft
             week={week.week}

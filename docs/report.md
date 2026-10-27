@@ -159,6 +159,31 @@ humanEdited: false
 - **下一级只认定稿**：核心库 `Workspace.FinalDraft` 对未定稿的归一稿返回 `ErrNotFinal`，CLI 退出码 `7 NOT_FINAL`。
 - **索引**：归一稿与原文共用 `reports` 表和全文索引，`level` 记为 `member-normalized`，ID 为 `<周>/member-normalized/<personId>`；`report list` 不指定 `--level` 时不混入归一稿。
 
+## 对照上周计划
+
+把**上周定稿**归一稿的「下周计划」与**本周**归一稿的「本周完成」逐条对照。计算全部在
+`internal/core/review.go`，CLI 与 App 共用。
+
+- **数据**：上周没有定稿的归一稿 → `7 NOT_FINAL`；本周归一稿草稿或定稿均可。
+- **条目 id**：「节名 + 条目文本」sha256 的前 8 位，不往正文里写隐藏注释。上周计划已定稿，id 稳定；本周完成项改了文字后，旧的对应关系会失效并显示为未对应，需要重新连线。`- 无` 不算条目。
+- **状态**：完成 `done` / 部分 `partial` / 延期 `delayed` / 取消 `canceled`；没对应到任何计划的本周完成项标「计划外」。
+- **对齐率** = (完成 + 0.5 × 部分) / (计划数 − 取消)；未标状态的计划算 0；分母为 0 时不显示。
+- **存储**：结果写在**本周归一稿 front matter 的 `review` 字段**，只改 front matter，不改正文、`status`、`humanEdited`，所以不影响定稿：
+
+  ```yaml
+  review:
+    items:
+      - plan: "a1b2c3d4"       # 上周计划 id
+        status: "partial"
+        matches: ["e5f60718"]  # 对应的本周完成 id
+        note: "压测一半"
+        source: "human"        # ai = AI 建议、未经人工确认
+    carried: ["a1b2c3d4"]      # 已顺延的计划
+  ```
+
+- **顺延**：把「部分 / 延期」的计划追加到本周「下周计划」，末尾加「（顺延）」，去掉该节的「- 无」；已顺延或文本已存在的不重复加，可重复执行。顺延会改正文，所以本周归一稿已定稿时要先取消定稿。
+- **AI 建议**：把上周计划和本周完成（带 id）发给模型，要求返回 JSON `[{plan, status, matches}]`，写入时 `source: ai`；人工标过的条目不覆盖。外发先预览确认。
+
 ## ISO 周与周报日
 
 - 周编号 `YYYY-WNN`，周一到周日；跨年按 `time.ISOWeek` 规则。例如
@@ -231,6 +256,10 @@ humanEdited: false
 | `report draft show <week> <person>` | 查看归一稿（`--json` 含 `sourceChanged`） |
 | `report draft edit <week> <person> [--file f]` | 保存人工修改（默认读 stdin），标记 `humanEdited` |
 | `report finalize <week> <person>` / `report unfinalize <week> <person>` | 定稿 / 取消定稿 |
+| `report review <week> <person>` | 对照上周计划：状态、对应关系、计划外、对齐率 |
+| `report review set <week> <person> <计划id> --status done\|partial\|delayed\|canceled [--match id]... [--note 文本]` | 人工标一条计划（`--status ""` 清除） |
+| `report review suggest <week> <person> [--yes \| --dry-run]` | AI 建议对应关系与状态（不带 `--yes` 只预览，退出 8） |
+| `report carry <week> <person> [--items id]...` | 把「部分 / 延期」计划顺延到本周下周计划，可重复执行 |
 
 ### 示例
 

@@ -78,6 +78,8 @@ type ReportPerson struct {
 	Normalized string `json:"normalized"`
 	// SourceChanged 表示归一后原文又被重新提交。
 	SourceChanged bool `json:"sourceChanged"`
+	// Alignment 是对照上周计划的对齐率 0~1，没有可对照数据时为 null。
+	Alignment *float64 `json:"alignment"`
 }
 
 // ReportStatusData 是一次提交状态统计。
@@ -374,12 +376,20 @@ func (s *ReportService) Status(week, level, group, productLine string) (ReportSt
 		Extra:   make([]ReportPerson, 0, len(st.Extra)),
 	}
 	for _, e := range st.Entries {
-		out.Entries = append(out.Entries, toReportPerson(e))
+		out.Entries = append(out.Entries, s.withAlignment(ws, week, level, toReportPerson(e)))
 	}
 	for _, e := range st.Extra {
-		out.Extra = append(out.Extra, toReportPerson(e))
+		out.Extra = append(out.Extra, s.withAlignment(ws, week, level, toReportPerson(e)))
 	}
 	return out, nil
+}
+
+// withAlignment 给有归一稿的组员补上对齐率。
+func (s *ReportService) withAlignment(ws *store.Workspace, week, level string, p ReportPerson) ReportPerson {
+	if level == store.ReportLevelMember && p.Normalized != "" && p.Normalized != "none" {
+		p.Alignment = alignmentFor(ws, week, p.PersonID)
+	}
+	return p
 }
 
 // Get 返回一份周报的原文与元数据。person 可为 ID 或姓名/别名。
