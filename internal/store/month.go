@@ -160,3 +160,31 @@ func (w *Workspace) SubmitMonthReport(person, month, body, source string, now ti
 		Group: group, ProductLines: products, Source: source, SubmittedAt: now, Body: body,
 	})
 }
+
+// DefaultMeetingWeekday 是默认周会日：周一。
+const DefaultMeetingWeekday = 1
+
+// MeetingWeekday 返回工作台配置的周会日（1-7），缺省周一。
+func (w *Workspace) MeetingWeekday() (int, error) {
+	cfg, err := w.readConfig()
+	if err != nil {
+		return DefaultMeetingWeekday, err
+	}
+	if cfg.MeetingWeekday < 1 || cfg.MeetingWeekday > 7 {
+		return DefaultMeetingWeekday, nil
+	}
+	return cfg.MeetingWeekday, nil
+}
+
+// SetMeetingWeekday 修改周会日。
+func (w *Workspace) SetMeetingWeekday(day int) error {
+	if day < 1 || day > 7 {
+		return fmt.Errorf("%w: 周会日必须在 1-7 之间", ErrInvalid)
+	}
+	cfg, err := w.readConfig()
+	if err != nil {
+		return err
+	}
+	cfg.MeetingWeekday = day
+	return w.writeConfig(cfg)
+}
