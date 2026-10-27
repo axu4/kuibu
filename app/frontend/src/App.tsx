@@ -20,6 +20,8 @@ import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
 import { ExtractTodos } from "./components/ExtractTodos";
+import { keyMove } from "./lib/tree";
+import type { MoveTarget } from "./lib/tree";
 import { loadMainView, saveMainView } from "./lib/todo";
 import type { MainView } from "./lib/todo";
 
@@ -444,6 +446,45 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openNote, saveNow]);
 
+  /** 移动笔记（拖拽或 ⌥⌘ 方向键），只改 parent / order。 */
+  const moveNote = useCallback(
+    async (target: MoveTarget) => {
+      try {
+        await WorkspaceService.Move(target.id, target.parent, target.pos);
+        if (target.parent) {
+          setExpanded((prev) => new Set(prev).add(target.parent));
+        }
+        await refreshTree();
+      } catch (err) {
+        const msg = String(err);
+        setError(msg.includes("成环") ? "不能把笔记移到它自己或它的子笔记下面" : `移动笔记失败：${msg}`);
+      }
+    },
+    [refreshTree],
+  );
+
+  // ⌥⌘↑/↓ 同级上下移动，⌥⌘←/→ 升级 / 降级（焦点在输入框或编辑器里时不处理）。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (view !== "notes" || !selectedId || !e.altKey || !(e.metaKey || e.ctrlKey) || e.shiftKey) {
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+        return;
+      }
+      const dir = ({ ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" } as const)[
+        e.key as "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight"
+      ];
+      if (!dir) return;
+      e.preventDefault();
+      const target = keyMove(tree, selectedId, dir);
+      if (target) void moveNote(target);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [moveNote, selectedId, tree, view]);
+
   /** 新建笔记：直接建一条「未命名笔记」并聚焦标题，省掉弹窗。 */
   const createNote = useCallback(
     async (parent: string) => {
@@ -765,6 +806,7 @@ export default function App() {
             </div>
             {workspace ? (
               <Tree
+                onMove={(target) => void moveNote(target)}
                 items={tree}
                 selectedId={selectedId}
                 expanded={expanded}
