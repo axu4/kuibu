@@ -88,3 +88,65 @@ func TestGroupReportService(t *testing.T) {
 		t.Fatal("没有栏目的模板应拒绝")
 	}
 }
+
+func TestProductReportService(t *testing.T) {
+	reports, _, _ := newTestReports(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"[{\"section\":\"本周完成\",\"productLine\":\"Kuibu\",\"category\":\"功能开发\",\"text\":\"完成网关\",\"sources\":[\"平台组\"]}]"}}]}`))
+	}))
+	defer srv.Close()
+	cfgDir := t.TempDir()
+	reports.env = func(k string) string {
+		if k == "KUIBU_CONFIG_DIR" {
+			return cfgDir
+		}
+		return ""
+	}
+	var cfg llm.Config
+	if err := cfg.Upsert(llm.Model{Name: "fake", Provider: llm.ProviderOpenAI, BaseURL: srv.URL, Model: "m", APIKey: "k"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := llm.Save(reports.env, cfg); err != nil {
+		t.Fatal(err)
+	}
+	zhao, err := reports.CreatePerson(PersonInput{Name: "赵六", Group: "平台组", ProductLines: []string{"Kuibu"}, Role: store.RoleLead})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reports.Submit([]SubmitItem{{Person: zhao.ID, Week: "2026-W44", Level: store.ReportLevelLead, Text: "网关完成"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := reports.PrepareProduct("2026-W44", false, false); !errors.Is(err, store.ErrNotFinal) {
+		t.Fatalf("组长未定稿应 NotFinal, got %v", err)
+	}
+	plan, err := reports.PrepareNormalize("2026-W44", store.ReportLevelLead, nil, "", false)
+	if err != nil || len(plan.Persons) != 1 {
+		t.Fatalf("组长归一预览 = %+v, %v", plan, err)
+	}
+	if _, err := reports.Normalize("2026-W44", store.ReportLevelLead, plan.Persons, "", false); err != nil {
+		t.Fatal(err)
+	}
+	d, err := reports.GetDraft("2026-W44", zhao.ID, store.ReportLevelLead)
+	if err != nil || !d.Exists || !strings.Contains(d.Body, "#### 功能开发") {
+		t.Fatalf("组长归一稿 = %+v, %v", d, err)
+	}
+	if _, err := reports.FinalizeDraft("2026-W44", zhao.ID, store.ReportLevelLead); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := reports.Status("2026-W44", store.ReportLevelLead, "", "")
+	if st.Entries[0].Normalized != "final" {
+		t.Fatalf("SE 名单应显示已定稿: %+v", st.Entries[0])
+	}
+
+	g, err := reports.GenerateProduct("2026-W44", false, false)
+	if err != nil || !strings.Contains(g.Body, "## Kuibu\n\n### 本周完成\n#### 功能开发\n- 完成网关（平台组）") {
+		t.Fatalf("GenerateProduct = %+v, %v", g, err)
+	}
+	if _, err := reports.FinalizeProduct("2026-W44"); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ = reports.ProductReport("2026-W44"); g.Status != "final" || g.LeadName != "产品报" {
+		t.Fatalf("ProductReport = %+v", g)
+	}
+}
