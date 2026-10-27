@@ -1,16 +1,15 @@
 # 跬步（kuibu）自动合并
 #
-# 给 PR 打上 automerge 标签后，CI 通过就自动 squash 合并；PR 还带 release:patch /
-# release:minor / release:major 标签时，合并后接着打 tag 并触发 Release。
+# 本仓库分支的 PR（只有仓库所有者能推分支）CI 通过就自动 squash 合并，合并后按
+# PR 标题决定是否发版、发哪一级（规则见 .github/scripts/bump-from-title.sh）。
+# 不想被自动合并的 PR 开成草稿即可。
 #
 # 触发：
-#   - pull_request_target labeled：刚打上 automerge 标签。CI 已经通过就立即合并，
-#     还在跑就先退出，等 CI 跑完的那次触发。
-#   - workflow_run（CI completed）：PR 的 CI 跑完。成功且带 automerge 标签就合并。
+#   - workflow_run（CI completed）：PR 的 CI 跑完，成功就合并。
+#   - pull_request_target ready_for_review：草稿转为可评审时，CI 已通过就立即合并。
 #
 # 安全：两种触发都以本仓库的写权限运行，所以这里只检出 main 上的脚本，绝不检出
-# 或执行 PR 里的代码；脚本也不会自动合并来自 fork 的 PR。能打标签的人至少有
-# triage 权限，标签本身就是授权。
+# 或执行 PR 里的代码；来自 fork 的 PR（别人提的）不会被自动合并。
 #
 # 逻辑在 .github/scripts/auto-merge.sh 与 release-from-pr.sh 里。
 
@@ -18,7 +17,7 @@ name: Auto merge
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [ready_for_review]
   workflow_run:
     workflows: [CI]
     types: [completed]
@@ -36,7 +35,7 @@ jobs:
   merge:
     name: CI 通过后合并
     if: >-
-      (github.event_name == 'pull_request_target' && github.event.label.name == 'automerge') ||
+      github.event_name == 'pull_request_target' ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.event == 'pull_request' &&
        github.event.workflow_run.conclusion == 'success')
@@ -48,7 +47,7 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
-      - name: 合并并按标签发版
+      - name: 合并并按标题发版
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
