@@ -11,7 +11,7 @@
 
 权限只有 `contents: read`。
 
-CI 跑完后会触发 `Auto merge` 工作流：带 `automerge` 标签的 PR 在 CI 成功后自动合并，带 `release:*` 标签的再自动发版，详见 [release.md](release.md#自动合并与自动发版按-pr-标签)。
+CI 跑完后会触发 `Auto merge` 工作流：本仓库分支的非草稿 PR 在 CI 成功后自动合并，并按 PR 标题自动发版，详见 [release.md](release.md#自动合并与自动发版)。
 
 ## 三个 job
 
