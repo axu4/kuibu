@@ -41,6 +41,8 @@ func allProductLines(ws *store.Workspace) ([]string, error) {
 
 // LeadNormalizeJob 是一份待归一的组长周报。结构同组报（产品线 × 类别），由代码渲染。
 type LeadNormalizeJob struct {
+	// Level 是 lead（组长周报）或 lead-month（组长月报）。
+	Level  string
 	Person string
 	Name   string
 	Report *store.Report
@@ -49,21 +51,25 @@ type LeadNormalizeJob struct {
 
 // PlanLeadNormalize 列出要归一的组长周报。persons 为空表示本周已交的全部组长；
 // 经组报带入（source=group-report）的本身就是定稿，跳过。
-func PlanLeadNormalize(ws *store.Workspace, week string, persons []string, force bool) ([]LeadNormalizeJob, []NormalizeSkip, error) {
+func PlanLeadNormalize(ws *store.Workspace, week, level string, persons []string, force bool) ([]LeadNormalizeJob, []NormalizeSkip, error) {
+	if level == "" {
+		level = store.ReportLevelLead
+	}
+	kind := store.NormalizedKind(level)
 	var reports []*store.Report
 	if len(persons) == 0 {
-		list, err := ws.ListReports(week, store.ReportLevelLead)
+		list, err := ws.ListReports(week, level)
 		if err != nil {
 			return nil, nil, err
 		}
 		reports = list
 	} else {
 		for _, p := range persons {
-			id, err := ws.ResolveReportPerson(week, store.ReportLevelLead, p)
+			id, err := ws.ResolveReportPerson(week, level, p)
 			if err != nil {
 				return nil, nil, err
 			}
-			r, err := ws.ReadReport(week, store.ReportLevelLead, id)
+			r, err := ws.ReadReport(week, level, id)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -98,7 +104,7 @@ func PlanLeadNormalize(ws *store.Workspace, week string, persons []string, force
 			skipped = append(skipped, NormalizeSkip{Person: r.Person, Name: name, Reason: "由定稿组报带入，无需归一"})
 			continue
 		}
-		if err := ws.CheckRegenerateKind(store.LeadDraftDirName, week, r.Person, force); err != nil {
+		if err := ws.CheckRegenerateKind(kind, week, r.Person, force); err != nil {
 			if len(persons) == 1 {
 				return nil, nil, err
 			}
@@ -114,7 +120,7 @@ func PlanLeadNormalize(ws *store.Workspace, week string, persons []string, force
 			Template: "group", Sections: sections, ProductLines: own, SourceNoun: "组员",
 			Included: []GroupMember{{Person: r.Person, Name: name, ProductLines: own, Draft: &store.Draft{Body: r.Body}}},
 		}
-		jobs = append(jobs, LeadNormalizeJob{Person: r.Person, Name: name, Report: r, Plan: plan})
+		jobs = append(jobs, LeadNormalizeJob{Level: level, Person: r.Person, Name: name, Report: r, Plan: plan})
 	}
 	return jobs, skipped, nil
 }
@@ -127,7 +133,7 @@ func SaveLeadNormalized(ws *store.Workspace, job LeadNormalizeJob, model, text s
 		warning = "模型输出不是预期的 JSON，已整段保存为草稿，请人工整理"
 	}
 	d, err := ws.SaveGeneratedDraft(store.GeneratedDraft{
-		Kind:       store.LeadDraftDirName,
+		Kind:       store.NormalizedKind(job.Level),
 		Person:     job.Person,
 		Name:       job.Name,
 		Week:       job.Report.Week,
@@ -326,8 +332,8 @@ type NormalizeBatch struct {
 // PlanNormalizeLevel 按层级列出要归一的原文：member 用组员归一结构，lead 用组报结构。
 func PlanNormalizeLevel(ws *store.Workspace, week, level string, persons []string, force bool) (*NormalizeBatch, []NormalizeSkip, error) {
 	b := &NormalizeBatch{Level: level, Persons: []string{}}
-	if level == store.ReportLevelLead {
-		jobs, skipped, err := PlanLeadNormalize(ws, week, persons, force)
+	if level == store.ReportLevelLead || level == store.ReportLevelLeadMonth {
+		jobs, skipped, err := PlanLeadNormalize(ws, week, level, persons, force)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -352,7 +358,7 @@ func PlanNormalizeLevel(ws *store.Workspace, week, level string, persons []strin
 
 // Run 逐个发送并保存草稿；confirmed 必须来自人工确认。
 func (b *NormalizeBatch) Run(ctx context.Context, ws *store.Workspace, out *llm.Outbound, model string, force, confirmed bool, now time.Time) ([]NormalizeResult, error) {
-	if b.Level == store.ReportLevelLead {
+	if b.Level == store.ReportLevelLead || b.Level == store.ReportLevelLeadMonth {
 		return RunLeadNormalize(ctx, ws, out, model, b.lead, force, confirmed, now)
 	}
 	return RunNormalize(ctx, ws, out, model, b.member, force, confirmed, now)

@@ -25,6 +25,9 @@ const GroupDirName = "group"
 // LeadDraftDirName 是组长周报归一稿目录：reports/<周>/lead-normalized/<personId>.md。
 const LeadDraftDirName = "lead-normalized"
 
+// LeadMonthDraftDirName 是组长月报归一稿目录：reports/<YYYY-MM>/lead-month-normalized/<personId>.md。
+const LeadMonthDraftDirName = "lead-month-normalized"
+
 // ProductDirName 是 SE 产品 / 项目周报目录：reports/<周>/product/product.md。
 const ProductDirName = "product"
 
@@ -32,7 +35,7 @@ const ProductDirName = "product"
 const ProductReportID = "product"
 
 // DraftKinds 是所有草稿 / 定稿类文件的目录名，索引据此识别。
-var DraftKinds = []string{DraftDirName, LeadDraftDirName, GroupDirName, ProductDirName}
+var DraftKinds = []string{DraftDirName, LeadDraftDirName, LeadMonthDraftDirName, GroupDirName, ProductDirName}
 
 // IsDraftKind 判断目录名是否是草稿 / 定稿类文件。
 func IsDraftKind(dir string) bool {
@@ -46,8 +49,11 @@ func IsDraftKind(dir string) bool {
 
 // NormalizedKind 返回某层级原文对应的归一稿目录：member → member-normalized，lead → lead-normalized。
 func NormalizedKind(level string) string {
-	if level == ReportLevelLead {
+	switch level {
+	case ReportLevelLead:
 		return LeadDraftDirName
+	case ReportLevelLeadMonth:
+		return LeadMonthDraftDirName
 	}
 	return DraftDirName
 }
@@ -305,7 +311,7 @@ func (w *Workspace) SaveGeneratedDraft(in GeneratedDraft, force bool) (*Draft, e
 	if strings.TrimSpace(in.Person) == "" {
 		return nil, fmt.Errorf("%w: 归一稿人员 ID 不能为空", ErrInvalid)
 	}
-	if _, _, err := WeekRange(in.Week); err != nil {
+	if err := ValidPeriod(in.Week); err != nil {
 		return nil, err
 	}
 	kind := kindOrDraft(in.Kind)

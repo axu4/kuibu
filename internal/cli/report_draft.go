@@ -87,6 +87,7 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 	dryRun := fs.Bool("dry-run", false, "只输出将发送的内容")
 	force := fs.Bool("force", false, "覆盖已人工修改或已定稿的归一稿（旧版移入历史）")
 	level := fs.String("level", store.ReportLevelMember, "层级: member（组员）| lead（组长）")
+	monthFlag := fs.String("month", "", "归一组长月报的月份（如 2026-10）")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -105,6 +106,12 @@ func reportNormalize(ctx context.Context, args []string, common *commonFlags, st
 	week, err := weekOrThis(*weekFlag, now)
 	if err != nil {
 		return err
+	}
+	if *monthFlag != "" {
+		if week, err = store.ParseMonth(*monthFlag, now); err != nil {
+			return err
+		}
+		*level = store.ReportLevelLeadMonth
 	}
 	ws, err := resolveWorkspace(common, env)
 	if err != nil {
@@ -311,9 +318,12 @@ func draftTarget(pos []string, common *commonFlags, env func(string) string, usa
 	if err != nil {
 		return nil, "", "", err
 	}
-	week, err := store.ParseWeek(pos[0], now)
-	if err != nil {
-		return nil, "", "", err
+	// 组长月报的归一稿用月份编号（2026-10），其余用周。
+	week := pos[0]
+	if !store.ValidMonth(week) {
+		if week, err = store.ParseWeek(pos[0], now); err != nil {
+			return nil, "", "", err
+		}
 	}
 	ws, err := resolveWorkspace(common, env)
 	if err != nil {
