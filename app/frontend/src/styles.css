@@ -3450,3 +3450,27 @@ body.quicknote-body {
   padding: 4px 0;
   border-bottom: 1px dashed var(--line);
 }
+
+/* ---------- 周报：组报 ---------- */
+
+.template-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 620px;
+}
+
+.template-text {
+  height: 340px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.btn.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}

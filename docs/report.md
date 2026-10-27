@@ -17,6 +17,12 @@
         │   └── <personId>.md
         ├── member-normalized/    # 组员周报的 AI 归一稿（草稿 / 定稿）
         │   └── <personId>.md
+        ├── group/                # 组报（合并组员定稿，草稿 / 定稿）
+        │   └── <组长 personId>.md
+        ├── lead-normalized/      # 组长周报原文的归一稿（结构同组报）
+        │   └── <组长 personId>.md
+        ├── product/              # SE 产品 / 项目周报（每周一份）
+        │   └── product.md
         └── .history/             # 覆盖 / 删除前的历史，不参与索引
             ├── member/
             │   └── <personId>-<旧 submittedAt 紧凑格式>.md
@@ -184,6 +190,53 @@ humanEdited: false
 - **顺延**：把「部分 / 延期」的计划追加到本周「下周计划」，末尾加「（顺延）」，去掉该节的「- 无」；已顺延或文本已存在的不重复加，可重复执行。顺延会改正文，所以本周归一稿已定稿时要先取消定稿。
 - **AI 建议**：把上周计划和本周完成（带 id）发给模型，要求返回 JSON `[{plan, status, matches}]`，写入时 `source: ai`；人工标过的条目不覆盖。外发先预览确认。
 
+## 组报（reports/<周>/group/<组长 personId>.md）
+
+组长把本组组员**定稿**的归一稿合并成组报，定稿后一键带入 SE tab。核心逻辑在
+`internal/core/group.go`。
+
+- **组长与组员**：组长 = 名单里角色为组长的人（`--group` 不填时取唯一有组长的组）；组员 = 该周周一时在这个组、角色为组员的在职人员。没有组长时提示先把自己加进名单。
+- **只用定稿**：有组员没定稿 / 没交时默认返回 `7 NOT_FINAL` 并列出名单；`--allow-missing`（App「仍然生成」）才生成，并在组报开头标「未纳入：xxx」，front matter 记 `missing`。
+- **结构由代码保证**：AI 只把条目归类、提炼措辞，返回 JSON `[{section, productLine, category, text, sources, pending}]`；代码渲染为 `## 栏目` → `### 产品线` → `#### 类别` → `- 事项（来源组员）`，空类别不输出，判不准的加「（待确认）」。类别固定：功能开发 / 客户支持 / 功能优化 / 项目管理；产品线取组员名单的 productLines，归不进去的放「其他」，类别不认识的放「未分类」。JSON 解析失败时整段保存为草稿并提示。
+- **front matter**：同归一稿，另有 `group`、`sources`（纳入的组员 ID）、`missing`。`sourceHash` 是纳入组员定稿正文的合并哈希，组员定稿内容再变时标「组员定稿已更新」。
+- **生命周期**同归一稿：人工修改 / 已定稿再生成返回 `9`，`--force` 覆盖且旧版进 `.history/group/`；定稿后只读。
+- **带入 SE**：`report group submit` 把定稿组报以组长本人身份写入该周 `lead` 层级，`source: group-report`，与手动粘贴效果一致；重复带入走现有覆盖 + `.history` 规则。未定稿返回 `7`。
+- **索引**：与归一稿一样复用 `reports` 表（`level = group`）。
+
+### 模板（templates/<名称>.md）
+
+模板是工作台根目录 `templates/` 下的普通 Markdown，CLI、App 和任何编辑器都能改；组报默认用 `group`，文件不存在时用内置默认模板。
+
+```markdown
+## 本周完成
+> [产品线×类别] 合并组员本周完成的事项，同一事项去重，保留进度与关键数字。
+
+## 下周计划
+> [产品线×类别] 合并组员下周计划。
+
+## 风险与求助
+> 需要 SE 或其他组关注、协调的风险和求助，没有就写「无」。
+
+## AI 使用 / AI Coding 实践经验
+> 只提炼对其他组有借鉴意义的 AI 使用和 AI Coding 经验，没有就写「无」。
+```
+
+- `## 栏目名` 一行一个栏目，可增删、改名、排序；紧跟的 `> ` 行是给 AI 的说明。
+- 说明里含 `[产品线×类别]` 的栏目按二维结构输出，其余栏目平铺。
+
+## 产品 / 项目周报（SE，reports/<周>/product/product.md）
+
+SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab 完全分开计算。核心逻辑在
+`internal/core/product.go`，存储、生命周期、合并请求与渲染都和组报共用。
+
+- **组长原文先归一**：`report normalize --level lead` 把组长原文归一到 `reports/<周>/lead-normalized/`，结构同组报（`## 栏目` → `### 产品线` → `#### 类别`，模板用 `group`），生命周期、7 / 9 规则同组员归一稿；`report draft show|edit`、`report finalize|unfinalize` 加 `--level lead`。
+- **组报带入的直接用**：组长经组报带入（`source: group-report`）的周报本身就是定稿，不再归一；`report status --level lead` 显示「定稿（组报）」，批量归一时跳过。
+- **只用定稿**：有组长未定稿默认返回 `7 NOT_FINAL` 并列出（显示为「组名（组长）」）；`--allow-missing` 才生成并在开头标「未纳入」。
+- **结构**：一份报告按产品线分章：`## 产品线` → `### 栏目` → `#### 类别` → `- 事项（来源组）`；模板里不带 `[产品线×类别]` 的栏目（如 风险与求助）放在最后单独成章。产品线取名单里所有在职人员的 productLines，没有条目的产品线不输出。
+- **模板**：`templates/product.md`，不存在时用内置默认（同组报四栏，措辞面向 SE）。
+- **front matter**：同组报，`sources` 为纳入的组长 ID，`missing` 为未纳入的组；组长定稿内容变化后标「来源已更新」。
+- `report product show --product <产品线>` 只输出那一章。
+
 ## ISO 周与周报日
 
 - 周编号 `YYYY-WNN`，周一到周日；跨年按 `time.ISOWeek` 规则。例如
@@ -252,7 +305,7 @@ humanEdited: false
 | `report status [--week W] [--level L] [--group g] [--product p]` | 提交状态与汇总计数 |
 | `report rm <week> <person> [--level L]` | 删除周报（移入 `.history`） |
 | `report config [--weekday 1-7]` | 查看 / 修改周报日 |
-| `report normalize [--week W] (--person p... \| --all) [--model m] [--dry-run \| --yes] [--force]` | AI 归一组员周报为草稿；不带 `--yes` 只输出完整预览并退出 8；`--all` 跳过已修改 / 已定稿的人并最终退出 9 |
+| `report normalize [--week W] [--level member\|lead] (--person p... \| --all) [--model m] [--dry-run \| --yes] [--force]` | AI 归一组员周报为草稿；不带 `--yes` 只输出完整预览并退出 8；`--all` 跳过已修改 / 已定稿的人并最终退出 9 |
 | `report draft show <week> <person>` | 查看归一稿（`--json` 含 `sourceChanged`） |
 | `report draft edit <week> <person> [--file f]` | 保存人工修改（默认读 stdin），标记 `humanEdited` |
 | `report finalize <week> <person>` / `report unfinalize <week> <person>` | 定稿 / 取消定稿 |
@@ -260,6 +313,12 @@ humanEdited: false
 | `report review set <week> <person> <计划id> --status done\|partial\|delayed\|canceled [--match id]... [--note 文本]` | 人工标一条计划（`--status ""` 清除） |
 | `report review suggest <week> <person> [--yes \| --dry-run]` | AI 建议对应关系与状态（不带 `--yes` 只预览，退出 8） |
 | `report carry <week> <person> [--items id]...` | 把「部分 / 延期」计划顺延到本周下周计划，可重复执行 |
+| `report group generate [--week W] [--group g] [--template t] [--allow-missing] [--yes \| --dry-run] [--force]` | AI 合并组员定稿为组报草稿；有人未定稿返回 7；不带 `--yes` 只预览，退出 8 |
+| `report group show\|edit\|finalize\|unfinalize [--week W] [--group g]` | 查看 / 修改（stdin 或 `--file`）/ 定稿 / 取消定稿组报 |
+| `report group submit [--week W] [--group g]` | 定稿组报带入 SE tab（组长本人 lead 层级）；未定稿返回 7 |
+| `report product generate [--week W] [--template t] [--allow-missing] [--yes \| --dry-run] [--force]` | SE 按产品线汇总组长定稿；有组长未定稿返回 7；不带 `--yes` 只预览，退出 8 |
+| `report product show [--product p]\|edit\|finalize\|unfinalize [--week W]` | 查看（可只看一章）/ 修改 / 定稿 / 取消定稿产品报 |
+| `template list\|show\|edit <名称>` | 报告模板（`templates/<名称>.md`，edit 读 stdin） |
 
 ### 示例
 

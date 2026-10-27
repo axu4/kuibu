@@ -80,6 +80,43 @@ export interface DraftData {
 }
 
 /**
+ * GroupData 是组长本周的组报。Exists 为 false 表示还没生成。
+ */
+export interface GroupData {
+    "exists": boolean;
+    "leadId": string;
+    "leadName": string;
+    "group": string;
+    "week": string;
+    "status": string;
+    "humanEdited": boolean;
+    "sourceChanged": boolean;
+    "missing": string[] | null;
+    "model": string;
+    "generatedAt": string;
+    "finalizedAt": string;
+    "body": string;
+
+    /**
+     * Submitted 表示 SE tab 里组长本人名下已有由组报带入的周报。
+     */
+    "submitted": boolean;
+
+    /**
+     * Warning 是本次生成的提示（模型输出不符合结构时）。
+     */
+    "warning": string;
+}
+
+/**
+ * GroupPlanData 是组报外发预览。
+ */
+export interface GroupPlanData {
+    "preview": llm$0.Preview;
+    "missing": string[] | null;
+}
+
+/**
  * LLMList 是「AI 模型」设置区的列表，密钥只给掩码。
  */
 export interface LLMList {
@@ -459,6 +496,11 @@ export interface ReportPerson {
     "sourceChanged": boolean;
 
     /**
+     * FromGroup 表示组长周报由定稿组报带入，本身就是定稿。
+     */
+    "fromGroup": boolean;
+
+    /**
      * Alignment 是对照上周计划的对齐率 0~1，没有可对照数据时为 null。
      */
     "alignment": number | null;
@@ -654,6 +696,15 @@ export interface SubmitItem {
      * Level 是层级：member / lead。
      */
     "level": string;
+}
+
+/**
+ * TemplateData 是一份报告模板。
+ */
+export interface TemplateData {
+    "name": string;
+    "body": string;
+    "isDefault": boolean;
 }
 
 /**

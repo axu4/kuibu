@@ -13,6 +13,7 @@ import { ReportPaste } from "./ReportPaste";
 import { PeopleManager } from "./PeopleManager";
 import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import { ReportReview, alignmentText } from "./ReportReview";
+import { GroupReport } from "./GroupReport";
 import {
   formatSubmittedAt,
   levelLabel,
@@ -54,6 +55,7 @@ export function ReportView() {
   const [deleteTarget, setDeleteTarget] = useState<ReportPerson | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   // 外部变化后用于强制重载当前详情（status 没变时，effect 依赖可能不触发）。
   const [refreshTick, setRefreshTick] = useState(0);
 
@@ -135,6 +137,7 @@ export function ReportView() {
       if (next === levelRef.current) return;
       setLevel(next);
       saveReportLevel(next);
+      setGroupOpen(false);
       setSelectedId(null);
       setDetail(null);
       const w = weekRef.current;
@@ -144,6 +147,7 @@ export function ReportView() {
   );
 
   const openRow = useCallback((entry: ReportPerson) => {
+    setGroupOpen(false);
     setSelectedId(entry.personId);
     setDetail(null);
     setDetailError(false);
@@ -377,6 +381,17 @@ export function ReportView() {
             <div className="report-actions">
               <button
                 type="button"
+                className={`btn${groupOpen ? " is-on" : ""}`}
+                onClick={() => {
+                  setSelectedId(null);
+                  setGroupOpen((v) => !v);
+                }}
+              >
+                <Icon name="report" size={14} />
+                {level === "member" ? "组报" : "产品报"}
+              </button>
+              <button
+                type="button"
                 className="btn btn-primary"
                 onClick={() => setPaste({ personId: "" })}
               >
@@ -385,15 +400,11 @@ export function ReportView() {
               </button>
               <MoreMenu
                 items={[
-                  ...(level === "member"
-                    ? [
-                        {
-                          label: "批量归一本周已交",
-                          icon: "bolt" as const,
-                          onClick: () => setBatchOpen(true),
-                        },
-                      ]
-                    : []),
+                  {
+                    label: "批量归一本周已交",
+                    icon: "bolt" as const,
+                    onClick: () => setBatchOpen(true),
+                  },
                   { label: "复制催交话术", icon: "copy", onClick: () => void copyReminder() },
                   { label: "管理名单", icon: "person", onClick: () => setManagerOpen(true) },
                   { label: "设置周报日", icon: "calendar", onClick: () => setWeekdayOpen(true) },
@@ -447,7 +458,18 @@ export function ReportView() {
         </div>
       </section>
 
-      {selectedEntry && week && (
+      {groupOpen && week && (
+        <GroupReport
+          key={level}
+          kind={level === "member" ? "group" : "product"}
+          week={week.week}
+          refreshTick={refreshTick}
+          onClose={() => setGroupOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
+      {!groupOpen && selectedEntry && week && (
         <ReportDetailPanel
           entry={selectedEntry}
           report={detail}
@@ -477,7 +499,12 @@ export function ReportView() {
       )}
 
       {batchOpen && week && (
-        <BatchNormalize week={week.week} onClose={() => setBatchOpen(false)} onToast={setToast} />
+        <BatchNormalize
+          week={week.week}
+          level={level}
+          onClose={() => setBatchOpen(false)}
+          onToast={setToast}
+        />
       )}
 
       {managerOpen && <PeopleManager onClose={() => setManagerOpen(false)} />}
@@ -538,7 +565,7 @@ function ReportRow({ entry, showGroup, selected, onSelect }: ReportRowProps) {
           className={`draft-badge is-${entry.normalized}${entry.sourceChanged ? " is-warn" : ""}`}
           title={entry.sourceChanged ? "归一后原文又更新过" : undefined}
         >
-          {entry.normalized === "final" ? "定稿" : "草稿"}
+          {entry.fromGroup ? "定稿（组报）" : entry.normalized === "final" ? "定稿" : "草稿"}
           {entry.sourceChanged && " ·原文已更新"}
         </span>
       )}
@@ -584,9 +611,11 @@ function ReportDetailPanel({
   onDelete,
 }: ReportDetailPanelProps) {
   const [tab, setTab] = useState<"raw" | "draft" | "review">("raw");
-  const canNormalize = level === "member" && entry.status !== "missing";
+  // 组长经组报带入的周报本身就是定稿，不需要归一。
+  const canNormalize = entry.status !== "missing" && !entry.fromGroup;
+  const canReview = canNormalize && level === "member";
   const showDraft = canNormalize && tab === "draft";
-  const showReview = canNormalize && tab === "review";
+  const showReview = canReview && tab === "review";
   return (
     <section className={`report-detail${showReview ? " is-wide" : ""}`}>
       <div className="report-detail-head">
@@ -619,13 +648,15 @@ function ReportDetailPanel({
             >
               归一稿
             </button>
-            <button
-              type="button"
-              className={`segmented-btn${tab === "review" ? " is-active" : ""}`}
-              onClick={() => setTab("review")}
-            >
-              对照上周
-            </button>
+            {canReview && (
+              <button
+                type="button"
+                className={`segmented-btn${tab === "review" ? " is-active" : ""}`}
+                onClick={() => setTab("review")}
+              >
+                对照上周
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -644,6 +675,7 @@ function ReportDetailPanel({
           <ReportDraft
             week={week.week}
             personId={entry.personId}
+            level={level}
             refreshTick={refreshTick}
             onToast={onToast}
           />

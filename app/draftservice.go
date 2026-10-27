@@ -52,41 +52,50 @@ func (s *ReportService) llmEnv() func(string) string {
 	return os.Getenv
 }
 
-// GetDraft 返回某人某周的归一稿；还没生成时 Exists 为 false。
-func (s *ReportService) GetDraft(week, person string) (DraftData, error) {
+// GetDraft 返回某人某周的归一稿（level 为 member / lead）；还没生成时 Exists 为 false。
+func (s *ReportService) GetDraft(week, person, level string) (DraftData, error) {
 	ws, _, err := s.instances()
 	if err != nil {
 		return DraftData{}, err
 	}
-	personID, err := ws.ResolveReportPerson(week, store.ReportLevelMember, person)
+	level = levelOrMember(level)
+	personID, err := ws.ResolveReportPerson(week, level, person)
 	if err != nil {
 		return DraftData{}, err
 	}
-	d, err := ws.ReadDraft(week, personID)
+	d, err := ws.ReadDraftKind(store.NormalizedKind(level), week, personID)
 	if errors.Is(err, store.ErrNotFound) {
 		return DraftData{Person: personID, Week: week, Status: "none"}, nil
 	}
 	if err != nil {
 		return DraftData{}, err
 	}
-	return toDraftData(ws, d), nil
+	return toDraftData(ws, d, level), nil
 }
 
-// PrepareNormalize 生成归一的外发预览，不发任何请求。persons 为空表示本周已交的全部组员。
-func (s *ReportService) PrepareNormalize(week string, persons []string, model string, force bool) (NormalizePlan, error) {
+// levelOrMember 空层级视为组员。
+func levelOrMember(level string) string {
+	if level == "" {
+		return store.ReportLevelMember
+	}
+	return level
+}
+
+// PrepareNormalize 生成归一的外发预览，不发任何请求。persons 为空表示本周已交的全部人员。
+func (s *ReportService) PrepareNormalize(week, level string, persons []string, model string, force bool) (NormalizePlan, error) {
 	ws, _, err := s.instances()
 	if err != nil {
 		return NormalizePlan{}, err
 	}
-	jobs, skipped, err := core.PlanNormalize(ws, week, persons, force)
+	batch, skipped, err := core.PlanNormalizeLevel(ws, week, levelOrMember(level), persons, force)
 	if err != nil {
 		return NormalizePlan{}, err
 	}
 	if skipped == nil {
 		skipped = []core.NormalizeSkip{}
 	}
-	plan := NormalizePlan{Persons: []string{}, Skipped: skipped}
-	if len(jobs) == 0 {
+	plan := NormalizePlan{Persons: batch.Persons, Skipped: skipped}
+	if len(batch.Persons) == 0 {
 		return plan, nil
 	}
 	out := &llm.Outbound{Env: s.llmEnv()}
@@ -94,18 +103,15 @@ func (s *ReportService) PrepareNormalize(week string, persons []string, model st
 	if err != nil {
 		return NormalizePlan{}, err
 	}
-	preview.Text = core.CombinedPreviewText(jobs)
+	preview.Text = batch.Text
 	preview.Chars = len([]rune(preview.Text))
 	plan.Preview = preview
-	for _, j := range jobs {
-		plan.Persons = append(plan.Persons, j.Person)
-	}
 	return plan, nil
 }
 
 // Normalize 发送并保存草稿。只能由外发确认弹窗的「确认发送」调用：persons 必须是
 // PrepareNormalize 预览过的那批人，内容与预览一致。
-func (s *ReportService) Normalize(week string, persons []string, model string, force bool) ([]NormalizeResultData, error) {
+func (s *ReportService) Normalize(week, level string, persons []string, model string, force bool) ([]NormalizeResultData, error) {
 	ws, _, err := s.instances()
 	if err != nil {
 		return nil, err
@@ -113,14 +119,15 @@ func (s *ReportService) Normalize(week string, persons []string, model string, f
 	if len(persons) == 0 {
 		return []NormalizeResultData{}, nil
 	}
-	jobs, _, err := core.PlanNormalize(ws, week, persons, force)
+	level = levelOrMember(level)
+	batch, _, err := core.PlanNormalizeLevel(ws, week, level, persons, force)
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	out := &llm.Outbound{Env: s.llmEnv()}
-	results, err := core.RunNormalize(ctx, ws, out, model, jobs, force, true, s.clock())
+	results, err := batch.Run(ctx, ws, out, model, force, true, s.clock())
 	if err != nil {
 		return nil, err
 	}
@@ -128,55 +135,57 @@ func (s *ReportService) Normalize(week string, persons []string, model string, f
 	ids := make([]string, 0, len(results))
 	for _, r := range results {
 		data = append(data, NormalizeResultData{Person: r.Person, Name: r.Name, Warning: r.Warning, Error: r.Error})
-		ids = append(ids, week+"/"+store.DraftDirName+"/"+r.Person)
+		ids = append(ids, week+"/"+store.NormalizedKind(level)+"/"+r.Person)
 	}
 	s.emitReport(nil, ids)
 	return data, nil
 }
 
 // SaveDraft 保存人工修改。已定稿时报错，需先取消定稿。
-func (s *ReportService) SaveDraft(week, person, body string) (DraftData, error) {
-	return s.changeDraft(week, person, func(ws *store.Workspace, id string) (*store.Draft, error) {
-		return ws.EditDraft(week, id, body, s.clock())
+func (s *ReportService) SaveDraft(week, person, level, body string) (DraftData, error) {
+	return s.changeDraft(week, person, level, func(ws *store.Workspace, kind, id string) (*store.Draft, error) {
+		return ws.EditDraftKind(kind, week, id, body, s.clock())
 	})
 }
 
 // FinalizeDraft 定稿。
-func (s *ReportService) FinalizeDraft(week, person string) (DraftData, error) {
-	return s.changeDraft(week, person, func(ws *store.Workspace, id string) (*store.Draft, error) {
-		return ws.FinalizeDraft(week, id, s.clock())
+func (s *ReportService) FinalizeDraft(week, person, level string) (DraftData, error) {
+	return s.changeDraft(week, person, level, func(ws *store.Workspace, kind, id string) (*store.Draft, error) {
+		return ws.FinalizeDraftKind(kind, week, id, s.clock())
 	})
 }
 
 // UnfinalizeDraft 取消定稿。
-func (s *ReportService) UnfinalizeDraft(week, person string) (DraftData, error) {
-	return s.changeDraft(week, person, func(ws *store.Workspace, id string) (*store.Draft, error) {
-		return ws.UnfinalizeDraft(week, id)
+func (s *ReportService) UnfinalizeDraft(week, person, level string) (DraftData, error) {
+	return s.changeDraft(week, person, level, func(ws *store.Workspace, kind, id string) (*store.Draft, error) {
+		return ws.UnfinalizeDraftKind(kind, week, id)
 	})
 }
 
 // changeDraft 解析人员后执行写操作并通知前端。
-func (s *ReportService) changeDraft(week, person string, fn func(*store.Workspace, string) (*store.Draft, error)) (DraftData, error) {
+func (s *ReportService) changeDraft(week, person, level string, fn func(*store.Workspace, string, string) (*store.Draft, error)) (DraftData, error) {
 	ws, _, err := s.instances()
 	if err != nil {
 		return DraftData{}, err
 	}
-	personID, err := ws.ResolveReportPerson(week, store.ReportLevelMember, person)
+	level = levelOrMember(level)
+	kind := store.NormalizedKind(level)
+	personID, err := ws.ResolveReportPerson(week, level, person)
 	if err != nil {
 		// 原文已删除时仍允许按 ID 操作归一稿。
 		personID = strings.TrimSpace(person)
 	}
-	d, err := fn(ws, personID)
+	d, err := fn(ws, kind, personID)
 	if err != nil {
 		return DraftData{}, err
 	}
-	s.emitReport(nil, []string{week + "/" + store.DraftDirName + "/" + personID})
-	return toDraftData(ws, d), nil
+	s.emitReport(nil, []string{week + "/" + kind + "/" + personID})
+	return toDraftData(ws, d, level), nil
 }
 
 // toDraftData 把归一稿转为前端结构。
-func toDraftData(ws *store.Workspace, d *store.Draft) DraftData {
-	report, _ := ws.ReadReport(d.Week, store.ReportLevelMember, d.Person)
+func toDraftData(ws *store.Workspace, d *store.Draft, level string) DraftData {
+	report, _ := ws.ReadReport(d.Week, level, d.Person)
 	st := store.DraftStateFor(d, report)
 	out := DraftData{
 		Exists:        true,

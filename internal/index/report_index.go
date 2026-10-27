@@ -383,10 +383,11 @@ func deletePerson(ctx context.Context, tx *sql.Tx, path string) (string, bool, e
 	return id, true, nil
 }
 
-// readReportOrDraft 读取周报原文或归一稿；归一稿转成 level=member-normalized
-// 的 Report，与原文共用 reports 表与全文索引，ID 不会与原文冲突。
+// readReportOrDraft 读取周报原文、归一稿或组报；后两者转成 level=目录名
+// （member-normalized / lead-normalized / group / product）的 Report，与原文共用 reports 表与全文索引，ID 不会与原文冲突。
 func readReportOrDraft(path string) (*store.Report, error) {
-	if filepath.Base(filepath.Dir(path)) != store.DraftDirName {
+	kind := filepath.Base(filepath.Dir(path))
+	if !store.IsDraftKind(kind) {
 		return store.ReadReportFile(path)
 	}
 	d, err := store.ReadDraftFile(path)
@@ -401,7 +402,7 @@ func readReportOrDraft(path string) (*store.Report, error) {
 		Person:      d.Person,
 		Name:        d.Name,
 		Week:        d.Week,
-		Level:       store.DraftDirName,
+		Level:       kind,
 		Source:      d.Status,
 		SubmittedAt: submitted,
 		Body:        d.Body,
