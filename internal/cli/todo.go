@@ -267,6 +267,7 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 	root := fs.Bool("root", false, "只看顶层")
 	search := fs.String("search", "", "标题与正文检索")
 	tree := fs.Bool("tree", false, "按父子缩进显示")
+	view := fs.String("view", "", "视图: today（含逾期）|week|all|done，与 App 侧栏一致")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -275,6 +276,12 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 		return usagef("todo list 不接受位置参数: %s", strings.Join(pos, " "))
 	}
 	visited := visitedSet(visitedFlags(fs))
+	if *view != "" && !core.ValidTodoView(*view) {
+		return usagef("非法 --view 值 %q（today|week|all|done）", *view)
+	}
+	if *view != "" && (visited["due"] || visited["status"]) {
+		return usagef("--view 不能与 --due / --status 同时使用")
+	}
 
 	now, err := nowFrom(env)
 	if err != nil {
@@ -304,6 +311,8 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 		if !all {
 			statuses = collected
 		}
+	} else if *view != "" {
+		statuses = core.TodoViewStatuses(*view)
 	} else {
 		statuses = []string{store.StatusTodo, store.StatusDoing}
 	}
@@ -346,6 +355,19 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 	matched, err := idx.ListTodos(filter)
 	if err != nil {
 		return err
+	}
+	if *view != "" {
+		kept := matched[:0]
+		for _, m := range matched {
+			ok, err := core.InTodoView(*view, m.Due, now)
+			if err != nil {
+				return err
+			}
+			if ok {
+				kept = append(kept, m)
+			}
+		}
+		matched = kept
 	}
 
 	if *tree {
@@ -496,6 +518,13 @@ func todoShow(args []string, common *commonFlags, stdout, stderr io.Writer, env 
 func todoSetStatus(args []string, common *commonFlags, stdout, stderr io.Writer, env func(string) string, status, verb string) error {
 	fs := newFlagSet("todo " + status)
 	addCommonFlags(fs, common)
+	// 完成 / 取消父任务时，未完成的子任务怎么办需要明确选择。
+	closing := status == store.StatusDone || status == store.StatusCanceled
+	var withChildren, onlyParent *bool
+	if closing {
+		withChildren = fs.Bool("with-children", false, "连同全部未完成的子任务一起"+verb)
+		onlyParent = fs.Bool("only-parent", false, "只处理本条，子任务保持不变")
+	}
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -511,11 +540,36 @@ func todoSetStatus(args []string, common *commonFlags, stdout, stderr io.Writer,
 	if err != nil {
 		return err
 	}
-	t, err := ws.SetTodoStatus(pos[0], status, now)
+	var (
+		t       *store.Todo
+		changed []string
+	)
+	if closing && *withChildren && *onlyParent {
+		return usagef("--with-children 与 --only-parent 不能同时使用")
+	}
+	if closing && !*withChildren && !*onlyParent {
+		n, err := ws.OpenDescendantCount(pos[0])
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf("%w：还有 %d 个未完成的子任务，加 --with-children 一起处理，或 --only-parent 只处理本条", store.ErrNeedsConfirm, n)
+		}
+	}
+	if closing && *withChildren {
+		t, changed, err = ws.SetTodoStatusTree(pos[0], status, now)
+	} else {
+		t, err = ws.SetTodoStatus(pos[0], status, now)
+		if t != nil {
+			changed = []string{t.ID}
+		}
+	}
 	if err != nil {
 		return err
 	}
-	upsertTodoIndex(ws, t.ID, stderr)
+	for _, id := range changed {
+		upsertTodoIndex(ws, id, stderr)
+	}
 
 	if common.json {
 		return writeJSON(stdout, todoJSONFromStore(ws, t, now, false, nil))
