@@ -26,6 +26,8 @@ const (
 	ReportSourcePaste = "paste"
 	// ReportSourceCLI 表示 CLI 提交。
 	ReportSourceCLI = "cli"
+	// ReportSourceGroup 表示由定稿组报一键带入（组长交给 SE）。
+	ReportSourceGroup = "group-report"
 )
 
 // DefaultReportWeekday 是默认周报日：周四（1=周一…7=周日）。
@@ -203,7 +205,7 @@ func ValidReportLevel(level string) bool {
 
 // ValidReportSource 判断周报来源是否合法。
 func ValidReportSource(source string) bool {
-	return source == ReportSourcePaste || source == ReportSourceCLI
+	return source == ReportSourcePaste || source == ReportSourceCLI || source == ReportSourceGroup
 }
 
 // reportPath 返回周报文件的绝对路径。

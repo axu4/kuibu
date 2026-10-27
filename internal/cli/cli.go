@@ -56,6 +56,9 @@ const usageText = `用法:
   report finalize|unfinalize <w> <p>     定稿 / 取消定稿
   report review <week> <person>          对照上周计划（set/suggest 子命令标状态、AI 建议）
   report carry <week> <person>           把未完成计划顺延到本周下周计划
+  report group generate [--week W] ...   AI 合并组员定稿为组报（不带 --yes 只预览，退出 8）
+  report group show|edit|finalize|unfinalize|submit  组报查看、修改、定稿、带入 SE
+  template list|show|edit <名称>         报告模板（templates/<名称>.md）
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
   asset add <file>                       归档资源并输出相对路径
@@ -173,6 +176,8 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runWatch(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "llm":
 		err = runLLM(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "template":
+		err = runTemplate(cmdArgs, &common, stdin, stdout, stderr, env)
 	default:
 		jsonMode := common.json || hasJSONFlag(cmdArgs)
 		if jsonMode {

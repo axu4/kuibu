@@ -74,9 +74,9 @@ func (ix *Index) ListReports(f ReportFilter) ([]ReportMeta, error) {
 		conds = append(conds, "level = ?")
 		args = append(args, f.Level)
 	} else {
-		// 不指定层级时只列原文，归一稿要显式按 level=member-normalized 查。
-		conds = append(conds, "level != ?")
-		args = append(args, store.DraftDirName)
+		// 不指定层级时只列原文，归一稿 / 组报要显式按 level 查。
+		conds = append(conds, "level NOT IN (?, ?)")
+		args = append(args, store.DraftDirName, store.GroupDirName)
 	}
 	if f.Group != "" {
 		conds = append(conds, "grp = ?")

@@ -33,7 +33,7 @@ type reportJSON struct {
 // runReport 分发 report 子命令。
 func runReport(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry")
+		return usagef("report 需要子命令: add/list/show/status/rm/config/normalize/draft/finalize/unfinalize/review/carry/group")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
@@ -61,6 +61,8 @@ func runReport(ctx context.Context, args []string, common *commonFlags, stdin io
 		return reportReview(ctx, rest, common, stdout, stderr, env)
 	case "carry":
 		return reportCarry(rest, common, stdout, stderr, env)
+	case "group":
+		return reportGroup(ctx, rest, common, stdin, stdout, stderr, env)
 	default:
 		return usagef("未知 report 子命令 %q", sub)
 	}

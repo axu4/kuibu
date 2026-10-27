@@ -19,6 +19,9 @@ import (
 // 生命周期：原文（只读）→ AI 草稿 → 人工修改 → 定稿。下一级引用与导出只认定稿。
 const DraftDirName = "member-normalized"
 
+// GroupDirName 是组报目录：reports/<周>/group/<组长 personId>.md。格式与归一稿相同。
+const GroupDirName = "group"
+
 // 归一稿状态。
 const (
 	DraftStatusDraft = "draft"
@@ -61,6 +64,14 @@ type Draft struct {
 	Body string
 	// Review 是「对照上周计划」的结果，只存在 front matter，不影响定稿状态。
 	Review *DraftReview
+	// Kind 是所在目录：member-normalized（归一稿）或 group（组报），不写入文件。
+	Kind string
+	// Group 是组报所属组（仅组报）。
+	Group string
+	// Sources 是组报纳入的组员 ID（仅组报）。
+	Sources []string
+	// Missing 是组报生成时未定稿、未纳入的组员姓名（仅组报）。
+	Missing []string
 	// Extra 保存 front matter 中未识别的字段。
 	Extra map[string]any
 
@@ -71,7 +82,7 @@ type Draft struct {
 var knownDraftKeys = map[string]bool{
 	"person": true, "name": true, "week": true, "status": true, "sourceHash": true,
 	"model": true, "generatedAt": true, "editedAt": true, "finalizedAt": true, "humanEdited": true,
-	"review": true,
+	"review": true, "group": true, "sources": true, "missing": true,
 }
 
 // 对照状态。
@@ -131,14 +142,35 @@ func SourceHash(body string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// draftPath 返回归一稿路径。
-func (w *Workspace) draftPath(week, personID string) string {
-	return filepath.Join(w.ReportsDir(), week, DraftDirName, personID+noteExt)
+// kindOrDraft 把空 kind 视为归一稿。
+func kindOrDraft(kind string) string {
+	if kind == "" {
+		return DraftDirName
+	}
+	return kind
+}
+
+// kindNoun 返回提示用的名称。
+func kindNoun(kind string) string {
+	if kind == GroupDirName {
+		return "组报"
+	}
+	return "归一稿"
+}
+
+// draftPath 返回归一稿 / 组报路径。
+func (w *Workspace) draftPath(kind, week, personID string) string {
+	return filepath.Join(w.ReportsDir(), week, kindOrDraft(kind), personID+noteExt)
 }
 
 // ReadDraft 读取归一稿；不存在时返回 ErrNotFound。
 func (w *Workspace) ReadDraft(week, personID string) (*Draft, error) {
-	return ReadDraftFile(w.draftPath(week, personID))
+	return ReadDraftFile(w.draftPath(DraftDirName, week, personID))
+}
+
+// ReadGroupReport 读取组报；leadID 是组长的组员 ID。
+func (w *Workspace) ReadGroupReport(week, leadID string) (*Draft, error) {
+	return ReadDraftFile(w.draftPath(GroupDirName, week, leadID))
 }
 
 // FinalDraft 返回已定稿的归一稿，未定稿时返回 ErrNotFinal。下一级引用与导出走它。
@@ -180,6 +212,11 @@ func (w *Workspace) ListDrafts(week string) ([]*Draft, error) {
 
 // GeneratedDraft 是 AI 生成结果。
 type GeneratedDraft struct {
+	// Kind 为空表示归一稿，GroupDirName 表示组报。
+	Kind       string
+	Group      string
+	Sources    []string
+	Missing    []string
 	Person     string
 	Name       string
 	Week       string
@@ -192,7 +229,12 @@ type GeneratedDraft struct {
 // CheckRegenerate 判断能否用 AI 结果覆盖现有归一稿：已人工修改或已定稿时，
 // 不带 force 返回 ErrHumanEdits。不存在归一稿时返回 nil。
 func (w *Workspace) CheckRegenerate(week, personID string, force bool) error {
-	old, err := w.ReadDraft(week, personID)
+	return w.CheckRegenerateKind(DraftDirName, week, personID, force)
+}
+
+// CheckRegenerateKind 同 CheckRegenerate，kind 指定归一稿或组报。
+func (w *Workspace) CheckRegenerateKind(kind, week, personID string, force bool) error {
+	old, err := ReadDraftFile(w.draftPath(kind, week, personID))
 	if errors.Is(err, ErrNotFound) {
 		return nil
 	}
@@ -206,7 +248,7 @@ func (w *Workspace) CheckRegenerate(week, personID string, force bool) error {
 	if old.Status == DraftStatusFinal {
 		reason = "已定稿"
 	}
-	return newReportError(ErrHumanEdits, "%s 的归一稿%s，重新生成会覆盖；确认要覆盖请加 --force", old.displayName(), reason)
+	return newReportError(ErrHumanEdits, "%s 的%s%s，重新生成会覆盖；确认要覆盖请加 --force", old.displayName(), kindNoun(kind), reason)
 }
 
 // SaveGeneratedDraft 写入 AI 生成的草稿。已有归一稿被人工修改或已定稿时，
@@ -218,10 +260,11 @@ func (w *Workspace) SaveGeneratedDraft(in GeneratedDraft, force bool) (*Draft, e
 	if _, _, err := WeekRange(in.Week); err != nil {
 		return nil, err
 	}
-	if err := w.CheckRegenerate(in.Week, in.Person, force); err != nil {
+	kind := kindOrDraft(in.Kind)
+	if err := w.CheckRegenerateKind(kind, in.Week, in.Person, force); err != nil {
 		return nil, err
 	}
-	if err := w.archiveDraft(in.Week, in.Person); err != nil {
+	if err := w.archiveDraft(kind, in.Week, in.Person); err != nil {
 		return nil, err
 	}
 	now := in.Now
@@ -237,6 +280,10 @@ func (w *Workspace) SaveGeneratedDraft(in GeneratedDraft, force bool) (*Draft, e
 		Model:       in.Model,
 		GeneratedAt: now.Truncate(time.Second),
 		Body:        trimBlankLines(in.Body),
+		Kind:        kind,
+		Group:       in.Group,
+		Sources:     in.Sources,
+		Missing:     in.Missing,
 		Extra:       map[string]any{},
 	}
 	if err := w.writeDraft(d); err != nil {
@@ -247,12 +294,17 @@ func (w *Workspace) SaveGeneratedDraft(in GeneratedDraft, force bool) (*Draft, e
 
 // EditDraft 保存人工修改后的正文。已定稿时返回 ErrFinalized；正文未变时不写盘。
 func (w *Workspace) EditDraft(week, personID, body string, now time.Time) (*Draft, error) {
-	d, err := w.ReadDraft(week, personID)
+	return w.EditDraftKind(DraftDirName, week, personID, body, now)
+}
+
+// EditDraftKind 同 EditDraft，kind 指定归一稿或组报。
+func (w *Workspace) EditDraftKind(kind, week, personID, body string, now time.Time) (*Draft, error) {
+	d, err := ReadDraftFile(w.draftPath(kind, week, personID))
 	if err != nil {
 		return nil, err
 	}
 	if d.Status == DraftStatusFinal {
-		return nil, newReportError(ErrFinalized, "%s 的归一稿已定稿，请先取消定稿再修改", d.displayName())
+		return nil, newReportError(ErrFinalized, "%s 的%s已定稿，请先取消定稿再修改", d.displayName(), kindNoun(kind))
 	}
 	body = trimBlankLines(body)
 	if body == d.Body {
@@ -272,7 +324,12 @@ func (w *Workspace) EditDraft(week, personID, body string, now time.Time) (*Draf
 
 // FinalizeDraft 定稿。已定稿时原样返回。
 func (w *Workspace) FinalizeDraft(week, personID string, now time.Time) (*Draft, error) {
-	d, err := w.ReadDraft(week, personID)
+	return w.FinalizeDraftKind(DraftDirName, week, personID, now)
+}
+
+// FinalizeDraftKind 同 FinalizeDraft，kind 指定归一稿或组报。
+func (w *Workspace) FinalizeDraftKind(kind, week, personID string, now time.Time) (*Draft, error) {
+	d, err := ReadDraftFile(w.draftPath(kind, week, personID))
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +337,7 @@ func (w *Workspace) FinalizeDraft(week, personID string, now time.Time) (*Draft,
 		return d, nil
 	}
 	if strings.TrimSpace(d.Body) == "" {
-		return nil, fmt.Errorf("%w: 归一稿正文为空，不能定稿", ErrInvalid)
+		return nil, fmt.Errorf("%w: %s正文为空，不能定稿", ErrInvalid, kindNoun(kind))
 	}
 	if now.IsZero() {
 		now = time.Now()
@@ -295,7 +352,12 @@ func (w *Workspace) FinalizeDraft(week, personID string, now time.Time) (*Draft,
 
 // UnfinalizeDraft 取消定稿，回到草稿。
 func (w *Workspace) UnfinalizeDraft(week, personID string) (*Draft, error) {
-	d, err := w.ReadDraft(week, personID)
+	return w.UnfinalizeDraftKind(DraftDirName, week, personID)
+}
+
+// UnfinalizeDraftKind 同 UnfinalizeDraft，kind 指定归一稿或组报。
+func (w *Workspace) UnfinalizeDraftKind(kind, week, personID string) (*Draft, error) {
+	d, err := ReadDraftFile(w.draftPath(kind, week, personID))
 	if err != nil {
 		return nil, err
 	}
@@ -340,9 +402,9 @@ func (d *Draft) displayName() string {
 	return d.Person
 }
 
-// archiveDraft 把现有归一稿移入 .history/member-normalized/，不存在时什么也不做。
-func (w *Workspace) archiveDraft(week, personID string) error {
-	path := w.draftPath(week, personID)
+// archiveDraft 把现有归一稿 / 组报移入 .history/<kind>/，不存在时什么也不做。
+func (w *Workspace) archiveDraft(kind, week, personID string) error {
+	path := w.draftPath(kind, week, personID)
 	old, err := ReadDraftFile(path)
 	if errors.Is(err, ErrNotFound) {
 		return nil
@@ -350,7 +412,7 @@ func (w *Workspace) archiveDraft(week, personID string) error {
 	if err != nil {
 		return err
 	}
-	destDir := filepath.Join(w.ReportsDir(), week, historyDirName, DraftDirName)
+	destDir := filepath.Join(w.ReportsDir(), week, historyDirName, kindOrDraft(kind))
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("创建归一稿历史目录失败: %w", err)
 	}
@@ -382,7 +444,7 @@ func ReadDraftFile(path string) (*Draft, error) {
 		}
 		return nil, fmt.Errorf("读取归一稿失败: %w", err)
 	}
-	d := &Draft{Person: id, Status: DraftStatusDraft, Body: string(data), Extra: map[string]any{}}
+	d := &Draft{Person: id, Status: DraftStatusDraft, Body: string(data), Kind: filepath.Base(filepath.Dir(path)), Extra: map[string]any{}}
 	if front, body, ok := splitFrontMatter(data); ok {
 		d.Body = trimTrailingNewline(string(body))
 		if root, _, ok := frontMatterMapping(front); ok {
@@ -415,6 +477,12 @@ func ReadDraftFile(path string) (*Draft, error) {
 					if err := val.Decode(&rv); err == nil {
 						d.Review = &rv
 					}
+				case "group":
+					_ = val.Decode(&d.Group)
+				case "sources":
+					_ = val.Decode(&d.Sources)
+				case "missing":
+					_ = val.Decode(&d.Missing)
 				default:
 					var v any
 					if err := val.Decode(&v); err == nil {
@@ -454,6 +522,15 @@ func (w *Workspace) writeDraft(d *Draft) error {
 			return err
 		}
 	}
+	if kindOrDraft(d.Kind) == GroupDirName {
+		appendFrontMatterKey(root, "group", stringNode(d.Group))
+		if err := appendFrontMatterValue(root, "sources", nonNil(d.Sources)); err != nil {
+			return err
+		}
+		if err := appendFrontMatterValue(root, "missing", nonNil(d.Missing)); err != nil {
+			return err
+		}
+	}
 	if err := appendExtraFrontMatter(root, d.Extra, d.extraNodes, knownDraftKeys); err != nil {
 		return err
 	}
@@ -461,7 +538,7 @@ func (w *Workspace) writeDraft(d *Draft) error {
 	if err != nil {
 		return err
 	}
-	path := w.draftPath(d.Week, d.Person)
+	path := w.draftPath(d.Kind, d.Week, d.Person)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("创建归一稿目录失败: %w", err)
 	}
@@ -469,6 +546,14 @@ func (w *Workspace) writeDraft(d *Draft) error {
 		return fmt.Errorf("写入归一稿 %s 失败: %w", d.Person, err)
 	}
 	return nil
+}
+
+// nonNil 保证切片序列化为 [] 而不是 null。
+func nonNil(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return list
 }
 
 // optTime 零值输出空字符串，其余按 RFC3339。
