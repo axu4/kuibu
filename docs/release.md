@@ -24,26 +24,31 @@ git push origin v0.2.0
 
 推完 tag 后 GitHub Actions 会自动跑 `Release` workflow。也可以不推 tag，直接在 GitHub 的 Actions → Release → Run workflow 里填 tag 手动触发（见下文「失败如何重跑」）。
 
-## 自动合并与自动发版（按 PR 标签）
+## 自动合并与自动发版
 
-日常更推荐用标签，不用手动打 tag：
+日常不用手动合并、也不用手动打 tag：
 
-| 标签 | 作用 |
-| --- | --- |
-| `automerge` | CI 通过后自动 squash 合并（标题末尾带 `(#PR号)`） |
-| `release:patch` | 合并后发 patch 版（v0.4.0 → v0.4.1），修 bug 用 |
-| `release:minor` | 合并后发 minor 版（v0.4.0 → v0.5.0），加功能用 |
-| `release:major` | 合并后发 major 版（v0.4.0 → v1.0.0） |
+- **自动合并**：本仓库分支的 PR，CI 通过后自动 squash 合并（标题末尾带 `(#PR号)`）。不想被自动合并就开成**草稿**；草稿转为可评审时，CI 已通过会立即合并。别人从 fork 提的 PR 不会被自动合并。
+- **自动发版**：PR 合并后按标题前缀决定发不发版、发哪一级：
 
-- 两类标签互相独立：只打 `automerge` 就只合并不发版；只打 `release:*` 就在你手动合并后发版。文档、CLAUDE.md 这类改动不需要发版，就别打 `release:*`，免得 App 每次都提示更新。
-- 同时有多个 `release:*` 时取最大的。新版本号从最新的正式 tag（`vX.Y.Z`，忽略 `-rc` 等预发布）递增，tag 打在 PR 的合并提交上，然后触发 `Release` workflow，并在 PR 下留言说明发了哪个版本。
-- 自动合并的条件：PR 打开、不是草稿、带 `automerge`、来自本仓库分支（fork 的 PR 不会自动合并）、该提交上最新一次 CI 成功。合并时锁定已通过 CI 的提交（`--match-head-commit`），期间有新推送就等新提交的 CI。
-- 合并后补打 `release:*` 不会自动发版；这时在 Actions → **Auto release** → Run workflow 填 PR 号即可。已经打过 tag 的合并提交会被跳过，重跑不会重复发版。
+| PR 标题 | 发版 | 例子 |
+| --- | --- | --- |
+| `docs:` `ci:` `chore:` `test:` `refactor:` `style:` `build:` | 不发版 | `docs: 更新 README` |
+| `feat:` / `feat(范围):` | minor（v0.4.0 → v0.5.0） | `feat(app): 竖排导航` |
+| `xxx!:` / `xxx(范围)!:` | major（v0.4.0 → v1.0.0） | `app!: 改数据格式` |
+| 其他（`app:`、`core:`、`fix:` …） | patch（v0.4.0 → v0.4.1） | `app: 修复设置弹窗错位` |
+
+- 前缀不区分大小写，中文冒号也认。规则在 `.github/scripts/bump-from-title.sh`。
+- 想覆盖标题的判断，给 PR 打 `release:patch` / `release:minor` / `release:major` 标签，以标签为准（多个取最大）。
+- 新版本号从最新的正式 tag（`vX.Y.Z`，忽略 `-rc` 等预发布）递增，tag 打在 PR 的合并提交上，然后触发 `Release` workflow，并在 PR 下留言说明发了哪个版本。
+- 合并时锁定已通过 CI 的提交（`--match-head-commit`），期间有新推送就等新提交的 CI。
+- 需要补发或重跑时，在 Actions → **Auto release** → Run workflow 填 PR 号。已经打过 tag 的合并提交会被跳过，重跑不会重复发版。
 
 实现：
 
-- `.github/workflows/auto-merge.yml`：`pull_request_target`（打上 `automerge` 时）与 `workflow_run`（CI 跑完时）触发，执行 `.github/scripts/auto-merge.sh`。
+- `.github/workflows/auto-merge.yml`：`workflow_run`（CI 跑完时）与 `pull_request_target`（草稿转为可评审时）触发，执行 `.github/scripts/auto-merge.sh`。
 - `.github/workflows/auto-release.yml`：`pull_request_target`（PR 关闭且已合并）与手动 `workflow_dispatch` 触发，执行 `.github/scripts/release-from-pr.sh`。
+- `.github/scripts/bump-from-title.sh`：由 PR 标题判断发版级别。
 - `.github/scripts/next-version.sh`：版本号递增。
 - 两个工作流都以仓库写权限运行，所以只检出 `main` 上的脚本，从不检出或执行 PR 里的代码；它们改动工作流文件后要合并进 `main` 才生效。
 - GitHub 规定工作流自带 token 的操作（合并 PR、推 tag）不会再触发其他工作流，所以：自动合并后直接在同一个 job 里调用 `release-from-pr.sh`；推完 tag 后用 `gh workflow run release.yml -f tag=…` 显式触发 Release（`workflow_dispatch` 不受这条限制）。
