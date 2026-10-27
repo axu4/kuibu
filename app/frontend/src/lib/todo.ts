@@ -9,13 +9,13 @@ export const VIEW_KEY = "kuibu.view";
 export const QUICKNOTE_MODE_KEY = "kuibu.quicknote.mode";
 
 /** 主视图。 */
-export type MainView = "notes" | "todo" | "report";
+export type MainView = "notes" | "todo" | "report" | "calendar";
 
 /** 读取上次的主视图，默认笔记。 */
 export function loadMainView(): MainView {
   try {
     const value = localStorage.getItem(VIEW_KEY);
-    return value === "todo" || value === "report" ? value : "notes";
+    return value === "todo" || value === "report" || value === "calendar" ? value : "notes";
   } catch {
     return "notes";
   }

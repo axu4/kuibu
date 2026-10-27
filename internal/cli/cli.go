@@ -65,6 +65,8 @@ const usageText = `用法:
   report month generate|show|edit|finalize|unfinalize [--month M] [--level group|product]  组月报 / 产品月报
   report add|status --month M            组长月报归档 / 提交状态（收集日 report config --month-day）
   report export group|product|month-group|month-product [--format f] [--out file]  导出定稿（未定稿退出 7）
+  calendar month [--month M] [--group g] [--perspective member|lead]  团队日历月视图（人 × 周）
+  calendar day [--month M]                         团队日历日视图（月历格）
   template list|show|edit <名称>         报告模板（templates/<名称>.md）
   tree [--root <id>]                     打印笔记树
   search <query> [--limit n]             全文检索
@@ -171,6 +173,8 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		err = runPerson(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
 	case "report":
 		err = runReport(ctx, cmdArgs, &common, stdin, stdout, stderr, env)
+	case "calendar":
+		err = runCalendar(cmdArgs, &common, stdout, stderr, env)
 	case "tree":
 		err = runTree(cmdArgs, &common, stdout, stderr, env)
 	case "search":

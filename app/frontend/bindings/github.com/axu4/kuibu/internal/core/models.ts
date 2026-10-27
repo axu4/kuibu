@@ -6,6 +6,152 @@
 import * as store$0 from "../store/models.js";
 
 /**
+ * CalendarCell 是月视图里一个人一格。
+ */
+export interface CalendarCell {
+    /**
+     * Week 是 ISO 周编号。
+     */
+    "week": string;
+
+    /**
+     * Status 是 submitted / late / missing；该人该周不属应交范围时为空。
+     */
+    "status": string;
+
+    /**
+     * Completed 是本周归一稿「本周完成」条数。
+     */
+    "completed": number;
+
+    /**
+     * Delayed 是对照上周计划中标为延期的条数。
+     */
+    "delayed": number;
+
+    /**
+     * Alignment 是对齐率 0~1；上周没有定稿或没有计划时为 nil（前端显示「—」）。
+     */
+    "alignment": number | null;
+}
+
+/**
+ * CalendarDay 是日视图里的一天。
+ */
+export interface CalendarDay {
+    /**
+     * Date 是日期（YYYY-MM-DD）。
+     */
+    "date": string;
+
+    /**
+     * Weekday 是 1=周一 … 7=周日。
+     */
+    "weekday": number;
+
+    /**
+     * IsReportDay 表示这天是周报日（默认周四）。
+     */
+    "isReportDay": boolean;
+
+    /**
+     * IsCurrentMonth 表示这天是否属于所查月份；首尾补齐的跨月天为 false。
+     */
+    "isCurrentMonth": boolean;
+    "meetings": CalendarDayItem[] | null;
+    "todos": CalendarDayItem[] | null;
+}
+
+/**
+ * CalendarDayItem 是日视图里一天上的一条：会议笔记或待办截止。
+ */
+export interface CalendarDayItem {
+    /**
+     * ID 是笔记 ID 或待办 ID，点击后跳到对应笔记 / 待办。
+     */
+    "id": string;
+
+    /**
+     * Title 是标题。
+     */
+    "title": string;
+
+    /**
+     * Kind 是 meeting / todo。
+     */
+    "kind": string;
+}
+
+/**
+ * CalendarDayMonth 是日视图的完整数据：按整周补齐首尾的日历格。
+ */
+export interface CalendarDayMonth {
+    /**
+     * Month 是月份编号，ReportWeekday 是周报日（1-7）。
+     */
+    "month": string;
+    "reportWeekday": number;
+    "days": CalendarDay[] | null;
+}
+
+/**
+ * CalendarMonth 是月视图的完整数据：行 = 组员，列 = 当月各周。
+ */
+export interface CalendarMonth {
+    /**
+     * Month 是月份编号，形如 2026-10。
+     */
+    "month": string;
+
+    /**
+     * Group 是 --group 过滤的组名，空表示全部组。
+     */
+    "group": string;
+
+    /**
+     * Perspective 是 member（框架组长视角，默认）或 lead（SE 视角）。
+     */
+    "perspective": string;
+    "weeks": CalendarWeek[] | null;
+    "rows": CalendarRow[] | null;
+}
+
+/**
+ * CalendarRow 是月视图里的一行：一个人。
+ */
+export interface CalendarRow {
+    /**
+     * Person 是组员 ID，Name 是姓名，Group 是所属组，Role 是 member / lead。
+     */
+    "person": string;
+    "name": string;
+    "group": string;
+    "role": string;
+    "cells": CalendarCell[] | null;
+}
+
+/**
+ * CalendarWeek 是月视图里的一列：一周的区间与周报日。
+ */
+export interface CalendarWeek {
+    /**
+     * Week 是 ISO 周编号，形如 2026-W44。
+     */
+    "week": string;
+
+    /**
+     * Start 是周一日期，End 是周日日期（YYYY-MM-DD）。
+     */
+    "start": string;
+    "end": string;
+
+    /**
+     * ReportDay 是该周的周报日日期（YYYY-MM-DD）。
+     */
+    "reportDay": string;
+}
+
+/**
  * DoneReview 是本周一条完成项。
  */
 export interface DoneReview {

@@ -43,9 +43,18 @@ function sortByName(list: ReportPerson[]): ReportPerson[] {
  * 读写一律经 ReportService；写入后服务端会发 report:changed，这里监听它整体
  * 刷新（不打断正在打开的粘贴弹窗）。
  */
-export function ReportView() {
+interface ReportViewProps {
+  /** 从日历跳转进来时初始打开的周、人员与层级；不传则为本周与上次层级。 */
+  initialWeek?: string;
+  initialPersonId?: string;
+  initialLevel?: string;
+}
+
+export function ReportView({ initialWeek, initialPersonId, initialLevel }: ReportViewProps) {
   const [week, setWeek] = useState<ReportWeek | null>(null);
-  const [level, setLevel] = useState<ReportLevel>(loadReportLevel);
+  const [level, setLevel] = useState<ReportLevel>(
+    initialLevel === "lead" ? "lead" : initialLevel === "member" ? "member" : loadReportLevel(),
+  );
   const [status, setStatus] = useState<ReportStatusData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ReportData | null>(null);
@@ -89,15 +98,16 @@ export function ReportView() {
     [loadStatus],
   );
 
-  // 首次加载本周。
+  // 首次加载：默认本周，日历跳转进来时打开指定周并选中该人。
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const w = await ReportService.Week("this");
+        const w = await ReportService.Week(initialWeek ?? "this");
         if (!alive) return;
         setWeek(w);
         await loadStatus(w.week, levelRef.current);
+        if (initialPersonId) setSelectedId(initialPersonId);
       } catch (err) {
         if (alive) setToast(`读取周报失败：${readableError(err)}`);
       }
