@@ -7,6 +7,7 @@ import type {
   UpdateInfo,
 } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
+import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
   modifiersOnlyDisplay,
@@ -269,200 +270,200 @@ export function Settings({
   return (
     <div className="modal-mask" onMouseDown={onClose}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>设置</h2>
+        <h2 className="settings-head">设置</h2>
 
-        <div className="settings-row">
-          <div className="settings-label">
-            <span>工作台</span>
-            <span className="settings-desc settings-path" title={workspace}>
-              {workspace || "尚未打开"}
-            </span>
-          </div>
-          <button type="button" className="btn" onClick={onChangeWorkspace}>
-            <Icon name="folder" size={14} />
-            更换…
-          </button>
-        </div>
-
-        <div className="settings-row">
-          <div className="settings-label">
-            <span>随手记快捷键</span>
-            <span className="settings-desc">
-              在任意应用里按下就弹出随手记小窗
-            </span>
-          </div>
-          <div className="settings-value">
-            <kbd className={`shortcut-key${registered ? "" : " is-broken"}`}>
-              {recording ? preview || "按下组合键…" : currentDisplay}
-            </kbd>
-            {status && (
-              <span className={`shortcut-state${registered ? " is-ok" : " is-bad"}`}>
-                {registered ? "已生效" : "未注册"}
+        <div className="settings-body">
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>工作台</span>
+              <span className="settings-desc settings-path" title={workspace}>
+                {workspace || "尚未打开"}
               </span>
+            </div>
+            <button type="button" className="btn" onClick={onChangeWorkspace}>
+              <Icon name="folder" size={14} />
+              更换…
+            </button>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-label">
+              <span>随手记快捷键</span>
+              <span className="settings-desc">
+                在任意应用里按下就弹出随手记小窗
+              </span>
+            </div>
+            <div className="settings-value">
+              <kbd className={`shortcut-key${registered ? "" : " is-broken"}`}>
+                {recording ? preview || "按下组合键…" : currentDisplay}
+              </kbd>
+              {status && (
+                <span className={`shortcut-state${registered ? " is-ok" : " is-bad"}`}>
+                  {registered ? "已生效" : "未注册"}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {recording && (
+            <div className="settings-hint">
+              按下新的组合键（至少一个修饰键），Esc 取消。为避免误触，请先不要用 ⌘Q。
+            </div>
+          )}
+
+          {statusNotice && <div className="settings-hint">{statusNotice}</div>}
+          {statusError && <div className="settings-error">{statusError}</div>}
+          {error && <div className="settings-error">{error}</div>}
+
+          <div className="settings-actions">
+            {recording ? (
+              <>
+                <button type="button" onClick={() => {
+                  setRecording(false);
+                  setPreview("");
+                  setPending("");
+                }}>
+                  取消录制
+                </button>
+                <button
+                  type="button"
+                  className="is-primary"
+                  disabled={!pending || busy}
+                  onClick={() => void save()}
+                >
+                  保存
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" onClick={() => void reset()} disabled={busy}>
+                  恢复默认
+                </button>
+                <button
+                  type="button"
+                  className="is-primary"
+                  onClick={startRecording}
+                  disabled={busy}
+                >
+                  录制新快捷键
+                </button>
+              </>
             )}
           </div>
-        </div>
 
-        {recording && (
-          <div className="settings-hint">
-            按下新的组合键（至少一个修饰键），Esc 取消。为避免误触，请先不要用 ⌘Q。
-          </div>
-        )}
+          <section className="settings-section" id="settings-update">
+            <h3>软件更新</h3>
 
-        {statusNotice && <div className="settings-hint">{statusNotice}</div>}
-        {statusError && <div className="settings-error">{statusError}</div>}
-        {error && <div className="settings-error">{error}</div>}
-
-        <div className="settings-actions">
-          {recording ? (
-            <>
-              <button type="button" onClick={() => {
-                setRecording(false);
-                setPreview("");
-                setPending("");
-              }}>
-                取消录制
-              </button>
+            <div className="settings-row">
+              <div className="settings-label">
+                <span>当前版本</span>
+                <span className="settings-desc">v{updateInfo?.current ?? "…"}</span>
+              </div>
               <button
                 type="button"
-                className="is-primary"
-                disabled={!pending || busy}
-                onClick={() => void save()}
+                className="btn"
+                onClick={() => void checkUpdate()}
+                disabled={checking || applying || (updateInfo?.isDev ?? false)}
+              >
+                <Icon name="refresh" size={14} />
+                {checking ? "检查中…" : "检查更新"}
+              </button>
+            </div>
+
+            {updateInfo?.isDev && (
+              <div className="settings-hint">
+                {updateInfo.devReason || "开发版不支持自更新，请打包成 .app 后再试。"}
+              </div>
+            )}
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span>启动时自动检查更新</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={updateInfo?.autoCheck ?? false}
+                className={`switch${updateInfo?.autoCheck ? " is-on" : ""}`}
+                disabled={!updateInfo || autoCheckBusy}
+                onClick={() => void toggleAutoCheck()}
+              >
+                <span className="switch-knob" />
+              </button>
+            </div>
+
+            {checkResult && (
+              <div className="update-result">
+                {checkResult.hasUpdate ? (
+                  <>
+                    <div className="update-result-head">
+                      <span className="update-new">发现新版本 v{checkResult.latest}</span>
+                      <span className="settings-desc">
+                        {formatDateTime(checkResult.publishedAt)} 发布
+                      </span>
+                    </div>
+                    {checkResult.notes && <ReleaseNotes markdown={checkResult.notes} />}
+                    <div className="settings-actions">
+                      <button
+                        type="button"
+                        className="is-primary"
+                        disabled={applying}
+                        onClick={() => void applyUpdate()}
+                      >
+                        <Icon name="download" size={14} />
+                        {applying ? "更新中…" : "更新并重启"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="settings-hint">
+                    已是最新版本（v{checkResult.latest}）
+                  </div>
+                )}
+              </div>
+            )}
+
+            {progress && (
+              <div className="settings-hint">更新进度：{progress.message}</div>
+            )}
+            {updateError && <div className="settings-error">{updateError}</div>}
+
+            <div className="settings-row">
+              <div className="settings-label">
+                <span>GitHub Token</span>
+                <span className="settings-desc">
+                  当前来源：{updateInfo ? tokenSourceText(updateInfo) : "…"}。
+                  仅在未登录 gh 时需要；保存在本机配置目录，权限 600。
+                </span>
+              </div>
+            </div>
+            <div className="token-row">
+              <input
+                type="password"
+                className="field"
+                placeholder="填写有 axu4/kuibu 读权限的 token"
+                value={tokenDraft}
+                onChange={(e) => setTokenDraft(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void saveToken()}
+                disabled={tokenBusy || !tokenDraft.trim()}
               >
                 保存
               </button>
-            </>
-          ) : (
-            <>
-              <button type="button" onClick={() => void reset()} disabled={busy}>
-                恢复默认
-              </button>
               <button
                 type="button"
-                className="is-primary"
-                onClick={startRecording}
-                disabled={busy}
+                className="btn"
+                onClick={() => void clearToken()}
+                disabled={tokenBusy || !updateInfo?.savedToken}
               >
-                录制新快捷键
+                清除
               </button>
-            </>
-          )}
+            </div>
+          </section>
         </div>
-
-        <section className="settings-section" id="settings-update">
-          <h3>软件更新</h3>
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span>当前版本</span>
-              <span className="settings-desc">v{updateInfo?.current ?? "…"}</span>
-            </div>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void checkUpdate()}
-              disabled={checking || applying || (updateInfo?.isDev ?? false)}
-            >
-              <Icon name="refresh" size={14} />
-              {checking ? "检查中…" : "检查更新"}
-            </button>
-          </div>
-
-          {updateInfo?.isDev && (
-            <div className="settings-hint">
-              {updateInfo.devReason || "开发版不支持自更新，请打包成 .app 后再试。"}
-            </div>
-          )}
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span>启动时自动检查更新</span>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={updateInfo?.autoCheck ?? false}
-              className={`switch${updateInfo?.autoCheck ? " is-on" : ""}`}
-              disabled={!updateInfo || autoCheckBusy}
-              onClick={() => void toggleAutoCheck()}
-            >
-              <span className="switch-knob" />
-            </button>
-          </div>
-
-          {checkResult && (
-            <div className="update-result">
-              {checkResult.hasUpdate ? (
-                <>
-                  <div className="update-result-head">
-                    <span className="update-new">发现新版本 v{checkResult.latest}</span>
-                    <span className="settings-desc">
-                      {formatDateTime(checkResult.publishedAt)} 发布
-                    </span>
-                  </div>
-                  {checkResult.notes && (
-                    <pre className="update-notes">{checkResult.notes}</pre>
-                  )}
-                  <div className="settings-actions">
-                    <button
-                      type="button"
-                      className="is-primary"
-                      disabled={applying}
-                      onClick={() => void applyUpdate()}
-                    >
-                      <Icon name="download" size={14} />
-                      {applying ? "更新中…" : "更新并重启"}
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="settings-hint">
-                  已是最新版本（v{checkResult.latest}）
-                </div>
-              )}
-            </div>
-          )}
-
-          {progress && (
-            <div className="settings-hint">更新进度：{progress.message}</div>
-          )}
-          {updateError && <div className="settings-error">{updateError}</div>}
-
-          <div className="settings-row">
-            <div className="settings-label">
-              <span>GitHub Token</span>
-              <span className="settings-desc">
-                当前来源：{updateInfo ? tokenSourceText(updateInfo) : "…"}。
-                仅在未登录 gh 时需要；保存在本机配置目录，权限 600。
-              </span>
-            </div>
-          </div>
-          <div className="token-row">
-            <input
-              type="password"
-              className="field"
-              placeholder="填写有 axu4/kuibu 读权限的 token"
-              value={tokenDraft}
-              onChange={(e) => setTokenDraft(e.target.value)}
-            />
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void saveToken()}
-              disabled={tokenBusy || !tokenDraft.trim()}
-            >
-              保存
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => void clearToken()}
-              disabled={tokenBusy || !updateInfo?.savedToken}
-            >
-              清除
-            </button>
-          </div>
-        </section>
 
         <div className="settings-footer">
           <span>快捷键保存在 config.json（可用 KUIBU_CONFIG_DIR 覆盖目录）</span>
@@ -471,6 +472,34 @@ export function Settings({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 更新说明：Release Markdown 排版成标题 + 列表。 */
+function ReleaseNotes({ markdown }: { markdown: string }) {
+  const blocks = parseReleaseNotes(markdown);
+  if (blocks.length === 0) {
+    return null;
+  }
+  return (
+    <div className="update-notes">
+      {blocks.map((block, i) => {
+        switch (block.kind) {
+          case "heading":
+            return <h4 key={i}>{block.text}</h4>;
+          case "list":
+            return (
+              <ul key={i}>
+                {block.items.map((item, j) => (
+                  <li key={j}>{item}</li>
+                ))}
+              </ul>
+            );
+          default:
+            return <p key={i}>{block.text}</p>;
+        }
+      })}
     </div>
   );
 }

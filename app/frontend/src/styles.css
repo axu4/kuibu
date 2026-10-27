@@ -1170,23 +1170,37 @@ kbd {
 
 /* ---------- 设置 ---------- */
 
+/* 标题、底部固定，只有中间内容滚动；矮窗口时弹窗往上挪，不被遮罩的 padding-top 挤出视口。 */
+.modal-mask:has(> .settings) {
+  padding-top: min(18vh, max(24px, calc(100vh - 720px)));
+}
+
 .settings {
+  display: flex;
+  flex-direction: column;
   width: 480px;
   max-width: calc(100vw - 40px);
-  max-height: calc(100vh - 18vh - 24px);
-  overflow-y: auto;
-  padding: 22px 24px 16px;
+  max-height: calc(100vh - min(18vh, max(24px, calc(100vh - 720px))) - 24px);
   border-radius: 14px;
   background: var(--panel);
   box-shadow: var(--shadow-modal);
   animation: pop-in 0.14s ease-out;
 }
 
-.settings h2 {
-  margin: 0 0 14px;
+.settings-head {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 22px 24px 14px;
   font-family: var(--font-serif);
   font-size: 18px;
   font-weight: 700;
+}
+
+.settings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 24px 4px;
 }
 
 .settings-row {
@@ -1287,7 +1301,12 @@ kbd {
 
 .settings-actions button,
 .settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   height: 30px;
+  white-space: nowrap;
   padding: 0 14px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -1383,19 +1402,36 @@ kbd {
 }
 
 .update-notes {
-  margin: 0;
   max-height: 140px;
   overflow: auto;
   padding: 10px 12px;
   border-radius: 8px;
   background: var(--hover);
   color: var(--ink-2);
-  font-family: var(--font);
   font-size: 12px;
   line-height: 1.6;
-  white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
+}
+
+.update-notes h4 {
+  margin: 0 0 2px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-notes ul,
+.update-notes p {
+  margin: 0 0 6px;
+}
+
+.update-notes ul {
+  padding-left: 18px;
+}
+
+.update-notes > :last-child {
+  margin-bottom: 0;
 }
 
 .token-row {
@@ -1409,12 +1445,12 @@ kbd {
 }
 
 .settings-footer {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 18px;
-  padding-top: 12px;
+  padding: 12px 24px 16px;
   border-top: 1px solid var(--line);
   color: var(--ink-3);
   font-size: 11.5px;
