@@ -3580,3 +3580,8 @@ body.quicknote-body {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   background: var(--accent-soft);
 }
+
+/* 编辑器懒加载期间的占位：与编辑区同尺寸，不显示任何内容，避免闪烁。 */
+.editor-loading {
+  min-height: 240px;
+}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ReportService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { GroupData } from "../../bindings/github.com/axu4/kuibu/app";
 import type { Preview } from "../../bindings/github.com/axu4/kuibu/internal/llm";
-import { Editor } from "./Editor";
+import { Editor } from "./LazyEditor";
 import { Icon } from "./Icon";
 import { MoreMenu } from "./Menu";
 import { copyRich } from "../lib/clipboard";

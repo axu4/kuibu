@@ -12,7 +12,7 @@ import type {
   TreeItem,
 } from "../bindings/github.com/axu4/kuibu/app";
 import { Tree } from "./components/Tree";
-import { Editor } from "./components/Editor";
+import { Editor } from "./components/LazyEditor";
 import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
 import { ReportView } from "./components/ReportView";

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TodoService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { TodoItem } from "../../bindings/github.com/axu4/kuibu/app";
-import { Editor } from "./Editor";
+import { Editor } from "./LazyEditor";
 import { Icon } from "./Icon";
 import { formatDueLong, linkDisplay, readableError, statusLabel } from "../lib/todo";
 
