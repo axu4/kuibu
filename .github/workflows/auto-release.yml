@@ -1,7 +1,7 @@
 # 跬步（kuibu）合并后自动发版
 #
-# 手动合并（网页、gh、Claude 应用）带 release:patch / release:minor / release:major
-# 标签的 PR 后，按标签递增版本号、在合并提交上打 tag，再触发 Release 工作流。
+# 手动合并（网页、gh、Claude 应用）PR 后，按 PR 标题（或 release:* 标签）决定是否
+# 发版、发哪一级，在合并提交上打 tag，再触发 Release 工作流。
 #
 # 由 auto-merge 工作流合并的 PR 不走这里：工作流自带 token 的操作不会触发其他工作流，
 # 那条路径在 auto-merge.sh 里直接调用同一个 release-from-pr.sh。
@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: '已合并、带 release:* 标签的 PR 号'
+        description: '已合并的 PR 号'
         required: true
 
 permissions:
@@ -35,10 +35,7 @@ jobs:
     name: 打 tag 并触发 Release
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       (contains(github.event.pull_request.labels.*.name, 'release:patch') ||
-        contains(github.event.pull_request.labels.*.name, 'release:minor') ||
-        contains(github.event.pull_request.labels.*.name, 'release:major')))
+      github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main（只取脚本与 tags）
