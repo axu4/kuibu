@@ -106,7 +106,7 @@ func ShellCommand(target, link string) string {
 		shellQuote(filepath.Dir(link)), shellQuote(target), shellQuote(link))
 }
 
-// shellQuote 用单引号包住 s，内部单引号转义成 '\''。
+// shellQuote 用单引号包住 s，内部的单引号先闭合、转义、再重新打开。
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
