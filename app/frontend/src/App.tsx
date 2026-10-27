@@ -140,6 +140,8 @@ export default function App() {
   bodyRef.current = body;
   const savedBodyRef = useRef(savedBody);
   savedBodyRef.current = savedBody;
+  // 正在写盘的正文：写盘触发的文件变化事件可能早于保存调用返回。
+  const savingBodyRef = useRef<string | null>(null);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
   const noteIdRef = useRef<string | null>(note?.data.id ?? null);
@@ -190,6 +192,7 @@ export default function App() {
     }
     const content = bodyRef.current;
     savingRef.current = true;
+    savingBodyRef.current = content;
     setStatus("saving");
     try {
       await WorkspaceService.SaveBody(id, content);
@@ -202,6 +205,7 @@ export default function App() {
       setStatus("dirty");
     } finally {
       savingRef.current = false;
+      savingBodyRef.current = null;
     }
   }, []);
 
@@ -267,8 +271,13 @@ export default function App() {
       void (async () => {
         try {
           const latest = await WorkspaceService.Get(current);
-          if (latest.body === bodyRef.current) {
-            // 自己保存引起的变化：正文与本地一致，只同步元数据。
+          if (
+            latest.body === bodyRef.current ||
+            latest.body === savedBodyRef.current ||
+            latest.body === savingBodyRef.current
+          ) {
+            // 自己写盘引起的变化（保存、新建、重命名等）：磁盘正文是本地已保存
+            // 或正在保存的版本，之后的输入照常等防抖保存，只同步元数据。
             setNote((prev) =>
               prev ? { ...prev, data: { ...latest, body: prev.data.body } } : prev,
             );
