@@ -61,11 +61,12 @@
    - 叠在别的 PR 上的（目标不是 `main`）不会自动合并。按从下往上的顺序合：底层合进 `main` 后，把上层 PR 的目标改为 `main`。
 7. **发版**：合并后按 PR 标题自动打 tag、发 Release；App 内自更新会拉到新版本。
 
+版本号一律只涨 patch，新功能也一样：
+
 | PR 标题 | 发版 |
 | --- | --- |
-| `docs:` `ci:` `chore:` `test:` `refactor:` `style:` `build:` 开头 | 不发版 |
-| `feat:` 开头（新的用户可见功能） | minor |
-| `xxx!:` 开头（破坏性改动，如工作台数据格式不兼容） | major |
-| 其他（修 bug、改进，可不带前缀） | patch |
+| `docs:` `ci:` `chore:` `test:` `refactor:` `style:` `build:` 开头（不影响 App 的改动） | 不发版 |
+| 其他（功能、修复、改进，不带前缀） | patch |
 
-PR 上加 `release:patch|minor|major` 标签时以标签为准，覆盖标题判断。前缀不区分大小写，中文冒号也认。
+- 不要用 `feat:` 和 `xxx!:` 前缀，它们会分别发 minor 和 major 版。
+- 只有勇旭明确要求时，才在 PR 上加 `release:minor` 或 `release:major` 标签，标签优先于标题。
