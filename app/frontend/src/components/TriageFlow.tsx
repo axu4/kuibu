@@ -941,7 +941,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           <div className="triage-empty">
             <p>这一周还没有可筛选的条目。</p>
             <p className="triage-empty-hint">
-              组员原文里没有能拆出的条目；先确认已交周报是按条写的（有「本周总结 / 下周计划 / 风险」小节或一行一条）。三步流程不需要 AI 归一。
+              组员原文里没有能拆出的条目；先确认已交周报是按条写的（有「本周总结 / 下周计划 / 其他事项」小节或一行一条）。三步流程不需要 AI 归一。
             </p>
             {(data.missing ?? []).length > 0 && (
               <p className="triage-empty-hint">未交 / 没有归一稿：{(data.missing ?? []).join("、")}</p>

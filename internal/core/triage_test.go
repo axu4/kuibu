@@ -125,7 +125,7 @@ func TestBuildTriageSectionsAndAssembleProjects(t *testing.T) {
 	if d1.Kind != store.GroupReportKind(p1.ID) || d1.Person != lead.ID {
 		t.Fatalf("组报草稿 = %+v", d1)
 	}
-	for _, wantPart := range []string{"## 本周总结", "## 下周计划", "## 风险与求助", "退款接口联调", "补齐用例", "测试环境不足"} {
+	for _, wantPart := range []string{"## 本周总结", "## 下周计划", "## 其他事项", "退款接口联调", "补齐用例", "测试环境不足"} {
 		if !strings.Contains(d1.Body, wantPart) {
 			t.Errorf("p1 组报缺少 %q:\n%s", wantPart, d1.Body)
 		}
@@ -282,5 +282,22 @@ func TestBuildTriageInfersGroupWhenLeadHasNoGroup(t *testing.T) {
 	lead, groupName, err := ResolveLead(ws, "2026-W44", "框架组")
 	if err != nil || lead == nil || groupName != "框架组" {
 		t.Fatalf("ResolveLead = %+v/%q/%v", lead, groupName, err)
+	}
+}
+
+func TestParseRawReportWeekPlanSections(t *testing.T) {
+	body := "InManage\n本周：\n1、KH5KVM openBmc 单机自研推进\n2、修复登录页闪回\n下周：\n1、修改主分支加密解密方案\n2、配置操作系统安装功能开发\nAI经验 ：H5KVM 协议分析\n"
+	items := parseTriageBody(body)
+	if len(items[SectionDone]) != 2 || len(items[SectionPlan]) != 2 {
+		t.Fatalf("分节 = %+v", items)
+	}
+	if items[SectionDone][0].Text != "KH5KVM openBmc 单机自研推进" {
+		t.Fatalf("中文序号未去掉: %+v", items[SectionDone][0])
+	}
+	if items[SectionPlan][0].Text != "修改主分支加密解密方案" {
+		t.Fatalf("计划条目 = %+v", items[SectionPlan][0])
+	}
+	if TriageSectionTitle(SectionRisk) != "其他事项" {
+		t.Fatalf("风险节显示名 = %q", TriageSectionTitle(SectionRisk))
 	}
 }

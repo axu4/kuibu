@@ -16,6 +16,9 @@ import (
 // TriageItemDomainPattern 匹配归一稿条目的「【领域】」前缀。
 var triageItemDomainPattern = regexp.MustCompile(`^【([^】]+)】\s*(.*)$`)
 
+// triageParserVersion 用于让解析规则变化后重新生成筛选记录；改解析逻辑时递增。
+const triageParserVersion = "2"
+
 // TriageSections 是筛选的顺序：先本周总结（现有归一稿的「本周完成」），再下周计划，最后风险。
 var TriageSections = []string{SectionDone, SectionPlan, SectionRisk}
 
@@ -23,8 +26,11 @@ var TriageSections = []string{SectionDone, SectionPlan, SectionRisk}
 //
 // 数据层沿用归一稿的固定节名「本周完成」，展示给组长用「本周总结」。
 func TriageSectionTitle(section string) string {
-	if section == SectionDone {
+	switch section {
+	case SectionDone:
 		return "本周总结"
+	case SectionRisk:
+		return "其他事项"
 	}
 	return section
 }
@@ -160,6 +166,7 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 		t.Projects = append(t.Projects, store.TriageProject{ID: p.ID, Name: p.Name})
 	}
 	hash := sha256.New()
+	hash.Write([]byte("triage-parser:" + triageParserVersion + "\x00"))
 	order := 0
 	for _, m := range members {
 		hash.Write([]byte(m.person.ID + "\n" + m.body + "\n\x00"))
@@ -461,28 +468,41 @@ func parseTriageBody(body string) map[string][]DraftItem {
 		return out
 	}
 	out = map[string][]DraftItem{}
+	lines := strings.Split(body, "\n")
+	// 组员的原文常见「本周：」「下周：」这种没有 Markdown 标题的写法。
+	// 先判断是否存在可识别的小节，存在时跳过第一个小节之前的内容（姓名/项目行）。
+	hasSection := false
+	for _, line := range lines {
+		if rawSectionLabel(line) != "" {
+			hasSection = true
+			break
+		}
+	}
 	section := SectionDone
+	if hasSection {
+		section = ""
+	}
 	seen := map[string]bool{}
-	for _, line := range strings.Split(body, "\n") {
+	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
-		switch {
-		case strings.Contains(trimmed, "本周总结"), strings.Contains(trimmed, "本周完成"):
-			section = SectionDone
-			continue
-		case strings.Contains(trimmed, "下周计划"), strings.Contains(trimmed, "下周工作"):
-			section = SectionPlan
-			continue
-		case strings.Contains(trimmed, "风险"), strings.Contains(trimmed, "求助"):
-			section = SectionRisk
+		if strings.HasPrefix(trimmed, "AI经验") || strings.HasPrefix(trimmed, "AI 经验") {
+			section = ""
 			continue
 		}
-		text, ok := listItemText(trimmed)
+		if label := rawSectionLabel(trimmed); label != "" {
+			section = label
+			continue
+		}
+		if section == "" {
+			continue
+		}
+		text, ok := rawListItemText(trimmed)
 		if !ok {
-			// 没有「- / 1.」前缀时，把非标题、非空行也当作一条（组员常见一行一条）。
-			if strings.HasPrefix(trimmed, "【周报】") || strings.HasPrefix(trimmed, "#") {
+			// 没有列表前缀时按一行一条；跳过明显的标题/项目行。
+			if strings.HasPrefix(trimmed, "【周报】") || strings.HasPrefix(trimmed, "#") || strings.HasSuffix(trimmed, "：") {
 				continue
 			}
 			text = trimmed
@@ -499,6 +519,45 @@ func parseTriageBody(body string) map[string][]DraftItem {
 		out[section] = append(out[section], DraftItem{ID: id, Text: text})
 	}
 	return out
+}
+
+// rawSectionLabel 识别组员原文里常见的小节写法；返回空表示不是小节行。
+//
+// 除了「本周总结/下周计划」，也认「本周：」「下周：」「本周工作」「风险」「求助」
+// 和「AI经验」；AI经验 不属于三步流程，返回的 section 为空以跳过其内容。
+func rawSectionLabel(line string) string {
+	t := strings.TrimSpace(line)
+	t = strings.TrimSpace(strings.Trim(t, "：:"))
+	switch {
+	case t == "本周" || t == "本周总结" || t == "本周完成" || t == "本周工作" || t == "本周完成事项":
+		return SectionDone
+	case t == "下周" || t == "下周计划" || t == "下周工作" || t == "下周计划事项" || t == "下步计划":
+		return SectionPlan
+	case t == "风险" || t == "风险与求助" || t == "求助" || t == "其他" || t == "其他事项" || t == "其他工作" || t == "领导交办":
+		return SectionRisk
+	case strings.HasPrefix(t, "AI经验") || strings.HasPrefix(t, "AI 经验"):
+		return ""
+	}
+	return ""
+}
+
+// rawListItemText 识别「- / * / 1. / 1、/ 1）」等列表项。
+func rawListItemText(line string) (string, bool) {
+	for _, p := range []string{"- ", "* ", "+ "} {
+		if strings.HasPrefix(line, p) {
+			return strings.TrimSpace(line[len(p):]), true
+		}
+	}
+	// 中文序号：1、 1） 1) 1． 1.
+	for _, sep := range []string{"、", "）", ")", "．", "."} {
+		if i := strings.Index(line, sep); i > 0 && i <= 3 {
+			digits := strings.TrimSpace(line[:i])
+			if digits != "" && strings.Trim(digits, "0123456789") == "" {
+				return strings.TrimSpace(line[i+len(sep):]), true
+			}
+		}
+	}
+	return "", false
 }
 
 // triageBodyLooksItemized 判断原文是否有可用的结构：Markdown 小节、常见节名或列表项。
