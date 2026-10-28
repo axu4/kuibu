@@ -412,12 +412,20 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       });
       try {
         const draft = await ReportService.GetDraft(week, personId, "member");
-        const value: ExcerptState = {
-          loading: false,
-          body: draft.body ?? "",
-          status: draft.status,
-          error: draft.exists ? null : "这位组员还没有归一稿",
-        };
+        let body = draft.body ?? "";
+        let status = draft.status;
+        let error: string | null = draft.exists ? null : null;
+        if (!draft.exists) {
+          // 三步流程不依赖 AI 归一：没有归一稿时直接看组员原文。
+          try {
+            const raw = await ReportService.Get(week, personId, "member");
+            body = raw.body ?? "";
+            status = "raw";
+          } catch {
+            error = "这位组员还没有周报原文";
+          }
+        }
+        const value: ExcerptState = { loading: false, body, status, error };
         setExcerpts((prev) => {
           const next = { ...prev, [personId]: value };
           excerptsRef.current = next;
@@ -826,7 +834,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           <div className="triage-empty">
             <p>这一周还没有可筛选的条目。</p>
             <p className="triage-empty-hint">
-              组员归一稿里没有能拆出的条目；可以先在「框架组长」里粘贴或归一周报，再回来筛选。
+              组员原文里没有能拆出的条目；先确认已交周报是按条写的（有「本周总结 / 下周计划 / 风险」小节或一行一条）。三步流程不需要 AI 归一。
             </p>
             {(data.missing ?? []).length > 0 && (
               <p className="triage-empty-hint">未交 / 没有归一稿：{(data.missing ?? []).join("、")}</p>
