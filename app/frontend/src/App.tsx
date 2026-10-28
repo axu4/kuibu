@@ -135,6 +135,7 @@ export default function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "people" | "ai" | "update">("general");
   const [shortcut, setShortcut] = useState<ShortcutStatus | null>(null);
   const [updateBanner, setUpdateBanner] = useState<CheckResult | null>(null);
   // 从更新提示条进入设置时定位到「软件更新」一节。
@@ -708,6 +709,10 @@ export default function App() {
       if (key === "s") {
         e.preventDefault();
         void saveNow();
+      } else if (key === ",") {
+        e.preventDefault();
+        setSettingsTab("general");
+        setSettingsOpen(true);
       } else if (/^[1-9]$/.test(key) && MAIN_VIEWS[Number(key) - 1]) {
         e.preventDefault();
         switchView(MAIN_VIEWS[Number(key) - 1].key);
@@ -938,6 +943,10 @@ export default function App() {
             {shortcutBanners}
             <ReportHome
               key={reportJump ? `${workspace}-${reportJump.key}` : workspace}
+              onOpenSettings={(tab) => {
+                setSettingsTab(tab);
+                setSettingsOpen(true);
+              }}
               initialWeek={reportJump?.week}
               initialPersonId={reportJump?.personId}
               initialLevel={reportJump?.level}
@@ -1204,6 +1213,7 @@ export default function App() {
           }}
           onStatusChange={applyShortcutStatus}
           focusUpdate={settingsFocusUpdate}
+          initialTab={settingsTab}
           workspace={workspace}
           onChangeWorkspace={() => void chooseWorkspace()}
         />

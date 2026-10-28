@@ -10,8 +10,14 @@ interface EditorState {
   members: string[];
 }
 
+interface GroupManagerProps {
+  /** 嵌入设置页时去掉外层页面留白。 */
+  embedded?: boolean;
+  onManagePeople?: () => void;
+}
+
 /** 组管理：组是唯一组织单位；没有额外的汇总组。 */
-export function GroupManager() {
+export function GroupManager({ embedded = false, onManagePeople }: GroupManagerProps) {
   const [groups, setGroups] = useState<GroupInfoData[]>([]);
   const [people, setPeople] = useState<PersonData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +95,7 @@ export function GroupManager() {
   if (loading) return <div className="gm-page"><div className="lib-empty">正在读取组…</div></div>;
 
   return (
-    <div className="gm-page">
+    <div className={`gm-page${embedded ? " is-embedded" : ""}`}>
       <div className="lib-inner">
         <div className="lib-head">
           <div>
@@ -98,6 +104,11 @@ export function GroupManager() {
             <p>组是唯一的组织单位：名字、组长、成员都可以改。组报定稿后自动进入周报库。</p>
           </div>
           <div className="lib-head-actions">
+            {onManagePeople && (
+              <button type="button" className="btn" onClick={onManagePeople}>
+                管理名单
+              </button>
+            )}
             <button type="button" className="btn btn-primary" onClick={openNew}>＋ 新建组</button>
           </div>
         </div>
