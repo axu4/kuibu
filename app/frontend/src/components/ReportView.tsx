@@ -485,6 +485,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
                   type="button"
                   className={`btn${triageOpen ? " is-on" : ""}`}
                   onClick={() => {
+                    setToast(null);
                     setSelectedId(null);
                     setGroupOpen(false);
                     setTriageOpen((v) => !v);
