@@ -152,6 +152,12 @@ func PlanGroupReport(ws *store.Workspace, week, group, template string, allowMis
 	if err != nil {
 		return nil, err
 	}
+	if groupName == "" {
+		groupName, err = inferLeaderGroup(ws, week)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if template == "" {
 		template = "group"
 	}
