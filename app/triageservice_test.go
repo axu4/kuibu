@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/axu4/kuibu/internal/core"
 	"github.com/axu4/kuibu/internal/store"
 )
 
@@ -124,5 +125,39 @@ func TestTriageServiceFlow(t *testing.T) {
 	}
 	if _, err := reports.UnfinalizeProjectGroup("2026-W44", "框架组", p1.ID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSubmitStoresEntrySections(t *testing.T) {
+	reports, workspace, _ := newTestReports(t)
+	if _, err := reports.CreatePerson(PersonInput{Name: "组长", Role: store.RoleLead}); err != nil {
+		t.Fatal(err)
+	}
+	zhang, err := reports.CreatePerson(PersonInput{Name: "张三", Group: "框架组", Role: store.RoleMember})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := "本周：\n1、完成 A\n下周：\n1、计划 B\n"
+	if _, err := reports.Submit([]SubmitItem{{
+		Text: text, Person: zhang.ID, Week: "2026-W44", Level: store.ReportLevelMember,
+		Sections: []ReportSectionInput{
+			{Section: core.SectionDone, Items: []string{"完成 A"}},
+			{Section: core.SectionPlan, Items: []string{"计划 B"}},
+			{Section: core.SectionRisk, Items: []string{"领导交办 C"}},
+		},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	ws := workspace.workspace()
+	got, err := ws.ReadReportSections("2026-W44", zhang.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Sections) != 3 || got.Sections[2].Items[0] != "领导交办 C" {
+		t.Fatalf("录入结构 = %+v", got)
+	}
+	report, _ := ws.ReadReport("2026-W44", store.ReportLevelMember, zhang.ID)
+	if got.SourceHash != core.ReportBodyHash(report.Body) {
+		t.Fatal("录入结构哈希与原文不一致")
 	}
 }

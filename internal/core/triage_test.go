@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/axu4/kuibu/internal/store"
 )
@@ -299,5 +300,70 @@ func TestParseRawReportWeekPlanSections(t *testing.T) {
 	}
 	if TriageSectionTitle(SectionRisk) != "其他事项" {
 		t.Fatalf("风险节显示名 = %q", TriageSectionTitle(SectionRisk))
+	}
+}
+
+func TestBuildTriageUsesEntrySections(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "组长", Role: store.RoleLead, Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	zhang, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ws.AddReportProject("云平台项目"); err != nil {
+		t.Fatal(err)
+	}
+	body := "本周：\n1、完成 A\n下周：\n1、计划 B\n"
+	report, err := ws.WriteReport(store.NewReport{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Level: store.ReportLevelMember,
+		Group: "框架组", Source: store.ReportSourcePaste, SubmittedAt: now, Body: body,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 录入时人工把「完成 A」改到「其他事项」。
+	if err := ws.WriteReportSections(store.ReportSections{
+		Person: zhang.ID, Week: "2026-W44", SourceHash: ReportBodyHash(report.Body), UpdatedAt: now.Format(time.RFC3339),
+		Sections: []store.ReportSection{
+			{Section: SectionDone, Items: []string{"完成 A"}},
+			{Section: SectionPlan, Items: []string{"计划 B"}},
+			{Section: SectionRisk, Items: []string{"领导交办 C"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	triage, err := BuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byText := map[string]string{}
+	for _, it := range triage.Items {
+		byText[it.Text] = it.Section
+	}
+	if byText["领导交办 C"] != SectionRisk || byText["计划 B"] != SectionPlan || byText["完成 A"] != SectionDone {
+		t.Fatalf("录入结构未生效: %+v", triage.Items)
+	}
+	// 原文变了，旧结构应失效并退回原文解析。
+	if _, err := ws.WriteReport(store.NewReport{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Level: store.ReportLevelMember,
+		Group: "框架组", Source: store.ReportSourcePaste, SubmittedAt: now, Body: body + "本周：\n1、新增 D\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	triage, err = BuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, it := range triage.Items {
+		if it.Text == "新增 D" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("原文更新后应退回解析: %+v", triage.Items)
 	}
 }

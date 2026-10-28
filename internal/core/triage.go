@@ -35,6 +35,37 @@ func TriageSectionTitle(section string) string {
 	return section
 }
 
+// ReportSectionInfo 是录入阶段识别出的一节（用于前端预览/校正）。
+type ReportSectionInfo struct {
+	Section string   `json:"section"`
+	Title   string   `json:"title"`
+	Items   []string `json:"items"`
+}
+
+// ParseReportSections 识别组员原文里的本周总结 / 下周计划 / 其他事项。
+//
+// 只做确定性拆条，不调 AI；前端在录入时展示并允许人工改分节。
+func ParseReportSections(body string) []ReportSectionInfo {
+	bySection := parseTriageBody(body)
+	out := make([]ReportSectionInfo, 0, len(TriageSections))
+	for _, section := range TriageSections {
+		items := make([]string, 0, len(bySection[section]))
+		for _, item := range bySection[section] {
+			if text := strings.TrimSpace(item.Text); text != "" {
+				items = append(items, text)
+			}
+		}
+		out = append(out, ReportSectionInfo{Section: section, Title: TriageSectionTitle(section), Items: items})
+	}
+	return out
+}
+
+// ReportBodyHash 返回周报原文的哈希，用于判断录入结构化是否还对应当前原文。
+func ReportBodyHash(body string) string {
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:])
+}
+
 // TriageItemID 计算一条筛选事项的稳定 id：sha256(人员 + 节名 + 文本) 前 8 位。
 func TriageItemID(person, section, text string) string {
 	sum := sha256.Sum256([]byte(person + "\n" + section + "\n" + strings.TrimSpace(text)))
@@ -95,6 +126,7 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 	type memberSource struct {
 		person *store.Person
 		body   string
+		stored *store.ReportSections
 	}
 	members := make([]memberSource, 0)
 	missing := make([]string, 0)
@@ -113,11 +145,14 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 		// 再退回归一稿（草稿或定稿），兼容已经归一过的数据。
 		body := ""
 		rawBody := ""
+		var stored *store.ReportSections
 		if raw, err := ws.ReadReport(week, store.ReportLevelMember, p.ID); err == nil {
 			rawBody = raw.Body
-			// 原文有明确小节或列表项时优先原文；整段散文则优先已有的归一稿，
-			// 避免把没有结构的原文拆成一堆碎行。
-			if triageBodyLooksItemized(rawBody) {
+			// 录入时确认过的结构化条目优先；仍用原文哈希绑定，原文改了就不再用旧结构。
+			if sec, err := ws.ReadReportSections(week, p.ID); err == nil && sec.SourceHash == ReportBodyHash(rawBody) {
+				stored = sec
+				body = rawBody
+			} else if triageBodyLooksItemized(rawBody) {
 				body = rawBody
 			}
 		} else if !errors.Is(err, store.ErrNotFound) {
@@ -134,11 +169,23 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 			// 没有归一稿、原文又不是典型小节/列表：仍按一行一条兜底。
 			body = rawBody
 		}
-		if len(parseTriageBody(body)) == 0 {
+		bySection := parseTriageBody(body)
+		if stored != nil && len(stored.Sections) > 0 {
+			bySection = map[string][]DraftItem{}
+			for _, sec := range stored.Sections {
+				if !isTriageSection(sec.Section) {
+					continue
+				}
+				for _, text := range sec.Items {
+					bySection[sec.Section] = append(bySection[sec.Section], DraftItem{ID: ItemID(sec.Section, text), Text: text})
+				}
+			}
+		}
+		if len(bySection) == 0 {
 			missing = append(missing, p.Name)
 			continue
 		}
-		members = append(members, memberSource{person: p, body: body})
+		members = append(members, memberSource{person: p, body: body, stored: stored})
 	}
 	sort.Slice(members, func(i, j int) bool {
 		if members[i].person.Name != members[j].person.Name {
@@ -171,6 +218,18 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 	for _, m := range members {
 		hash.Write([]byte(m.person.ID + "\n" + m.body + "\n\x00"))
 		bySection := parseTriageBody(m.body)
+		if m.stored != nil {
+			hash.Write([]byte("stored:" + m.stored.UpdatedAt + "\x00"))
+			bySection = map[string][]DraftItem{}
+			for _, sec := range m.stored.Sections {
+				if !isTriageSection(sec.Section) {
+					continue
+				}
+				for _, text := range sec.Items {
+					bySection[sec.Section] = append(bySection[sec.Section], DraftItem{ID: ItemID(sec.Section, text), Text: text})
+				}
+			}
+		}
 		for _, section := range TriageSections {
 			for _, item := range bySection[section] {
 				domain, body := SplitTriageDomain(item.Text)
@@ -455,6 +514,15 @@ func wsProjects(ws *store.Workspace) []store.ReportProject {
 		return nil
 	}
 	return projects
+}
+
+func isTriageSection(section string) bool {
+	for _, s := range TriageSections {
+		if s == section {
+			return true
+		}
+	}
+	return false
 }
 
 // parseTriageBody 从组员原文/归一稿里拆条目。
