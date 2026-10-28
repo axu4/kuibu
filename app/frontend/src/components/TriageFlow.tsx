@@ -277,7 +277,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       try {
         const fresh = await TriageService.TriageDecide(
           week,
-          group,
+          activeGroup,
           item.id,
           decision,
           decision === "accepted" ? (targetProject ?? "") : "",
@@ -331,7 +331,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       try {
         const fresh = await TriageService.TriageDecide(
           week,
-          group,
+          activeGroup,
           itemId,
           decision,
           decision === "accepted" ? (projectId ?? "") : "",
@@ -372,7 +372,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       // SetTriageDecision 支持空决策：撤销到「未判」时用空字符串清除本条决策。
       const fresh = await TriageService.TriageDecide(
         week,
-        group,
+        activeGroup,
         entry.itemId,
         entry.prev?.decision ?? "",
         entry.prev?.project ?? "",
