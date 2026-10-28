@@ -132,8 +132,8 @@ export function GroupManager({ embedded = false, onManagePeople }: GroupManagerP
                 {(g.members ?? []).length === 0 && <span className="muted">还没有成员</span>}
               </div>
               <div className="gm-actions">
-                <button type="button" className="link" onClick={() => openEdit(g)}>编辑</button>
-                <button type="button" className="link is-danger" onClick={() => setPendingDelete(g)}>删除</button>
+                <button type="button" className="btn is-compact" onClick={() => openEdit(g)}>编辑</button>
+                <button type="button" className="btn btn-danger is-compact" onClick={() => setPendingDelete(g)}>删除</button>
               </div>
             </article>
           ))}
