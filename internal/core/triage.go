@@ -99,23 +99,27 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 		// 优先读组员原文：三步流程不再依赖 AI 归一稿。原文拆不出条目时，
 		// 再退回归一稿（草稿或定稿），兼容已经归一过的数据。
 		body := ""
+		rawBody := ""
 		if raw, err := ws.ReadReport(week, store.ReportLevelMember, p.ID); err == nil {
-			if len(parseTriageBody(raw.Body)) > 0 {
-				body = raw.Body
+			rawBody = raw.Body
+			// 原文有明确小节或列表项时优先原文；整段散文则优先已有的归一稿，
+			// 避免把没有结构的原文拆成一堆碎行。
+			if triageBodyLooksItemized(rawBody) {
+				body = rawBody
 			}
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, err
 		}
 		if body == "" {
-			d, err := ws.ReadDraft(week, p.ID)
-			if err != nil {
-				if errors.Is(err, store.ErrNotFound) {
-					missing = append(missing, p.Name)
-					continue
-				}
+			if d, err := ws.ReadDraft(week, p.ID); err == nil {
+				body = d.Body
+			} else if !errors.Is(err, store.ErrNotFound) {
 				return nil, err
 			}
-			body = d.Body
+		}
+		if body == "" {
+			// 没有归一稿、原文又不是典型小节/列表：仍按一行一条兜底。
+			body = rawBody
 		}
 		if len(parseTriageBody(body)) == 0 {
 			missing = append(missing, p.Name)
@@ -485,4 +489,25 @@ func parseTriageBody(body string) map[string][]DraftItem {
 		out[section] = append(out[section], DraftItem{ID: id, Text: text})
 	}
 	return out
+}
+
+// triageBodyLooksItemized 判断原文是否有可用的结构：Markdown 小节、常见节名或列表项。
+func triageBodyLooksItemized(body string) bool {
+	if len(ParseDraftItems(body)) > 0 {
+		return true
+	}
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") || strings.HasPrefix(trimmed, "+ ") {
+			return true
+		}
+		if strings.Contains(trimmed, "本周总结") || strings.Contains(trimmed, "本周完成") ||
+			strings.Contains(trimmed, "下周计划") || strings.Contains(trimmed, "风险") {
+			return true
+		}
+	}
+	return false
 }
