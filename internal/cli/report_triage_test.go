@@ -67,7 +67,7 @@ func TestReportTriageProjectFlow(t *testing.T) {
 	e.mustRun("", "report", "group", "assemble", "--project", p1, "--week", "2026-W44", "--workspace", e.workspace)
 	asm := e.mustRun("", "report", "group", "show", "--project", p1, "--week", "2026-W44", "--workspace", e.workspace, "--json").jsonOut(t)
 	body, _ := asm["body"].(string)
-	for _, want := range []string{"## 本周总结", "## 下周计划", "## 风险与求助", "退款接口联调"} {
+	for _, want := range []string{"## 本周总结", "## 下周计划", "## 其他事项", "退款接口联调"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("p1 组报缺少 %q: %s", want, body)
 		}
