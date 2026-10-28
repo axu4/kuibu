@@ -53,6 +53,13 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 	if err != nil {
 		return nil, err
 	}
+	if groupName == "" {
+		// 组长没填自己的组：从本周在职组员里推导唯一组名。
+		groupName, err = inferLeaderGroup(ws, week)
+		if err != nil {
+			return nil, err
+		}
+	}
 	projects, err := ws.ReportProjects()
 	if err != nil {
 		return nil, err
@@ -321,6 +328,9 @@ func AssembleProjectGroup(ws *store.Workspace, week, group, projectIDOrName stri
 		}
 		return nil, err
 	}
+	if groupName == "" {
+		groupName = t.Group
+	}
 	if t.Group != "" && t.Group != groupName {
 		return nil, fmt.Errorf("%w: 筛选记录属于组「%s」，不是「%s」", store.ErrInvalid, t.Group, groupName)
 	}
@@ -510,4 +520,38 @@ func triageBodyLooksItemized(body string) bool {
 		}
 	}
 	return false
+}
+
+// inferLeaderGroup 从本周在职组员里推导唯一组名；组长自己的 group 为空时使用。
+func inferLeaderGroup(ws *store.Workspace, week string) (string, error) {
+	people, err := ws.ListPersons()
+	if err != nil {
+		return "", err
+	}
+	monday, _, err := store.WeekRange(week)
+	if err != nil {
+		return "", err
+	}
+	groups := map[string]bool{}
+	for _, p := range people {
+		if !p.Active || p.Role != store.RoleMember {
+			continue
+		}
+		g, _ := p.MembershipAt(monday)
+		if g == "" {
+			g = p.Group
+		}
+		if g != "" {
+			groups[g] = true
+		}
+	}
+	switch len(groups) {
+	case 0:
+		return "", nil
+	case 1:
+		for g := range groups {
+			return g, nil
+		}
+	}
+	return "", fmt.Errorf("%w: 组长没有填组，且名单里有多个组；请用 --group 指定要汇总的组", store.ErrInvalid)
 }

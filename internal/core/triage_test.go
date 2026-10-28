@@ -247,3 +247,40 @@ func TestBuildTriageFromRawReportsWithoutAI(t *testing.T) {
 		t.Fatal("有原文时应优先原文，不应读归一稿")
 	}
 }
+
+func TestBuildTriageInfersGroupWhenLeadHasNoGroup(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "组长", Role: store.RoleLead, Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	zhang, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ws.AddReportProject("云平台项目"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.WriteReport(store.NewReport{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Level: store.ReportLevelMember,
+		Group: "框架组", Source: store.ReportSourcePaste, SubmittedAt: now,
+		Body: "本周完成：\n1. 完成退款接口联调\n下周计划：\n1. 补齐用例\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	triage, err := BuildTriage(ws, "2026-W44", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if triage.Group != "框架组" {
+		t.Fatalf("组名 = %q，期望由组员推导出 框架组", triage.Group)
+	}
+	if len(triage.Items) != 2 {
+		t.Fatalf("条目 = %d: %+v", len(triage.Items), triage.Items)
+	}
+	// 显式传组也应能找到空组的组长。
+	lead, groupName, err := ResolveLead(ws, "2026-W44", "框架组")
+	if err != nil || lead == nil || groupName != "框架组" {
+		t.Fatalf("ResolveLead = %+v/%q/%v", lead, groupName, err)
+	}
+}
