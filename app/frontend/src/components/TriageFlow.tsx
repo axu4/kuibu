@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Events } from "@wailsio/runtime";
 import { ReportService, TriageService } from "../../bindings/github.com/axu4/kuibu/app";
 import type {
+  GroupInfoData,
   ProjectGroupList,
   TriageData,
   TriageItemData,
@@ -83,6 +84,8 @@ function FlowStep({ n, title, sub, on, done, locked, onClick }: FlowStepProps) {
 export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: TriageFlowProps) {
   const [data, setData] = useState<TriageData | null>(null);
   const [rows, setRows] = useState<ProjectGroupList[]>([]);
+  const [groupOptions, setGroupOptions] = useState<GroupInfoData[]>([]);
+  const [activeGroup, setActiveGroup] = useState(group);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<Step>(1);
@@ -109,6 +112,33 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
     rowsRef.current = rows;
   }, [rows]);
 
+  // 一个组长可能带多个组；进来先读组列表，多个组时先选组。
+  useEffect(() => {
+    let alive = true;
+    ReportService.GroupList()
+      .then((list) => {
+        if (!alive) return;
+        const groups = list ?? [];
+        setGroupOptions(groups);
+        if (!activeGroup && groups.length === 1) setActiveGroup(groups[0].name);
+        if (!activeGroup && groups.length === 0) {
+          setError("还没有组，请先在「设置 → 组与成员」里建组");
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (alive) {
+          setError(readableError(err));
+          setLoading(false);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+    // activeGroup 变化只用于判断首次自动选组，不重复拉名单。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const projects = data?.projects ?? [];
   const items = data?.items ?? [];
   const allJudged = Boolean(data?.allJudged);
@@ -116,7 +146,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
 
   const loadTriage = useCallback(async (): Promise<TriageData | null> => {
     try {
-      const fresh = await TriageService.Triage(week, group);
+      const fresh = await TriageService.Triage(week, activeGroup);
       setData(fresh);
       setError(null);
       return fresh;
@@ -127,20 +157,21 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
     } finally {
       setLoading(false);
     }
-  }, [week, group]);
+  }, [week, activeGroup]);
 
   const loadRows = useCallback(async (): Promise<ProjectGroupList[]> => {
     try {
-      const list = (await ReportService.ProjectGroups(week, group)) ?? [];
+      const list = (await ReportService.ProjectGroups(week, activeGroup)) ?? [];
       setRows(list);
       return list;
     } catch {
       // 第 1 步不依赖草稿状态；没有组长/组时保持旧值即可。
       return rowsRef.current;
     }
-  }, [week, group]);
+  }, [week, activeGroup]);
 
   useEffect(() => {
+    if (!activeGroup) return;
     setLoading(true);
     void (async () => {
       const fresh = await loadTriage();
@@ -273,7 +304,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
         setBusy(false);
       }
     },
-    [advance, current, group, onToast, projects, week],
+    [activeGroup, advance, current, onToast, projects, week],
   );
 
   const moveItem = useCallback(
@@ -325,7 +356,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
         setBusy(false);
       }
     },
-    [group, items, onToast, projects, week],
+    [activeGroup, items, onToast, projects, week],
   );
 
   const undo = useCallback(async () => {
@@ -363,7 +394,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       busyRef.current = false;
       setBusy(false);
     }
-  }, [group, history, onToast, week]);
+  }, [activeGroup, history, onToast, week]);
 
   const gotoItem = useCallback(
     (itemId: string) => {
@@ -455,6 +486,29 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
     if (next) void loadExcerpt(current.person);
   }, [current, excerptOpen, loadExcerpt]);
 
+  const chooseGroup = useCallback(
+    async (name: string) => {
+      if (step === 3) {
+        const ok = await reportsRef.current?.flush();
+        if (ok === false) return;
+      }
+      setActiveGroup(name);
+      setData(null);
+      setRows([]);
+      setStep(1);
+      setFilter("本周完成");
+      setCurrentId(null);
+      setHistory([]);
+      setLastAction(null);
+      setExcerptOpen(false);
+      setReportsReady(false);
+      setActiveProject(null);
+      bootstrappedRef.current = false;
+      setLoading(true);
+    },
+    [step],
+  );
+
   const closeFlow = useCallback(async () => {
     if (step === 3) {
       const ok = await reportsRef.current?.flush();
@@ -506,7 +560,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
       try {
         let freshRows = rows;
         try {
-          freshRows = (await ReportService.ProjectGroups(week, group)) ?? [];
+          freshRows = (await ReportService.ProjectGroups(week, activeGroup)) ?? [];
           setRows(freshRows);
         } catch {
           // 读不到草稿状态时仍按已知状态尝试，失败会在下面收集。
@@ -518,7 +572,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           // 已有草稿的项目不覆盖：保留组长已经整理过的内容。
           if (!byProject.has(project.id) || existing.has(project.id)) continue;
           try {
-            await ReportService.AssembleProjectGroup(week, group, project.id, false, false);
+            await ReportService.AssembleProjectGroup(week, activeGroup, project.id, false, false);
           } catch (err) {
             failures.push(`${project.name}：${readableError(err)}`);
           }
@@ -547,7 +601,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
         setBusy(false);
       }
     },
-    [data, group, loadRows, onToast, rows, week],
+    [activeGroup, data, loadRows, onToast, rows, week],
   );
 
   const handleSettingsChanged = useCallback(() => {
@@ -687,6 +741,45 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           }${stale > 0 ? ` · ${stale} 份需更新` : ""}`
       : "预览后开始整理";
 
+  if (!activeGroup && groupOptions.length > 1 && !error) {
+    return (
+      <section className="report-detail is-wide triage-flow">
+        <header className="triage-topbar">
+          <button type="button" className="triage-back" onClick={() => void closeFlow()} title="返回周报">
+            ‹ 周报
+          </button>
+          <span className="triage-topbar-divider" />
+          <span className="triage-topbar-title">周报整理</span>
+          <span className="triage-topbar-week">{week}</span>
+          <span className="triage-topbar-spacer" />
+          <button type="button" className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>
+            项目设置
+          </button>
+        </header>
+        <div className="triage-body">
+          <div className="triage-group-choose">
+            <div className="triage-eyebrow">选择一个组开始</div>
+            <h1 className="triage-h1">这次整理哪个组？</h1>
+            <p className="triage-lede">
+              三步流程按组独立进行：每个组分别筛选、分拣、成稿。你带着多个组，先选一个。
+            </p>
+            <div className="triage-group-picks">
+              {groupOptions.map((g) => (
+                <button key={g.id} type="button" className="triage-group-pick" onClick={() => void chooseGroup(g.name)}>
+                  <b>{g.name}</b>
+                  <span>{(g.members ?? []).length} 位成员 · 组长 {g.leadName || "未指定"}</span>
+                </button>
+              ))}
+            </div>
+            <div className="triage-group-actions">
+              没有要选的组？去「设置 → 组与成员」里新增或调整。
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   const actions =
     step === 1 ? (
       <>
@@ -761,7 +854,21 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
         <span className="triage-topbar-divider" />
         <span className="triage-topbar-title">周报整理</span>
         <span className="triage-topbar-week">{data?.week ?? week}</span>
-        {data?.group && <span className="triage-topbar-group">{data.group}</span>}
+        {groupOptions.length > 1 ? (
+          <select
+            className="triage-group-select"
+            value={activeGroup || ""}
+            onChange={(e) => void chooseGroup(e.target.value)}
+            title="切换组"
+          >
+            {!activeGroup && <option value="">选择组</option>}
+            {groupOptions.map((g) => (
+              <option key={g.id} value={g.name}>{g.name}</option>
+            ))}
+          </select>
+        ) : (
+          data?.group && <span className="triage-topbar-group">{data.group}</span>
+        )}
         <span className="triage-topbar-spacer" />
         {undecided > 0 && <span className="triage-topbar-progress">未判 {undecided} 条</span>}
         <button type="button" className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>
@@ -878,7 +985,7 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           <TriageReportsStep
             ref={reportsRef}
             week={data.week}
-            group={group}
+            group={activeGroup}
             projects={projects}
             rows={rows}
             items={items}
