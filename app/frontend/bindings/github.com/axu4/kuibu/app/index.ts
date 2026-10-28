@@ -28,6 +28,8 @@ export type {
     DroppedAsset,
     ExportContent,
     GroupData,
+    GroupInfoData,
+    GroupMemberData,
     GroupPlanData,
     LLMList,
     LLMModelInput,

@@ -57,12 +57,14 @@ interface ReportViewProps {
   initialWeek?: string;
   initialPersonId?: string;
   initialLevel?: string;
+  /** 通用组模式：只保留本组名单，不显示层级 tab / 月视图。 */
+  memberOnly?: boolean;
 }
 
-export function ReportView({ initialWeek, initialPersonId, initialLevel }: ReportViewProps) {
+export function ReportView({ initialWeek, initialPersonId, initialLevel, memberOnly = false }: ReportViewProps) {
   const [week, setWeek] = useState<ReportWeek | null>(null);
   const [level, setLevel] = useState<ReportLevel>(
-    initialLevel === "lead" ? "lead" : initialLevel === "member" ? "member" : loadReportLevel(),
+    memberOnly ? "member" : initialLevel === "lead" ? "lead" : initialLevel === "member" ? "member" : loadReportLevel(),
   );
   const [status, setStatus] = useState<ReportStatusData | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -388,7 +390,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
   const empty = status && (status.entries?.length ?? 0) === 0 && extra.length === 0;
   const deadline = week ? deadlineInfo(week.start, week.reportDay) : null;
 
-  if (period === "month") {
+  if (!memberOnly && period === "month") {
     return (
       <MonthView
         level={level}
@@ -442,26 +444,28 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
             </div>
 
             <div className="report-head-meta">
-              <PeriodSwitch period="week" onChange={(p) => p === "month" && setPeriod("month")} />
+              {!memberOnly && <PeriodSwitch period="week" onChange={(p) => p === "month" && setPeriod("month")} />}
               {week && <span>{weekdayLabel(week.reportDay)}截止</span>}
             </div>
 
-            <div className="segmented report-tabs">
-              <button
-                type="button"
-                className={`segmented-btn${level === "member" ? " is-active" : ""}`}
-                onClick={() => changeLevel("member")}
-              >
-                {levelLabel("member")}
-              </button>
-              <button
-                type="button"
-                className={`segmented-btn${level === "lead" ? " is-active" : ""}`}
-                onClick={() => changeLevel("lead")}
-              >
-                {levelLabel("lead")}
-              </button>
-            </div>
+            {!memberOnly && (
+              <div className="segmented report-tabs">
+                <button
+                  type="button"
+                  className={`segmented-btn${level === "member" ? " is-active" : ""}`}
+                  onClick={() => changeLevel("member")}
+                >
+                  {levelLabel("member")}
+                </button>
+                <button
+                  type="button"
+                  className={`segmented-btn${level === "lead" ? " is-active" : ""}`}
+                  onClick={() => changeLevel("lead")}
+                >
+                  {levelLabel("lead")}
+                </button>
+              </div>
+            )}
           </header>
 
           <div className="report-toolbar">
@@ -495,18 +499,20 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
                   周报三步流程
                 </button>
               )}
-              <button
-                type="button"
-                className={`btn${groupOpen ? " is-on" : ""}`}
-                onClick={() => {
-                  setSelectedId(null);
-                  setTriageOpen(false);
-                  setGroupOpen((v) => !v);
-                }}
-              >
-                <Icon name="report" size={14} />
-                {level === "member" ? "组报" : "产品报"}
-              </button>
+              {!memberOnly && (
+                <button
+                  type="button"
+                  className={`btn${groupOpen ? " is-on" : ""}`}
+                  onClick={() => {
+                    setSelectedId(null);
+                    setTriageOpen(false);
+                    setGroupOpen((v) => !v);
+                  }}
+                >
+                  <Icon name="report" size={14} />
+                  {level === "member" ? "组报" : "产品报"}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-primary"
@@ -517,11 +523,15 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
               </button>
               <MoreMenu
                 items={[
-                  {
-                    label: "批量归一本周已交",
-                    icon: "bolt" as const,
-                    onClick: () => setBatchOpen(true),
-                  },
+                  ...(!memberOnly
+                    ? [
+                        {
+                          label: "批量归一本周已交",
+                          icon: "bolt" as const,
+                          onClick: () => setBatchOpen(true),
+                        },
+                      ]
+                    : []),
                   { label: "复制催交话术", icon: "copy", onClick: () => void copyReminder() },
                   { label: "管理名单", icon: "person", onClick: () => setManagerOpen(true) },
                   { label: "设置周报日", icon: "calendar", onClick: () => setWeekdayOpen(true) },
@@ -620,6 +630,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
           kind={level === "member" ? "group" : "product"}
           week={week.week}
           refreshTick={refreshTick}
+          allowSubmit={false}
           onClose={() => setGroupOpen(false)}
           onToast={setToast}
         />

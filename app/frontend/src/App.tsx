@@ -15,7 +15,7 @@ import { Tree } from "./components/Tree";
 import { Editor } from "./components/LazyEditor";
 import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
-import { ReportView } from "./components/ReportView";
+import { ReportHome } from "./components/ReportHome";
 import { CalendarView } from "./components/CalendarView";
 import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
@@ -936,7 +936,7 @@ export default function App() {
         workspace ? (
           <div className="report-shell">
             {shortcutBanners}
-            <ReportView
+            <ReportHome
               key={reportJump ? `${workspace}-${reportJump.key}` : workspace}
               initialWeek={reportJump?.week}
               initialPersonId={reportJump?.personId}

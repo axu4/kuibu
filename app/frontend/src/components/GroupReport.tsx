@@ -81,6 +81,8 @@ interface GroupReportProps {
   refreshTick: number;
   onClose: () => void;
   onToast: (text: string) => void;
+  /** 通用组模式不把组报交给下一层；默认 true 兼容旧组报。 */
+  allowSubmit?: boolean;
 }
 
 /**
@@ -93,6 +95,7 @@ export function GroupReport({
   refreshTick,
   onClose,
   onToast,
+  allowSubmit = true,
 }: GroupReportProps) {
   const api = reportApi(kind, week);
   const [data, setData] = useState<GroupData | null>(null);
@@ -305,7 +308,7 @@ export function GroupReport({
                 <span className="draft-badge">未生成</span>
               )}
               {data.sourceChanged && <span className="draft-badge is-warn">组员定稿已更新</span>}
-              {data.submitted && <span className="draft-badge is-final">已带入 SE</span>}
+              {allowSubmit && data.submitted && <span className="draft-badge is-final">已带入 SE</span>}
               {data.exists && !final && saving !== "saved" && (
                 <span className="draft-saving">{saving === "saving" ? "保存中…" : "未保存"}</span>
               )}
@@ -333,7 +336,7 @@ export function GroupReport({
                     >
                       取消定稿
                     </button>
-                    {api.submit && (
+                    {allowSubmit && api.submit && (
                       <button
                         type="button"
                         className="btn btn-primary"

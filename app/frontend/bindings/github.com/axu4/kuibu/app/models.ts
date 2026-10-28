@@ -183,6 +183,26 @@ export interface GroupData {
 }
 
 /**
+ * GroupInfoData 是组管理页的一项。
+ */
+export interface GroupInfoData {
+    "id": string;
+    "name": string;
+    "leadId": string;
+    "leadName": string;
+    "members": GroupMemberData[] | null;
+}
+
+/**
+ * GroupMemberData 是组里的一位成员。
+ */
+export interface GroupMemberData {
+    "id": string;
+    "name": string;
+    "role": string;
+}
+
+/**
  * GroupPlanData 是组报外发预览。
  */
 export interface GroupPlanData {

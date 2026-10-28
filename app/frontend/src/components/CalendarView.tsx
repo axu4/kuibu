@@ -49,7 +49,7 @@ const WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六
 export function CalendarView({ onOpenReport, onOpenNote, onOpenTodo }: CalendarViewProps) {
   const [mode, setMode] = useState<CalendarMode>("month");
   const [month, setMonth] = useState(currentMonth);
-  const [perspective, setPerspective] = useState<ReportLevel>("member");
+  const [perspective] = useState<ReportLevel>("member");
   const [group, setGroup] = useState("");
   const [groups, setGroups] = useState<string[]>([]);
   const [monthData, setMonthData] = useState<CalendarMonth | null>(null);
@@ -141,22 +141,6 @@ export function CalendarView({ onOpenReport, onOpenNote, onOpenTodo }: CalendarV
               </button>
               {mode === "month" && (
                 <>
-                  <div className="segmented" role="tablist" aria-label="月视图视角">
-                    <button
-                      type="button"
-                      className={`segmented-btn${perspective === "member" ? " is-active" : ""}`}
-                      onClick={() => setPerspective("member")}
-                    >
-                      框架组长
-                    </button>
-                    <button
-                      type="button"
-                      className={`segmented-btn${perspective === "lead" ? " is-active" : ""}`}
-                      onClick={() => setPerspective("lead")}
-                    >
-                      SE
-                    </button>
-                  </div>
                   <label>
                     组
                     <select value={group} onChange={(e) => setGroup(e.target.value)}>

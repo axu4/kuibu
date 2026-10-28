@@ -208,7 +208,7 @@ func LoadTriage(ws *store.Workspace, week, group string) (*store.Triage, bool, e
 		return nil, false, err
 	}
 	old, oldErr := ws.ReadTriage(week, t.Lead)
-	changed := oldErr != nil || old.SourceHash != t.SourceHash || !sameTriageProjects(old.Projects, t.Projects)
+	changed := oldErr != nil || old.SourceHash != t.SourceHash || old.Group != t.Group || !sameTriageProjects(old.Projects, t.Projects)
 	if changed {
 		if err := ws.WriteTriage(t); err != nil {
 			return nil, false, err

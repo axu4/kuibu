@@ -11,6 +11,7 @@ export type {
     CalendarWeek,
     DoneReview,
     DraftItem,
+    LibraryReport,
     NormalizeSkip,
     PlanReview,
     ReviewCounts,
