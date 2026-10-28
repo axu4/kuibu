@@ -39,6 +39,7 @@ export type {
     PersonData,
     PersonInput,
     ProjectGroupList,
+    ProjectMonthList,
     QuickAddPreview,
     QuickNoteSaved,
     QuickTodoSaved,

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Clipboard, Events } from "@wailsio/runtime";
 import { ReportService } from "../../bindings/github.com/axu4/kuibu/app";
 import type {
+  ProjectMonthList,
   ReportData,
   ReportMonth,
   ReportPerson,
@@ -16,6 +17,7 @@ import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import { ReportReview, alignmentText } from "./ReportReview";
 import { GroupReport } from "./GroupReport";
 import { TriageFlow } from "./TriageFlow";
+import { MonthProjectFlow } from "./MonthProjectFlow";
 import {
   deadlineInfo,
   formatSubmittedAt,
@@ -44,6 +46,45 @@ interface ReportGroup {
 
 function sortByName(list: ReportPerson[]): ReportPerson[] {
   return [...list].sort((a, b) => a.name.localeCompare(b.name, "zh-Hans-CN"));
+}
+
+/** 2026-W44 -> W44。 */
+function shortWeek(week: string): string {
+  const m = /^\d{4}-(W\d{2})$/.exec(week);
+  return m ? m[1] : week;
+}
+
+/** 月视角各项目月报列表的状态文案。 */
+function projectMonthStatus(row: ProjectMonthList): { text: string; cls: string } {
+  if (!row.exists) return { text: "未生成", cls: "is-none" };
+  if (row.status === "final") return { text: "已定稿", cls: "is-final" };
+  if (row.sourceChanged) return { text: "来源已更新", cls: "is-stale" };
+  const clock = formatSubmittedAt(row.editedAt);
+  return { text: `草稿${clock ? ` · ${clock}` : ""}`, cls: "is-saved" };
+}
+
+/**
+ * 读取月视角各项目月报列表。组长带多个组时服务端无法用空组名解析，
+ * 这里退化为逐组尝试，取第一个配置了报送项目的组。
+ */
+async function loadMonthProjectRows(
+  month: string,
+): Promise<{ rows: ProjectMonthList[]; group: string }> {
+  try {
+    return { rows: (await ReportService.MonthProjectList(month, "")) ?? [], group: "" };
+  } catch (err) {
+    const groups = (await ReportService.GroupList()) ?? [];
+    if (groups.length <= 1) throw err;
+    for (const group of groups) {
+      try {
+        const rows = (await ReportService.MonthProjectList(month, group.name)) ?? [];
+        if (rows.length > 0) return { rows, group: group.name };
+      } catch {
+        // 这个组读不到就试下一个。
+      }
+    }
+    return { rows: [], group: "" };
+  }
 }
 
 /**
@@ -1048,11 +1089,16 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
   const [detailError, setDetailError] = useState(false);
   const [paste, setPaste] = useState<{ personId: string; text: string } | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(level === "member");
+  const [panelOpen, setPanelOpen] = useState(false);
   const [dayOpen, setDayOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  // 框架组长月视角：配置了报送项目时按项目出月报，否则保留旧的一份组月报。
+  const [monthProjects, setMonthProjects] = useState<ProjectMonthList[] | null>(null);
+  const [monthProjectGroup, setMonthProjectGroup] = useState("");
+  const [monthFlow, setMonthFlow] = useState<{ project: string | null } | null>(null);
   const monthRef = useRef<ReportMonth | null>(null);
+  const autoPanelRef = useRef(false);
   monthRef.current = month;
 
   const load = useCallback(
@@ -1060,8 +1106,28 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
       setMonth(m);
       if (level !== "lead") {
         setStatus(null);
+        try {
+          const { rows, group } = await loadMonthProjectRows(m.month);
+          setMonthProjects(rows);
+          setMonthProjectGroup(group);
+          // 没有配置报送项目时，沿用旧的一份组月报面板。
+          if (rows.length === 0 && !autoPanelRef.current) {
+            autoPanelRef.current = true;
+            setPanelOpen(true);
+          }
+        } catch (err) {
+          setMonthProjects([]);
+          setMonthProjectGroup("");
+          if (!autoPanelRef.current) {
+            autoPanelRef.current = true;
+            setPanelOpen(true);
+          }
+          setToast(`读取项目月报失败：${readableError(err)}`);
+        }
         return;
       }
+      setMonthProjects(null);
+      setMonthProjectGroup("");
       try {
         setStatus(await ReportService.Status(m.month, "lead-month", "", ""));
       } catch (err) {
@@ -1073,7 +1139,10 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
 
   useEffect(() => {
     setSelectedId(null);
-    setPanelOpen(level === "member");
+    autoPanelRef.current = false;
+    setMonthProjects(null);
+    setMonthProjectGroup("");
+    setPanelOpen(false);
     const cur = monthRef.current;
     void (cur ? load(cur) : ReportService.Month("this").then(load)).catch((err) =>
       setToast(`读取月份失败：${readableError(err)}`),
@@ -1138,6 +1207,20 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
     const day = month.collectDay >= 1 ? Math.min(month.collectDay, lastDay) : lastDay;
     return Date.now() >= new Date(year, mon - 1, day + 1).getTime();
   }, [month]);
+
+  const hasMonthProjects = (monthProjects?.length ?? 0) > 0;
+  const projectCandidates = useMemo(
+    () => (monthProjects ?? []).reduce((n, p) => n + p.candidates, 0),
+    [monthProjects],
+  );
+  const projectFinalized = useMemo(
+    () => (monthProjects ?? []).filter((p) => p.status === "final").length,
+    [monthProjects],
+  );
+  const projectMissing = useMemo(
+    () => (monthProjects ?? []).reduce((n, p) => n + (p.missing?.length ?? 0), 0),
+    [monthProjects],
+  );
 
   return (
     <div className="report-view">
@@ -1213,22 +1296,54 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
                     未交 <b>{counts?.missing ?? 0}</b>
                   </span>
                 </>
+              ) : hasMonthProjects ? (
+                <>
+                  <span>
+                    项目 <b>{monthProjects?.length ?? 0}</b>
+                  </span>
+                  <span>
+                    候选 <b>{projectCandidates}</b> 条
+                  </span>
+                  <span>
+                    已定稿月报 <b>{projectFinalized}</b>/{monthProjects?.length ?? 0}
+                  </span>
+                  {projectMissing > 0 && (
+                    <span>
+                      缺周 <b>{projectMissing}</b>
+                    </span>
+                  )}
+                </>
               ) : (
                 <span>组月报由本月各周已定稿的组报合并</span>
               )}
             </div>
             <div className="report-actions">
-              <button
-                type="button"
-                className={`btn${panelOpen ? " is-on" : ""}`}
-                onClick={() => {
-                  setSelectedId(null);
-                  setPanelOpen((v) => !v);
-                }}
-              >
-                <Icon name="report" size={14} />
-                {level === "member" ? "组月报" : "产品月报"}
-              </button>
+              {level === "member" && hasMonthProjects ? (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setPanelOpen(false);
+                    setSelectedId(null);
+                    setMonthFlow({ project: null });
+                  }}
+                >
+                  <Icon name="report" size={14} />
+                  项目月报
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`btn${panelOpen ? " is-on" : ""}`}
+                  onClick={() => {
+                    setSelectedId(null);
+                    setPanelOpen((v) => !v);
+                  }}
+                >
+                  <Icon name="report" size={14} />
+                  {level === "member" ? "组月报" : "产品月报"}
+                </button>
+              )}
               {level === "lead" && (
                 <>
                   <button
@@ -1278,6 +1393,53 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
                 )}
               </div>
             </div>
+          ) : monthProjects === null ? (
+            <div className="report-empty">
+              <p>正在读取项目月报…</p>
+            </div>
+          ) : hasMonthProjects ? (
+            <div className="month-project-list">
+              <div className="month-project-head">
+                <span>项目</span>
+                <span>候选</span>
+                <span>来源 / 缺周</span>
+                <span>状态</span>
+                <span />
+              </div>
+              {monthProjects.map((p) => {
+                const state = projectMonthStatus(p);
+                return (
+                  <button
+                    key={p.project}
+                    type="button"
+                    className="month-project-row"
+                    onClick={() => {
+                      setPanelOpen(false);
+                      setSelectedId(null);
+                      setMonthFlow({ project: p.project });
+                    }}
+                  >
+                    <span className="month-project-name">{p.projectName}</span>
+                    <span>{p.candidates} 条</span>
+                    <span>
+                      {p.planFrom ? `计划取自 ${shortWeek(p.planFrom)}` : "暂无计划来源"}
+                      {(p.missing ?? []).length > 0 && (
+                        <span className="month-project-missing">
+                          {" "}
+                          · 缺 {(p.missing ?? []).join("、")}
+                        </span>
+                      )}
+                    </span>
+                    <span className={`triage-rl-status ${state.cls}`}>{state.text}</span>
+                    <span className="month-project-open">整理 ›</span>
+                  </button>
+                );
+              })}
+              <p className="month-project-hint">
+                项目月报按「报送项目」各出一份：从本期各周已定稿的按项目组报拉取候选，人工整理、定稿后导出。
+                没有配置报送项目的工作台仍使用旧的一份组月报。
+              </p>
+            </div>
           ) : (
             <div className="report-empty">
               <p>
@@ -1288,13 +1450,27 @@ function MonthView({ level, onLevel, onWeek }: MonthViewProps) {
         </div>
       </section>
 
-      {panelOpen && month && (
+      {panelOpen && month && (level === "lead" || !hasMonthProjects) && (
         <GroupReport
           key={`${level}-${month.month}`}
           kind={level === "member" ? "month-group" : "month-product"}
           week={month.month}
           refreshTick={refreshTick}
           onClose={() => setPanelOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
+      {monthFlow && month && (
+        <MonthProjectFlow
+          key={`${month.month}-${monthFlow.project ?? "all"}`}
+          month={month.month}
+          group={monthProjectGroup}
+          initialProject={monthFlow.project}
+          onClose={() => {
+            setMonthFlow(null);
+            void load(month);
+          }}
           onToast={setToast}
         />
       )}

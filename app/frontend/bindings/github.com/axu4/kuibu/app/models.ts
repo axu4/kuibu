@@ -396,6 +396,35 @@ export interface ProjectGroupList {
 }
 
 /**
+ * ProjectMonthList 是月报首页左侧项目列表的一行。
+ */
+export interface ProjectMonthList {
+    "project": string;
+    "projectName": string;
+    "status": string;
+    "exists": boolean;
+    "humanEdited": boolean;
+
+    /**
+     * Candidates 是会进入月报的候选条目数（总结 + 计划）。
+     */
+    "candidates": number;
+
+    /**
+     * Missing 是本期范围内这个项目未定稿 / 未提交的周。
+     */
+    "missing": string[] | null;
+
+    /**
+     * PlanFrom 是下月计划的来源周，没有来源时为空。
+     */
+    "planFrom": string;
+    "finalizedAt": string;
+    "editedAt": string;
+    "sourceChanged": boolean;
+}
+
+/**
  * QuickAddPreview 是快速录入的实时预览结果。
  */
 export interface QuickAddPreview {

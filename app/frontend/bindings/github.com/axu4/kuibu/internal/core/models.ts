@@ -190,6 +190,172 @@ export interface LibraryReport {
 }
 
 /**
+ * MonthProjectCandidates 是一个项目的本月候选。
+ */
+export interface MonthCandidatesData {
+    "project": string;
+    "projectName": string;
+    "summary": MonthItem[] | null;
+    "plan": MonthItem[] | null;
+    "archive": MonthItem[] | null;
+    "excluded": MonthItem[] | null;
+
+    /**
+     * Missing 是本期范围内这个项目未定稿 / 未提交的周，形如「W44（未定稿）」。
+     */
+    "missing": string[] | null;
+
+    /**
+     * PlanFrom 是下月计划的来源周，没有来源时为空。
+     */
+    "planFrom"?: string;
+
+    /**
+     * SourceWeeks 是本期实际纳入的周。
+     */
+    "sourceWeeks": string[] | null;
+    "counts": MonthCounts;
+}
+
+/**
+ * MonthCounts 是一个项目的候选统计。
+ */
+export interface MonthCounts {
+    "summary": number;
+    "plan": number;
+    "archive": number;
+    "excluded": number;
+
+    /**
+     * Total 是 summary + plan，即会进入月报的候选数。
+     */
+    "total": number;
+}
+
+/**
+ * MonthItem 是月报里的一条候选事项。
+ */
+export interface MonthItem {
+    "id": string;
+    "text": string;
+
+    /**
+     * Section 是原始节：summary / plan。
+     */
+    "section": string;
+
+    /**
+     * Pool 是当前归口：summary / plan / archive / excluded。
+     */
+    "pool": string;
+    "weeks": string[] | null;
+    "firstWeek": string;
+    "lastWeek": string;
+
+    /**
+     * Duplicated 是跨周重复的次数（weeks 的长度）。
+     */
+    "duplicated": number;
+}
+
+/**
+ * MonthSourceView 是月报第 ① 步的来源视图。
+ */
+export interface MonthSourceView {
+    "month": string;
+    "group": string;
+    "leadId": string;
+    "leadName": string;
+    "defaultWeeks": string[] | null;
+
+    /**
+     * CandidateWeeks 是本期可以勾选的周：上月最后一周 + 默认周 + 下月第一周。
+     */
+    "candidateWeeks": string[] | null;
+    "scopeWeeks": string[] | null;
+    "weeks": MonthWeekRow[] | null;
+    "projects": store$0.ReportProject[] | null;
+
+    /**
+     * Missing 是本期范围内未定稿 / 未提交的来源，形如「云平台项目 W44（未定稿）」。
+     */
+    "missing": string[] | null;
+
+    /**
+     * FinalSlots / IncludedSlots / Slots 是来源份数统计（按 项目 × 周）。
+     */
+    "finalSlots": number;
+    "includedSlots": number;
+    "slots": number;
+
+    /**
+     * CandidateTotal 是当前各项目候选条目数之和。
+     */
+    "candidateTotal": number;
+}
+
+/**
+ * MonthWeekProject 是本期某一周某个项目的周组报状态。
+ */
+export interface MonthWeekProject {
+    "project": string;
+    "projectName": string;
+
+    /**
+     * Status 是 final / draft / missing。
+     */
+    "status": string;
+
+    /**
+     * Included 表示这份定稿周组报是否被纳入本期。
+     */
+    "included": boolean;
+
+    /**
+     * Items 是周组报本周总结 + 下周计划的条目数，未定稿时为 0。
+     */
+    "items": number;
+
+    /**
+     * FinalizedAt 是定稿时间，未定稿为空。
+     */
+    "finalizedAt"?: string;
+}
+
+/**
+ * MonthWeekRow 是本期周范围里的一周。
+ */
+export interface MonthWeekRow {
+    "week": string;
+
+    /**
+     * ReportDay 是该周周报日的日期（YYYY-MM-DD）。
+     */
+    "reportDay": string;
+
+    /**
+     * Default 表示按周报日归属本月的默认周。
+     */
+    "default": boolean;
+
+    /**
+     * Scope 表示当前是否在本期周范围里。
+     */
+    "scope": boolean;
+
+    /**
+     * Side 是 prev / next / custom；默认周为空。
+     */
+    "side"?: string;
+
+    /**
+     * Label 是相邻周的展示名（上月最后一周 / 下月第一周）。
+     */
+    "label"?: string;
+    "reports": MonthWeekProject[] | null;
+}
+
+/**
  * NormalizeSkip 是因存在人工修改或已定稿而跳过的人。
  */
 export interface NormalizeSkip {

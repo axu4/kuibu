@@ -5,3 +5,13 @@
  * Due 是待办截止日期（可选，日期必填，时间可空）。
  */
 export type Due = any;
+
+/**
+ * ReportProject 是一个报送项目（组报按项目分别成稿）。
+ * 
+ * 项目只是报送口径，不改变组员名单里的产品线；id 稳定、名称可改。
+ */
+export interface ReportProject {
+    "id": string;
+    "name": string;
+}
