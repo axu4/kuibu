@@ -101,6 +101,8 @@ func ResolveLead(ws *store.Workspace, week, group string) (*store.Person, string
 		return nil, "", err
 	}
 	var leads []*store.Person
+	// 组长的 group 可能留空（只带组员、不给自己填组）；指定组时先精确匹配，
+	// 没有精确匹配再把空组组长视为该组，避免「组里有组员却找不到组长」。
 	for _, p := range people {
 		if !p.Active || p.Role != store.RoleLead {
 			continue
@@ -113,11 +115,25 @@ func ResolveLead(ws *store.Workspace, week, group string) (*store.Person, string
 			leads = append(leads, p)
 		}
 	}
+	if len(leads) == 0 && group != "" {
+		for _, p := range people {
+			if !p.Active || p.Role != store.RoleLead {
+				continue
+			}
+			g, _ := p.MembershipAt(monday)
+			if g == "" && p.Group == "" {
+				leads = append(leads, p)
+			}
+		}
+	}
 	switch {
 	case len(leads) == 1:
 		g, _ := leads[0].MembershipAt(monday)
 		if g == "" {
 			g = leads[0].Group
+		}
+		if group != "" && g == "" {
+			g = group
 		}
 		return leads[0], g, nil
 	case len(leads) == 0 && group != "":
@@ -135,6 +151,12 @@ func PlanGroupReport(ws *store.Workspace, week, group, template string, allowMis
 	lead, groupName, err := ResolveLead(ws, week, group)
 	if err != nil {
 		return nil, err
+	}
+	if groupName == "" {
+		groupName, err = inferLeaderGroup(ws, week)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if template == "" {
 		template = "group"
