@@ -25,6 +25,13 @@ import * as llm$0 from "../internal/llm/models.js";
 import * as $models from "./models.js";
 
 /**
+ * AddGroup 新建组。
+ */
+export function AddGroup(name: string, leadID: string): $CancellablePromise<$models.GroupInfoData[] | null> {
+    return $Call.ByID(2483884765, name, leadID);
+}
+
+/**
  * AssembleProjectGroup 按筛选结果生成/重新生成某个项目的组报草稿。
  */
 export function AssembleProjectGroup(week: string, group: string, projectID: string, force: boolean, allowUnreviewed: boolean): $CancellablePromise<$models.GroupData> {
@@ -65,6 +72,13 @@ export function CreatePerson($in: $models.PersonInput): $CancellablePromise<$mod
  */
 export function Delete(week: string, person: string, level: string): $CancellablePromise<void> {
     return $Call.ByID(1128688876, week, person, level);
+}
+
+/**
+ * DeleteGroup 删除组；有在职成员时拒绝。
+ */
+export function DeleteGroup(id: string): $CancellablePromise<$models.GroupInfoData[] | null> {
+    return $Call.ByID(717026271, id);
 }
 
 /**
@@ -165,6 +179,13 @@ export function Get(week: string, person: string, level: string): $CancellablePr
  */
 export function GetDraft(week: string, person: string, level: string): $CancellablePromise<$models.DraftData> {
     return $Call.ByID(3702025472, week, person, level);
+}
+
+/**
+ * Groups 返回所有组及成员（首次会从组员名单推导组）。
+ */
+export function GroupList(): $CancellablePromise<$models.GroupInfoData[] | null> {
+    return $Call.ByID(1241147202);
 }
 
 /**
@@ -285,6 +306,13 @@ export function ProjectGroup(week: string, group: string, projectID: string): $C
  */
 export function ProjectGroups(week: string, group: string): $CancellablePromise<$models.ProjectGroupList[] | null> {
     return $Call.ByID(2172607428, week, group);
+}
+
+/**
+ * ReportLibrary 返回某周所有已定稿组报（跨组），可按组/项目过滤。
+ */
+export function ReportLibrary(week: string, group: string, project: string): $CancellablePromise<core$0.LibraryReport[] | null> {
+    return $Call.ByID(995234844, week, group, project);
 }
 
 /**
@@ -453,6 +481,13 @@ export function UnfinalizeProduct(week: string): $CancellablePromise<$models.Gro
  */
 export function UnfinalizeProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(1705953266, week, group, projectID);
+}
+
+/**
+ * UpdateGroup 修改组名、组长与成员。
+ */
+export function UpdateGroup(id: string, name: string, leadID: string, memberIDs: string[] | null): $CancellablePromise<$models.GroupInfoData[] | null> {
+    return $Call.ByID(1278612817, id, name, leadID, memberIDs);
 }
 
 /**

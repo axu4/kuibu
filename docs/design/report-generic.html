@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>跬步 · 通用组与周报库（交互原型）</title>
+<style>
+  :root {
+    --paper: #fcfcfb;
+    --sidebar: #f2f3f1;
+    --panel: #ffffff;
+    --hover: rgba(30, 40, 36, 0.055);
+    --line: #e6e7e4;
+    --line-strong: #d6d8d4;
+    --ink: #1e2120;
+    --ink-2: #5b605e;
+    --ink-3: #979c99;
+    --ink-4: #c3c7c4;
+    --accent: #2c7362;
+    --accent-soft: rgba(44, 115, 98, 0.1);
+    --accent-line: rgba(44, 115, 98, 0.35);
+    --seal: #c4432c;
+    --amber: #a86d12;
+    --amber-soft: rgba(168, 109, 18, 0.1);
+    --shadow-pop: 0 0 0 0.5px rgba(0,0,0,.12), 0 8px 28px rgba(20,30,26,.16);
+    --shadow-modal: 0 0 0 0.5px rgba(0,0,0,.12), 0 24px 64px rgba(20,30,26,.26);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --font-serif: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", Georgia, serif;
+    --font-mono: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1a1c1b; --sidebar: #212423; --panel: #1e2120; --hover: rgba(230,240,235,.06);
+      --line: #2d3130; --line-strong: #3a3f3d; --ink: #e4e7e5; --ink-2: #a5aba8; --ink-3: #737976;
+      --ink-4: #4e5452; --accent: #5db39c; --accent-soft: rgba(93,179,156,.14);
+      --accent-line: rgba(93,179,156,.4); --seal: #e8664d; --amber: #d9a24a; --amber-soft: rgba(217,162,74,.13);
+      --shadow-pop: 0 0 0 .5px rgba(255,255,255,.1), 0 8px 28px rgba(0,0,0,.5);
+      --shadow-modal: 0 0 0 .5px rgba(255,255,255,.1), 0 24px 64px rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: var(--font); font-size: 13px; color: var(--ink); background: var(--paper); overflow: hidden; -webkit-font-smoothing: antialiased; user-select: none; }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: none; background: none; padding: 0; cursor: default; }
+  input, select { user-select: text; }
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  .screen { display: none; flex: 1; min-height: 0; }
+  body[data-screen="library"] .screen-library,
+  body[data-screen="groups"] .screen-groups,
+  body[data-screen="mine"] .screen-mine { display: flex; }
+
+  /* topbar */
+  .topbar { flex: 0 0 50px; display: flex; align-items: center; gap: 14px; padding: 0 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(10px); z-index: 10; }
+  .brand { display: flex; align-items: baseline; gap: 7px; font-family: var(--font-serif); font-weight: 600; font-size: 15px; letter-spacing: .06em; }
+  .brand small { font-family: var(--font); font-size: 10px; font-weight: 400; letter-spacing: .12em; color: var(--ink-3); }
+  .top-divider { width: 1px; height: 18px; background: var(--line); }
+  .nav { display: flex; align-items: center; gap: 2px; }
+  .nav button { height: 30px; padding: 0 11px; border-radius: 7px; color: var(--ink-2); font-size: 12.5px; }
+  .nav button:hover { background: var(--hover); color: var(--ink); }
+  .nav button.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+  .top-right { margin-left: auto; display: flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: 12px; }
+  .week-chip { font-family: var(--font-mono); font-size: 11px; border: 1px solid var(--line); border-radius: 5px; padding: 2px 7px; background: var(--panel); }
+  .avatar { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 11px; }
+  .top-ghost { height: 28px; padding: 0 9px; border-radius: 7px; color: var(--ink-2); font-size: 12px; }
+  .top-ghost:hover { background: var(--hover); color: var(--ink); }
+
+  /* page */
+  .page { flex: 1; overflow: auto; }
+  .wrap { width: min(1120px, 92vw); margin: 0 auto; padding: 30px 0 56px; }
+  .eyebrow { font-size: 10.5px; letter-spacing: .16em; color: var(--ink-3); text-transform: uppercase; font-weight: 500; }
+  .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; }
+  h1 { font-family: var(--font-serif); font-size: 30px; line-height: 1.25; font-weight: 600; letter-spacing: .01em; margin: 7px 0 7px; }
+  .lede { max-width: 680px; color: var(--ink-2); line-height: 1.8; font-size: 12.5px; margin: 0; }
+  .head-actions { display: flex; gap: 8px; flex-shrink: 0; padding-top: 4px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 13px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel); color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
+  .btn:hover { background: var(--hover); color: var(--ink); }
+  .btn-primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent); color: #fff; filter: brightness(1.07); }
+  .btn-danger { border-color: color-mix(in srgb, var(--seal) 35%, var(--line)); color: var(--seal); }
+  .btn-danger:hover { background: color-mix(in srgb, var(--seal) 8%, transparent); }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .link { color: var(--accent); font-size: 12px; }
+  .link:hover { text-decoration: underline; }
+  .muted { color: var(--ink-3); }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 24px 0 22px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px; }
+  .stat b { display: block; font-family: var(--font-serif); font-size: 25px; line-height: 1.15; font-weight: 600; }
+  .stat span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+  .stat em { font-style: normal; color: var(--accent); }
+  .stat.is-se { background: linear-gradient(135deg, var(--accent-soft), transparent 80%), var(--panel); }
+
+  /* filter bar */
+  .filterbar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); margin-bottom: 14px; }
+  .seg { display: flex; align-items: center; gap: 2px; background: var(--sidebar); border-radius: 7px; padding: 2px; }
+  .seg button { height: 26px; padding: 0 9px; border-radius: 5px; font-size: 11.5px; color: var(--ink-2); }
+  .seg button:hover { color: var(--ink); }
+  .seg button.is-on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); font-weight: 500; }
+  .filter-divider { width: 1px; height: 20px; background: var(--line); margin: 0 2px; }
+  .select { height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 0 25px 0 8px; font-size: 12px; color: var(--ink-2); }
+  .search { height: 28px; min-width: 170px; flex: 1; border: 1px solid var(--line); border-radius: 6px; padding: 0 9px; background: var(--paper); font-size: 12px; color: var(--ink); }
+  .search::placeholder { color: var(--ink-4); }
+  .filter-note { margin-left: auto; font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+  /* report list */
+  .list { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: var(--panel); }
+  .list-head, .report-row { display: grid; grid-template-columns: 190px minmax(160px, 1fr) 74px 132px 112px; align-items: center; gap: 12px; padding: 0 16px; }
+  .list-head { height: 34px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--sidebar) 65%, transparent); color: var(--ink-3); font-size: 10.5px; letter-spacing: .04em; }
+  .report-row { min-height: 68px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .report-row:last-child { border-bottom: 0; }
+  .report-row:hover { background: var(--hover); }
+  .report-group { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .gmark { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-family: var(--font-serif); font-size: 14px; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-line); flex-shrink: 0; }
+  .gmark.is-2 { color: var(--amber); background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 35%, var(--line)); }
+  .gmark.is-3 { color: var(--seal); background: color-mix(in srgb, var(--seal) 8%, transparent); border-color: color-mix(in srgb, var(--seal) 30%, var(--line)); }
+  .report-group b { display: block; font-size: 12.5px; font-weight: 500; }
+  .report-group small { display: block; margin-top: 2px; color: var(--ink-3); font-size: 10.5px; }
+  .project-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .pill { display: inline-flex; align-items: center; height: 21px; padding: 0 7px; border-radius: 5px; border: 1px solid var(--line); color: var(--ink-2); font-size: 10.5px; background: var(--paper); white-space: nowrap; }
+  .pill.is-accent { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+  .report-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); font-size: 11.5px; }
+  .count { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); }
+  .count small { font-family: var(--font); color: var(--ink-3); font-size: 10px; margin-left: 2px; }
+  .time { color: var(--ink-2); font-size: 11.5px; }
+  .time small { display: block; color: var(--ink-3); font-size: 10px; margin-top: 2px; }
+  .row-actions { display: flex; justify-content: flex-end; gap: 5px; opacity: .3; transition: opacity .15s; }
+  .report-row:hover .row-actions { opacity: 1; }
+  .row-actions button { height: 26px; padding: 0 7px; border-radius: 5px; font-size: 11px; color: var(--ink-2); }
+  .row-actions button:hover { background: var(--pressed); color: var(--ink); }
+  .empty { padding: 60px 20px; text-align: center; color: var(--ink-3); }
+  .empty b { display: block; color: var(--ink-2); font-weight: 500; margin-bottom: 6px; }
+
+  /* groups */
+  .group-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+  .group-card { border: 1px solid var(--line); border-radius: 11px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 13px; }
+  .group-card:hover { border-color: var(--line-strong); box-shadow: 0 5px 18px rgba(20,30,26,.05); }
+  .group-card-head { display: flex; align-items: flex-start; gap: 10px; }
+  .group-card-head .gmark { width: 34px; height: 34px; border-radius: 9px; font-size: 16px; }
+  .group-card-head h3 { margin: 0; font-family: var(--font-serif); font-size: 17px; font-weight: 600; }
+  .group-card-head p { margin: 3px 0 0; color: var(--ink-3); font-size: 11px; }
+  .group-card-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 11px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .group-card-meta span { color: var(--ink-3); font-size: 10.5px; }
+  .group-card-meta b { display: block; color: var(--ink-2); font-size: 12px; font-weight: 500; margin-top: 2px; }
+  .avatar-stack { display: flex; align-items: center; }
+  .avatar-stack i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--sidebar); border: 2px solid var(--panel); color: var(--ink-2); font-style: normal; font-size: 9px; margin-left: -5px; }
+  .avatar-stack i:first-child { margin-left: 0; }
+  .avatar-stack .more { background: var(--panel); border: 1px dashed var(--line-strong); color: var(--ink-3); }
+  .group-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .group-card-actions .muted { font-size: 10.5px; }
+  .card-link { font-size: 11.5px; color: var(--ink-2); padding: 4px 6px; border-radius: 5px; }
+  .card-link:hover { background: var(--hover); color: var(--ink); }
+  .card-link.is-danger:hover { color: var(--seal); background: color-mix(in srgb, var(--seal) 8%, transparent); }
+  .archive-note { margin-top: 18px; display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: 10px; }
+  .archive-note .mark { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--accent-line); display: grid; place-items: center; color: var(--accent); font-family: var(--font-serif); font-size: 12px; flex-shrink: 0; }
+  .archive-note b { font-size: 12.5px; font-weight: 600; }
+  .archive-note p { margin: 3px 0 0; color: var(--ink-2); line-height: 1.7; font-size: 11.5px; }
+
+  /* mine */
+  .mine-grid { display: grid; grid-template-columns: 300px 1fr; gap: 14px; margin-top: 22px; align-items: start; }
+  .panel { border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+  .panel-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+  .panel-head h3 { margin: 0; font-family: var(--font-serif); font-size: 16px; font-weight: 600; }
+  .panel-body { padding: 14px 16px; }
+  .group-select { width: 100%; height: 31px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 0 9px; font-size: 12.5px; }
+  .group-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .group-facts span { display: block; color: var(--ink-3); font-size: 10.5px; }
+  .group-facts b { display: block; color: var(--ink-2); font-size: 12px; font-weight: 500; margin-top: 2px; }
+  .member-list { display: flex; flex-direction: column; }
+  .member-row { display: grid; grid-template-columns: 1fr 80px 92px; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .member-row:last-child { border-bottom: 0; }
+  .member-name { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+  .member-name i { width: 24px; height: 24px; border-radius: 50%; background: var(--sidebar); display: grid; place-items: center; font-style: normal; font-size: 10px; color: var(--ink-2); }
+  .status { font-size: 11px; color: var(--accent); }
+  .status.is-wait { color: var(--amber); }
+  .member-time { color: var(--ink-3); font-size: 10.5px; text-align: right; }
+  .report-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--paper); }
+  .report-card b { display: block; font-size: 12.5px; font-weight: 500; }
+  .report-card span { display: block; margin-top: 3px; color: var(--ink-3); font-size: 11px; }
+  .section-title { font-size: 10.5px; letter-spacing: .08em; color: var(--ink-3); text-transform: uppercase; margin: 0 0 9px; }
+
+  /* modals */
+  .modal-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(20,30,26,.24); backdrop-filter: blur(2px); }
+  .modal { width: min(540px, 90vw); max-height: 84vh; overflow: auto; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-modal); }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px 12px; }
+  .modal-head h2 { margin: 0; font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
+  .modal-head p { margin: 5px 0 0; color: var(--ink-3); font-size: 11.5px; line-height: 1.6; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--ink-3); }
+  .icon-btn:hover { background: var(--hover); color: var(--ink); }
+  .modal-body { padding: 4px 20px 18px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 18px; border-top: 1px solid var(--line); }
+  .field-label { display: block; color: var(--ink-2); font-size: 11.5px; margin-bottom: 5px; }
+  .field { width: 100%; height: 32px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 0 9px; font-size: 12.5px; color: var(--ink); }
+  .field:focus { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .member-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+  .pick { display: flex; align-items: center; gap: 7px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; }
+  .pick:hover { background: var(--hover); }
+  .pick input { accent-color: var(--accent); }
+  .preview-title { font-family: var(--font-serif); font-size: 21px; margin: 0 0 4px; }
+  .preview-meta { color: var(--ink-3); font-size: 11.5px; margin: 0 0 15px; }
+  .preview-body { border-top: 1px solid var(--line); padding-top: 14px; }
+  .preview-body h3 { font-family: var(--font-serif); font-size: 16px; margin: 18px 0 7px; font-weight: 600; }
+  .preview-body h3:first-child { margin-top: 0; }
+  .preview-body li { margin: 6px 0; color: var(--ink-2); line-height: 1.65; font-size: 12.5px; }
+  .preview-body ul { margin: 0; padding-left: 18px; }
+  .delete-box { border: 1px solid color-mix(in srgb, var(--seal) 30%, var(--line)); background: color-mix(in srgb, var(--seal) 6%, transparent); border-radius: 8px; padding: 11px 12px; color: var(--ink-2); font-size: 11.5px; line-height: 1.7; margin-top: 12px; }
+  .toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 80; background: #2b2f2d; color: #fff; border-radius: 8px; padding: 9px 14px; font-size: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.25); opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; }
+  .toast.is-on { opacity: 1; transform: translateX(-50%) translateY(-2px); }
+  .scope-chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); font-size: 10.5px; }
+  .scope-chip i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  @media (max-width: 980px) {
+    .wrap { width: 94vw; }
+    .list-head, .report-row { grid-template-columns: 160px minmax(140px, 1fr) 60px 110px 88px; gap: 8px; }
+    .group-grid { grid-template-columns: 1fr 1fr; }
+    .mine-grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body data-screen="library">
+<div id="app">
+  <header class="topbar">
+    <div class="brand">跬步 <small>周报</small></div>
+    <span class="top-divider"></span>
+    <nav class="nav" aria-label="主导航">
+      <button data-nav="library" class="is-on">周报库</button>
+      <button data-nav="mine">我的组</button>
+      <button data-nav="groups">组管理</button>
+    </nav>
+    <div class="top-right">
+      <span class="week-chip" id="top-week">2026-W44</span>
+      <span id="top-identity">陈组长 · 框架组</span>
+      <span class="avatar">陈</span>
+      <button class="top-ghost" data-act="toast" data-msg="原型里先不展开设置">设置</button>
+    </div>
+  </header>
+
+  <!-- 周报库 -->
+  <main class="screen screen-library">
+    <div class="page"><div class="wrap">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Weekly archive · <span id="lib-week">2026-W44</span></div>
+          <h1>周报库</h1>
+          <p class="lede">所有组定稿后的周报都在这里。按组、项目、周统一查看；组报定稿后自动归档，不需要再交给另一个角色或组。</p>
+        </div>
+        <div class="head-actions">
+          <span class="scope-chip"><i></i>全部组</span>
+          <button class="btn" data-nav="groups">管理组</button>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><b id="stat-reports">3</b><span>份定稿组报</span></div>
+        <div class="stat"><b id="stat-groups">3</b><span>个组 · 已归档</span></div>
+        <div class="stat"><b id="stat-projects">2</b><span>个项目</span></div>
+        <div class="stat is-se"><b id="stat-items">17</b><span>条定稿事项</span></div>
+      </div>
+
+      <div class="filterbar">
+        <div class="seg" id="group-filter"></div>
+        <span class="filter-divider"></span>
+        <select class="select" id="project-filter">
+          <option value="all">全部项目</option>
+          <option value="云平台项目">云平台项目</option>
+          <option value="数据中台项目">数据中台项目</option>
+        </select>
+        <input class="search" id="search" placeholder="搜组、项目或条目…" />
+        <span class="filter-note">只显示已定稿 · 只读</span>
+      </div>
+
+      <div class="list">
+        <div class="list-head">
+          <span>组</span><span>项目 / 内容</span><span>条目</span><span>定稿</span><span style="text-align:right">操作</span>
+        </div>
+        <div id="report-list"></div>
+      </div>
+    </div></div>
+  </main>
+
+  <!-- 我的组 -->
+  <main class="screen screen-mine">
+    <div class="page"><div class="wrap">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">My group · 同一套机制</div>
+          <h1>我的组</h1>
+          <p class="lede">每个组都是同一种东西：有组长、有成员、各自收周报、各自成稿。所有组走同一套流程。</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn" data-nav="library">去周报库</button>
+        </div>
+      </div>
+      <div class="mine-grid">
+        <aside class="panel">
+          <div class="panel-head"><h3>组</h3><span class="muted" id="mine-group-count"></span></div>
+          <div class="panel-body">
+            <select class="group-select" id="my-group-select"></select>
+            <div class="group-facts">
+              <div><span>组长</span><b id="mine-lead"></b></div>
+              <div><span>成员</span><b id="mine-members"></b></div>
+              <div><span>本周已交</span><b id="mine-submitted"></b></div>
+              <div><span>本周定稿</span><b id="mine-final"></b></div>
+            </div>
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+              <p class="section-title">本组组报</p>
+              <div class="report-card">
+                <div><b id="mine-report-title">云平台项目 · 2026-W44</b><span id="mine-report-meta">7 条 · 已定稿</span></div>
+                <button class="btn" data-nav="library">查看</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+        <section class="panel">
+          <div class="panel-head"><h3>成员周报</h3><span class="muted" id="mine-roster-meta"></span></div>
+          <div class="panel-body"><div class="member-list" id="member-list"></div></div>
+        </section>
+      </div>
+    </div></div>
+  </main>
+
+  <!-- 组管理 -->
+  <main class="screen screen-groups">
+    <div class="page"><div class="wrap">
+      <div class="page-head">
+        <div>
+          <div class="eyebrow">Groups · CRUD</div>
+          <h1>组管理</h1>
+          <p class="lede">组是唯一的组织单位：名字、组长、成员都可以改。组报定稿后自动进入周报库，不再需要额外的汇总组。</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn btn-primary" data-act="new-group">＋ 新建组</button>
+        </div>
+      </div>
+      <div class="group-grid" id="group-grid"></div>
+      <div class="archive-note">
+        <span class="mark">档</span>
+        <div>
+          <b>定稿即归档</b>
+          <p>组报定稿后直接进入周报库，不需要再交给任何角色或组；在周报库可以按组、项目、周查看所有定稿。</p>
+        </div>
+      </div>
+    </div></div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="modal-root"></div>
+
+<script>
+  const state = {
+    groups: [
+      { id: 'g1', name: '框架组', lead: '陈组长', members: ['张三', '李四', '王五', '赵六'], mark: '框' },
+      { id: 'g2', name: '数据组', lead: '林组长', members: ['周七', '吴八', '郑九'], mark: '数' },
+      { id: 'g3', name: '平台组', lead: '何组长', members: ['孙一', '钱二'], mark: '平' },
+    ],
+    reports: [
+      { id: 'r1', groupId: 'g1', project: '云平台项目', count: 7, finalized: '周四 11:12', lead: '陈组长', sections: [
+        { title: '本周总结', items: ['完成退款接口联调，覆盖 12 条用例', '排查线上超时问题，定位为连接池配置过小', '完成登录鉴权改造，灰度 20%'] },
+        { title: '下周计划', items: ['补齐退款异常分支用例，周四前提供', '灰度扩到 50%，准备回滚预案'] },
+        { title: '风险与求助', items: ['测试环境资源不足，压测排期可能延后 1 天'] },
+      ]},
+      { id: 'r2', groupId: 'g2', project: '数据中台项目', count: 6, finalized: '周四 10:48', lead: '林组长', sections: [
+        { title: '本周总结', items: ['报表导出支持 Excel，10 万行导出耗时 8 秒', '修复报表日期筛选跨月错误，已上线', '梳理报表权限模型，输出方案文档'] },
+        { title: '下周计划', items: ['按评审意见完成剩余 3 条改造'] },
+      ]},
+      { id: 'r3', groupId: 'g3', project: '云平台项目', count: 4, finalized: '周三 18:20', lead: '何组长', sections: [
+        { title: '本周总结', items: ['完成监控采集器资源占用优化，内存下降 30%', '补充 3 个告警规则的单元测试'] },
+        { title: '下周计划', items: ['接入新的指标采集链路，先灰度一个机房'] },
+      ]},
+    ],
+    filter: { group: 'all', project: 'all', q: '' },
+    myGroup: 'g1',
+  };
+
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const groupOf = (id) => state.groups.find((g) => g.id === id) || { name: '未分组', lead: '—', members: [], mark: '未' };
+  const markClass = (id) => (id === 'g2' ? ' is-2' : id === 'g3' ? ' is-3' : '');
+  const toastEl = $('#toast');
+  let toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('is-on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('is-on'), 2200);
+  }
+
+  function setScreen(name) {
+    document.body.dataset.screen = name;
+    $$('.nav [data-nav]').forEach((b) => b.classList.toggle('is-on', b.dataset.nav === name));
+    if (name === 'mine') renderMine();
+    if (name === 'groups') renderGroups();
+    if (name === 'library') renderLibrary();
+  }
+
+  function renderLibrary() {
+    const groups = state.groups;
+    $('#group-filter').innerHTML =
+      `<button data-filter-group="all" class="${state.filter.group === 'all' ? 'is-on' : ''}">全部组</button>` +
+      groups.map((g) => `<button data-filter-group="${g.id}" class="${state.filter.group === g.id ? 'is-on' : ''}">${esc(g.name)}</button>`).join('');
+    const q = state.filter.q.trim();
+    const rows = state.reports.filter((r) => {
+      if (state.filter.group !== 'all' && r.groupId !== state.filter.group) return false;
+      if (state.filter.project !== 'all' && r.project !== state.filter.project) return false;
+      if (q) {
+        const hay = `${groupOf(r.groupId).name} ${r.project} ${r.lead} ${r.sections.map((s) => s.items.join(' ')).join(' ')}`;
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const totalItems = rows.reduce((n, r) => n + r.count, 0);
+    $('#stat-reports').textContent = rows.length;
+    $('#stat-groups').textContent = new Set(rows.map((r) => r.groupId)).size;
+    $('#stat-projects').textContent = new Set(rows.map((r) => r.project)).size;
+    $('#stat-items').textContent = totalItems;
+    $('#lib-week').textContent = '2026-W44';
+    $('#top-week').textContent = '2026-W44';
+
+    if (!rows.length) {
+      $('#report-list').innerHTML = `<div class="empty"><b>没有符合条件的定稿组报</b><span>换个组、项目或搜索词试试。</span></div>`;
+      return;
+    }
+    $('#report-list').innerHTML = rows.map((r) => {
+      const g = groupOf(r.groupId);
+      return `<div class="report-row" data-report="${r.id}">
+        <div class="report-group"><span class="gmark${markClass(g.id)}">${esc(g.mark)}</span><span><b>${esc(g.name)}</b><small>组长 ${esc(g.lead)}</small></span></div>
+        <div class="project-cell"><span class="pill is-accent">${esc(r.project)}</span><span class="report-title">${esc(r.sections[0]?.items[0] || '')}</span></div>
+        <div class="count">${r.count}<small>条</small></div>
+        <div class="time">${esc(r.finalized)}<small>2026-W44 · 已定稿</small></div>
+        <div class="row-actions"><button data-preview="${r.id}">查看</button><button data-act="toast" data-msg="已复制为飞书格式">复制</button></div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderGroups() {
+    $('#group-grid').innerHTML = state.groups.map((g) => {
+      const reports = state.reports.filter((r) => r.groupId === g.id);
+      const avatars = g.members.slice(0, 4).map((m) => `<i>${esc(m[0] || '')}</i>`).join('') + (g.members.length > 4 ? `<i class="more">+${g.members.length - 4}</i>` : '');
+      return `<article class="group-card">
+        <div class="group-card-head"><span class="gmark${markClass(g.id)}">${esc(g.mark)}</span><div><h3>${esc(g.name)}</h3><p>组长 · ${esc(g.lead)}</p></div></div>
+        <div class="group-card-meta">
+          <div><span>成员</span><b>${g.members.length} 人</b></div>
+          <div><span>本周定稿</span><b>${reports.length} 份</b></div>
+        </div>
+        <div class="avatar-stack">${avatars}</div>
+        <div class="group-card-actions">
+          <span class="muted">${reports.length ? '本周已归档' : '本周未成稿'}</span>
+          <span><button class="card-link" data-edit-group="${g.id}">编辑</button><button class="card-link is-danger" data-delete-group="${g.id}">删除</button></span>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function renderMine() {
+    const g = groupOf(state.myGroup);
+    $('#my-group-select').innerHTML = state.groups.map((x) => `<option value="${x.id}" ${x.id === state.myGroup ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    $('#mine-group-count').textContent = `${state.groups.length} 个组`;
+    $('#mine-lead').textContent = g.lead;
+    $('#mine-members').textContent = `${g.members.length} 人`;
+    $('#mine-submitted').textContent = `${g.members.length} / ${g.members.length}`;
+    const rep = state.reports.find((r) => r.groupId === g.id);
+    $('#mine-final').textContent = rep ? '1 份' : '0 份';
+    $('#mine-report-title').textContent = rep ? `${rep.project} · 2026-W44` : '本周还没有定稿组报';
+    $('#mine-report-meta').textContent = rep ? `${rep.count} 条 · 已定稿` : '去周报库看看其他组';
+    $('#mine-roster-meta').textContent = `${g.members.length} 人 · 本周已交 ${g.members.length}`;
+    $('#member-list').innerHTML = g.members.map((m, i) => `<div class="member-row">
+      <div class="member-name"><i>${esc(m[0] || '')}</i>${esc(m)}</div>
+      <span class="status">已交</span>
+      <span class="member-time">周四 ${String(9 + i).padStart(2, '0')}:${i % 2 ? '18' : '42'}</span>
+    </div>`).join('');
+  }
+
+  /* modals */
+  function closeModal() { $('#modal-root').innerHTML = ''; }
+  function openPreview(id) {
+    const r = state.reports.find((x) => x.id === id);
+    if (!r) return;
+    const g = groupOf(r.groupId);
+    $('#modal-root').innerHTML = `<div class="modal-mask" data-close="1"><div class="modal">
+      <div class="modal-head">
+        <div><div class="eyebrow">已定稿 · 只读</div><h2 class="preview-title">${esc(g.name)} · ${esc(r.project)}</h2><p class="preview-meta">${r.count} 条事项 · 组长 ${esc(r.lead)} · 2026-W44 ${esc(r.finalized)} 定稿</p></div>
+        <button class="icon-btn" data-close="1">✕</button>
+      </div>
+      <div class="modal-body"><div class="preview-body">
+        ${r.sections.map((s) => `<h3>${esc(s.title)}</h3><ul>${s.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`).join('')}
+      </div></div>
+      <div class="modal-foot"><button class="btn" data-close="1">关闭</button><button class="btn" data-act="toast" data-msg="已复制为飞书格式">复制飞书</button><button class="btn btn-primary" data-act="toast" data-msg="已导出 Markdown">导出</button></div>
+    </div></div>`;
+  }
+
+  function openGroupEditor(id) {
+    const editing = id ? state.groups.find((g) => g.id === id) : null;
+    const people = Array.from(new Set(state.groups.flatMap((g) => [g.lead, ...g.members])));
+    const allMembers = Array.from(new Set(state.groups.flatMap((g) => g.members)));
+    $('#modal-root').innerHTML = `<div class="modal-mask" data-close="1"><div class="modal">
+      <div class="modal-head"><div><div class="eyebrow">${editing ? 'Edit group' : 'New group'}</div><h2 class="preview-title">${editing ? '编辑组' : '新建组'}</h2><p class="preview-meta">组是唯一组织单位，组报定稿后自动进入周报库。</p></div><button class="icon-btn" data-close="1">✕</button></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <label><span class="field-label">组名</span><input class="field" id="f-name" value="${editing ? esc(editing.name) : ''}" placeholder="例如：框架组" /></label>
+          <label><span class="field-label">组长</span><select class="field" id="f-lead">${people.map((p) => `<option ${editing?.lead === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label>
+        </div>
+        <div style="margin-top:14px"><span class="field-label">成员（可多选）</span>
+          <div class="member-picks">${allMembers.map((m) => `<label class="pick"><input type="checkbox" value="${esc(m)}" ${editing?.members.includes(m) ? 'checked' : ''}/>${esc(m)}</label>`).join('')}</div>
+        </div>
+        ${editing ? `<div class="delete-box">删除组不会删掉已归档的周报；组内成员需要先转到其他组。周报库里仍可查看历史定稿。</div>` : ''}
+      </div>
+      <div class="modal-foot"><button class="btn" data-close="1">取消</button><button class="btn btn-primary" data-save-group="${editing ? editing.id : ''}">保存</button></div>
+    </div></div>`;
+  }
+
+  function saveGroup(id) {
+    const name = $('#f-name').value.trim();
+    if (!name) { toast('组名不能为空'); return; }
+    const lead = $('#f-lead').value;
+    const members = $$('.member-picks input:checked').map((x) => x.value);
+    if (!members.length) { toast('至少选一位成员'); return; }
+    if (id) {
+      const g = state.groups.find((x) => x.id === id);
+      if (!g) return;
+      g.name = name; g.lead = lead; g.members = members; g.mark = name[0];
+      toast(`已保存「${name}」`);
+    } else {
+      const gid = 'g' + (state.groups.length + 1);
+      state.groups.push({ id: gid, name, lead, members, mark: name[0] });
+      toast(`已新建「${name}」`);
+    }
+    closeModal();
+    renderGroups(); renderLibrary(); renderMine();
+  }
+
+  function deleteGroup(id) {
+    const g = state.groups.find((x) => x.id === id);
+    if (!g) return;
+    state.groups = state.groups.filter((x) => x.id !== id);
+    state.myGroup = state.groups[0]?.id || '';
+    toast(`已删除「${g.name}」；历史定稿仍在周报库`);
+    renderGroups(); renderLibrary(); renderMine();
+  }
+
+  document.addEventListener('click', (e) => {
+    const nav = e.target.closest('[data-nav]');
+    if (nav) { setScreen(nav.dataset.nav); return; }
+    const fg = e.target.closest('[data-filter-group]');
+    if (fg) { state.filter.group = fg.dataset.filterGroup; renderLibrary(); return; }
+    const pv = e.target.closest('[data-preview]');
+    if (pv) { openPreview(pv.dataset.preview); return; }
+    const row = e.target.closest('.report-row');
+    if (row && !e.target.closest('button')) { openPreview(row.dataset.report); return; }
+    const ng = e.target.closest('[data-act="new-group"]');
+    if (ng) { openGroupEditor(''); return; }
+    const eg = e.target.closest('[data-edit-group]');
+    if (eg) { openGroupEditor(eg.dataset.editGroup); return; }
+    const dg = e.target.closest('[data-delete-group]');
+    if (dg) { deleteGroup(dg.dataset.deleteGroup); return; }
+    const sg = e.target.closest('[data-save-group]');
+    if (sg) { saveGroup(sg.dataset.saveGroup); return; }
+    const close = e.target.closest('[data-close]');
+    if (close) { closeModal(); return; }
+    const act = e.target.closest('[data-act="toast"]');
+    if (act) { toast(act.dataset.msg || '原型操作'); return; }
+  });
+
+  $('#search').addEventListener('input', (e) => { state.filter.q = e.target.value; renderLibrary(); });
+  $('#project-filter').addEventListener('change', (e) => { state.filter.project = e.target.value; renderLibrary(); });
+  $('#my-group-select').addEventListener('change', (e) => { state.myGroup = e.target.value; renderMine(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+  renderLibrary(); renderMine(); renderGroups();
+  window.__generic = { state, setScreen, openPreview, openGroupEditor, deleteGroup, saveGroup };
+</script>
+</body>
+</html>

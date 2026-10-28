@@ -41,6 +41,8 @@ type config struct {
 	MeetingWeekday int `json:"meetingWeekday,omitempty"`
 	// ReportProjects 是报送项目列表；空表示未启用按项目成稿。
 	ReportProjects []ReportProject `json:"reportProjects,omitempty"`
+	// ReportGroups 是组配置；空表示从组员名单推导。
+	ReportGroups []ReportGroup `json:"reportGroups,omitempty"`
 }
 
 // Workspace 代表一个已打开的工作台目录。

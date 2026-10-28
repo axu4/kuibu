@@ -173,6 +173,23 @@ export interface DraftItem {
 }
 
 /**
+ * LibraryReport 是周报库里一份已定稿组报。
+ */
+export interface LibraryReport {
+    "id": string;
+    "week": string;
+    "group": string;
+    "project": string;
+    "projectId": string;
+    "leadId": string;
+    "leadName": string;
+    "count": number;
+    "finalizedAt": string;
+    "path": string;
+    "body": string;
+}
+
+/**
  * NormalizeSkip 是因存在人工修改或已定稿而跳过的人。
  */
 export interface NormalizeSkip {
