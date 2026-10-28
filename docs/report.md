@@ -521,6 +521,6 @@ App 侧栏第三个视图「周报」，服务是 `app/reportservice.go`（`Repo
   保存 / 定稿 / 导出；正文按「本周总结 / 下周计划 / 风险与求助」分节，不带姓名。
 - 索引里按项目组报的 `level = group/<项目 id>`，`report list` 不指定 level 时默认仍只列
   member / lead。
-- 筛选读取组员归一稿的**草稿或定稿**，不要求先逐人定稿；组报定稿仍是导出/带入 SE 的闸门。
+- 筛选**优先读组员周报原文**，按标题/一行一条拆条目；原文拆不出时才退回已有归一稿。不要求先逐人定稿，也不需要配置 AI；组报定稿仍是导出/带入 SE 的闸门。
 - 项目配置在 `.kuibu/config.json` 的 `reportProjects`，最多 4 个；设计说明见
   [design/report-triage.md](design/report-triage.md)。

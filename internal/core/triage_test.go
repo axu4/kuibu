@@ -187,3 +187,63 @@ func TestBuildTriageSectionsAndAssembleProjects(t *testing.T) {
 		t.Error("来源变化后 sourceHash 应变化")
 	}
 }
+
+func TestBuildTriageFromRawReportsWithoutAI(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "组长", Group: "框架组", Role: store.RoleLead, Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	zhang, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ws.AddReportProject("云平台项目"); err != nil {
+		t.Fatal(err)
+	}
+	// 原文直接按条写，没有归一稿，也没有 AI 配置。
+	if _, err := ws.WriteReport(store.NewReport{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Level: store.ReportLevelMember,
+		Group: "框架组", Source: store.ReportSourcePaste, SubmittedAt: now,
+		Body: "【周报】张三 2026-10-29\n本周总结\n- 退款接口联调\n- 排查超时\n下周计划\n- 补齐用例\n风险与求助\n- 测试环境不足\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	triage, err := BuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(triage.Items) != 4 {
+		t.Fatalf("原文条目 = %d: %+v", len(triage.Items), triage.Items)
+	}
+	want := []struct{ section, text string }{
+		{SectionDone, "退款接口联调"},
+		{SectionDone, "排查超时"},
+		{SectionPlan, "补齐用例"},
+		{SectionRisk, "测试环境不足"},
+	}
+	for i, it := range triage.Items {
+		if it.Section != want[i].section || it.Text != want[i].text {
+			t.Errorf("第 %d 条 = %+v，期望 %s/%s", i, it, want[i].section, want[i].text)
+		}
+	}
+	// 原文优先于已有归一稿：归一稿里没有的条目也应出现。
+	if _, err := ws.SaveGeneratedDraft(store.GeneratedDraft{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Body: "## 本周完成\n- 只有归一稿\n",
+	}, true); err != nil {
+		t.Fatal(err)
+	}
+	triage, err = BuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, it := range triage.Items {
+		if it.Text == "只有归一稿" {
+			found = true
+		}
+	}
+	if found {
+		t.Fatal("有原文时应优先原文，不应读归一稿")
+	}
+}

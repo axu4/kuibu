@@ -201,8 +201,11 @@ export function TriageFilterStep({
                 <div className="triage-excerpt">
                   <div className="triage-excerpt-head">
                     <span>
-                      {current.name} 的归一稿
-                      {excerpt?.status === "final" ? " · 已定稿" : " · 草稿"} · 只读
+                      {current.name} 的
+                      {excerpt?.status === "raw"
+                        ? "周报原文 · 按条"
+                        : `归一稿${excerpt?.status === "final" ? " · 已定稿" : " · 草稿"}`}
+                      {" · 只读"}
                     </span>
                     <span>当前条目高亮</span>
                   </div>

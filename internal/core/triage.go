@@ -79,11 +79,11 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 		}
 	}
 
-	type memberDraft struct {
+	type memberSource struct {
 		person *store.Person
-		draft  *store.Draft
+		body   string
 	}
-	members := make([]memberDraft, 0)
+	members := make([]memberSource, 0)
 	missing := make([]string, 0)
 	for _, p := range people {
 		if !p.Active || p.Role != store.RoleMember {
@@ -96,15 +96,36 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 		if g != groupName {
 			continue
 		}
-		d, err := ws.ReadDraft(week, p.ID)
-		if err != nil {
-			if errors.Is(err, store.ErrNotFound) {
-				missing = append(missing, p.Name)
-				continue
+		// 优先读组员原文：三步流程不再依赖 AI 归一稿。原文拆不出条目时，
+		// 再退回归一稿（草稿或定稿），兼容已经归一过的数据。
+		body := ""
+		rawBody := ""
+		if raw, err := ws.ReadReport(week, store.ReportLevelMember, p.ID); err == nil {
+			rawBody = raw.Body
+			// 原文有明确小节或列表项时优先原文；整段散文则优先已有的归一稿，
+			// 避免把没有结构的原文拆成一堆碎行。
+			if triageBodyLooksItemized(rawBody) {
+				body = rawBody
 			}
+		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, err
 		}
-		members = append(members, memberDraft{person: p, draft: d})
+		if body == "" {
+			if d, err := ws.ReadDraft(week, p.ID); err == nil {
+				body = d.Body
+			} else if !errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+		}
+		if body == "" {
+			// 没有归一稿、原文又不是典型小节/列表：仍按一行一条兜底。
+			body = rawBody
+		}
+		if len(parseTriageBody(body)) == 0 {
+			missing = append(missing, p.Name)
+			continue
+		}
+		members = append(members, memberSource{person: p, body: body})
 	}
 	sort.Slice(members, func(i, j int) bool {
 		if members[i].person.Name != members[j].person.Name {
@@ -134,8 +155,8 @@ func BuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error)
 	hash := sha256.New()
 	order := 0
 	for _, m := range members {
-		hash.Write([]byte(m.person.ID + "\n" + m.draft.Body + "\n\x00"))
-		bySection := ParseDraftItems(m.draft.Body)
+		hash.Write([]byte(m.person.ID + "\n" + m.body + "\n\x00"))
+		bySection := parseTriageBody(m.body)
 		for _, section := range TriageSections {
 			for _, item := range bySection[section] {
 				domain, body := SplitTriageDomain(item.Text)
@@ -417,4 +438,76 @@ func wsProjects(ws *store.Workspace) []store.ReportProject {
 		return nil
 	}
 	return projects
+}
+
+// parseTriageBody 从组员原文/归一稿里拆条目。
+//
+// 优先用 ParseDraftItems（识别「## 本周完成/本周总结/下周计划/风险与求助」）；
+// 原文没有 Markdown 标题时退化为按行解析，识别常见节名，未识别到标题的列表项
+// 归入「本周完成」，保证已经一条一条写的原文也能直接筛选。
+func parseTriageBody(body string) map[string][]DraftItem {
+	out := ParseDraftItems(body)
+	if len(out) > 0 {
+		return out
+	}
+	out = map[string][]DraftItem{}
+	section := SectionDone
+	seen := map[string]bool{}
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		switch {
+		case strings.Contains(trimmed, "本周总结"), strings.Contains(trimmed, "本周完成"):
+			section = SectionDone
+			continue
+		case strings.Contains(trimmed, "下周计划"), strings.Contains(trimmed, "下周工作"):
+			section = SectionPlan
+			continue
+		case strings.Contains(trimmed, "风险"), strings.Contains(trimmed, "求助"):
+			section = SectionRisk
+			continue
+		}
+		text, ok := listItemText(trimmed)
+		if !ok {
+			// 没有「- / 1.」前缀时，把非标题、非空行也当作一条（组员常见一行一条）。
+			if strings.HasPrefix(trimmed, "【周报】") || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			text = trimmed
+		}
+		text = strings.TrimSpace(text)
+		if text == "" || text == "无" {
+			continue
+		}
+		id := ItemID(section, text)
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out[section] = append(out[section], DraftItem{ID: id, Text: text})
+	}
+	return out
+}
+
+// triageBodyLooksItemized 判断原文是否有可用的结构：Markdown 小节、常见节名或列表项。
+func triageBodyLooksItemized(body string) bool {
+	if len(ParseDraftItems(body)) > 0 {
+		return true
+	}
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") || strings.HasPrefix(trimmed, "+ ") {
+			return true
+		}
+		if strings.Contains(trimmed, "本周总结") || strings.Contains(trimmed, "本周完成") ||
+			strings.Contains(trimmed, "下周计划") || strings.Contains(trimmed, "风险") {
+			return true
+		}
+	}
+	return false
 }
