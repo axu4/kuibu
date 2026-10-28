@@ -747,6 +747,23 @@ export interface ReportPreview {
 }
 
 /**
+ * ReportSectionData 是识别结果的一节（带展示名）。
+ */
+export interface ReportSectionData {
+    "section": string;
+    "title": string;
+    "items": string[] | null;
+}
+
+/**
+ * ReportSectionInput 是录入时提交的一节。
+ */
+export interface ReportSectionInput {
+    "section": string;
+    "items": string[] | null;
+}
+
+/**
  * ReportStatusData 是一次提交状态统计。
  */
 export interface ReportStatusData {
@@ -865,6 +882,11 @@ export interface SubmitItem {
      * Level 是层级：member / lead。
      */
     "level": string;
+
+    /**
+     * Sections 是录入时识别/校正后的结构化条目；仅 member 使用。
+     */
+    "sections"?: ReportSectionInput[] | null;
 }
 
 /**

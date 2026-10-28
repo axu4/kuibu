@@ -48,6 +48,8 @@ export type {
     ReportMonth,
     ReportPerson,
     ReportPreview,
+    ReportSectionData,
+    ReportSectionInput,
     ReportStatusData,
     ReportWeek,
     ShortcutStatus,

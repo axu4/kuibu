@@ -232,6 +232,13 @@ export function Normalize(week: string, level: string, persons: string[] | null,
 }
 
 /**
+ * ParseReportSections 在录入阶段识别组员原文的分节，不调 AI。
+ */
+export function ParseReportSections(text: string): $CancellablePromise<$models.ReportSectionData[] | null> {
+    return $Call.ByID(3278484772, text);
+}
+
+/**
  * People 返回组员列表；includeInactive 为 false 时只返回在职人员。
  */
 export function People(includeInactive: boolean): $CancellablePromise<$models.PersonData[] | null> {
@@ -369,6 +376,13 @@ export function SaveProduct(week: string, body: string): $CancellablePromise<$mo
  */
 export function SaveProjectGroup(week: string, group: string, projectID: string, body: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(2231099970, week, group, projectID, body);
+}
+
+/**
+ * SaveReportSections 保存人工校正后的录入结构化；按当前原文哈希绑定。
+ */
+export function SaveReportSections(week: string, personID: string, sections: $models.ReportSectionInput[] | null): $CancellablePromise<void> {
+    return $Call.ByID(1291019692, week, personID, sections);
 }
 
 /**

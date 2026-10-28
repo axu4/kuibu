@@ -183,6 +183,21 @@ type SubmitItem struct {
 	Week string `json:"week"`
 	// Level 是层级：member / lead。
 	Level string `json:"level"`
+	// Sections 是录入时识别/校正后的结构化条目；仅 member 使用。
+	Sections []ReportSectionInput `json:"sections,omitempty"`
+}
+
+// ReportSectionInput 是录入时提交的一节。
+type ReportSectionInput struct {
+	Section string   `json:"section"`
+	Items   []string `json:"items"`
+}
+
+// ReportSectionData 是识别结果的一节（带展示名）。
+type ReportSectionData struct {
+	Section string   `json:"section"`
+	Title   string   `json:"title"`
+	Items   []string `json:"items"`
 }
 
 // PersonData 是一名组员的前端结构。
@@ -510,6 +525,31 @@ func (s *ReportService) Preview(text, level, week, person string) ([]ReportPrevi
 	return out, nil
 }
 
+// ParseReportSections 在录入阶段识别组员原文的分节，不调 AI。
+func (s *ReportService) ParseReportSections(text string) []ReportSectionData {
+	out := make([]ReportSectionData, 0, 3)
+	for _, sec := range core.ParseReportSections(text) {
+		out = append(out, ReportSectionData{Section: sec.Section, Title: sec.Title, Items: sec.Items})
+	}
+	return out
+}
+
+// SaveReportSections 保存人工校正后的录入结构化；按当前原文哈希绑定。
+func (s *ReportService) SaveReportSections(week, personID string, sections []ReportSectionInput) error {
+	ws, _, err := s.instances()
+	if err != nil {
+		return err
+	}
+	report, err := ws.ReadReport(week, store.ReportLevelMember, personID)
+	if err != nil {
+		return err
+	}
+	return ws.WriteReportSections(store.ReportSections{
+		Person: personID, Week: week, SourceHash: core.ReportBodyHash(report.Body),
+		UpdatedAt: s.clock().Format(time.RFC3339), Sections: toStoreSections(sections),
+	})
+}
+
 // Submit 写入一批周报原文，source 记为 paste，返回每份的归档结果。
 func (s *ReportService) Submit(items []SubmitItem) ([]ReportData, error) {
 	ws, _, err := s.instances()
@@ -539,6 +579,14 @@ func (s *ReportService) Submit(items []SubmitItem) ([]ReportData, error) {
 			return nil, err
 		}
 		results = append(results, toReportData(report))
+		if it.Level == store.ReportLevelMember && len(it.Sections) > 0 {
+			if err := ws.WriteReportSections(store.ReportSections{
+				Person: report.Person, Week: report.Week, SourceHash: core.ReportBodyHash(report.Body),
+				UpdatedAt: now.Format(time.RFC3339), Sections: toStoreSections(it.Sections),
+			}); err != nil {
+				return nil, err
+			}
+		}
 	}
 	s.emitReport(nil, nil)
 	return results, nil
@@ -878,4 +926,27 @@ func sameStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func toStoreSections(sections []ReportSectionInput) []store.ReportSection {
+	valid := map[string]bool{}
+	for _, sec := range core.TriageSections {
+		valid[sec] = true
+	}
+	out := make([]store.ReportSection, 0, len(sections))
+	for _, sec := range sections {
+		if !valid[sec.Section] {
+			continue
+		}
+		items := make([]string, 0, len(sec.Items))
+		for _, item := range sec.Items {
+			if text := strings.TrimSpace(item); text != "" {
+				items = append(items, text)
+			}
+		}
+		if len(items) > 0 {
+			out = append(out, store.ReportSection{Section: sec.Section, Items: items})
+		}
+	}
+	return out
 }

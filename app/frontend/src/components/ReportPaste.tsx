@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReportService } from "../../bindings/github.com/axu4/kuibu/app";
-import type { PersonData, ReportPreview } from "../../bindings/github.com/axu4/kuibu/app";
+import type { PersonData, ReportPreview, ReportSectionData } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
 import { reportSummary } from "../lib/report";
 import type { ReportLevel } from "../lib/report";
 import { readableError } from "../lib/todo";
 
 /** 一份预览 + 用户确认后的人员选择。 */
+type EditableSection = { section: string; title: string; items: string[] };
+
 interface PreviewRow {
   preview: ReportPreview;
   personId: string;
+  sections: EditableSection[];
+}
+
+function normalizeSections(list: ReportSectionData[] | null | undefined): EditableSection[] {
+  return (list ?? []).map((sec) => ({ section: sec.section, title: sec.title, items: sec.items ?? [] }));
 }
 
 interface ReportPasteProps {
@@ -49,6 +56,7 @@ export function ReportPaste({
   const [text, setText] = useState(initialText);
   const [people, setPeople] = useState<PersonData[]>([]);
   const [rows, setRows] = useState<PreviewRow[] | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -112,19 +120,18 @@ export function ReportPaste({
         // 预设人员只允许单份文本；多份时退回按头行识别。
         previews = (await ReportService.Preview(raw, submitLevel, week, "")) ?? [];
       }
-      const next = previews.map((p) => ({
-        preview: p,
-        personId: p.personId || (p.hasHeader ? "" : presetPersonId),
-      }));
+      const next = await Promise.all(
+        previews.map(async (p) => ({
+          preview: p,
+          personId: p.personId || (p.hasHeader ? "" : presetPersonId),
+          sections: normalizeSections(await ReportService.ParseReportSections(p.text)),
+        })),
+      );
       if (next.length === 0) {
         setError("没识别出周报内容");
         return;
       }
-      if (!needsConfirm(next)) {
-        // 没有任何要人工判断的情况：识别完直接归档，少点一次。
-        await submit(next);
-        return;
-      }
+      // 录入时先展示识别结果（本周/下周/其他），允许调整分类后再写入。
       setRows(next);
     } catch (err) {
       setError(`识别失败：${readableError(err)}`);
@@ -152,6 +159,7 @@ export function ReportPaste({
           person: r.personId,
           week: r.preview.week || week,
           level: submitLevel,
+          sections: r.sections.map((sec) => ({ section: sec.section, items: sec.items })),
         }));
       if (items.length === 0) return;
       setBusy(true);
@@ -175,17 +183,6 @@ export function ReportPaste({
    * 没有任何新信息——直接写入更省事。其余情况（尤其是多份批量粘贴）
    * 仍然要给一眼预览。
    */
-  const needsConfirm = useCallback(
-    (list: PreviewRow[]) => {
-      if (!locked || list.length !== 1) return true;
-      const p = list[0].preview;
-      if (p.duplicate || p.overwrite || p.late || !p.personId) return true;
-      if (p.week && p.week !== week) return true;
-      return false;
-    },
-    [locked, week],
-  );
-
   // 停下来确认时，把那件需要人判断的事直接写出来。
   const confirmReason = useMemo(() => {
     if (!rows || rows.length === 0) return "";
@@ -254,6 +251,7 @@ export function ReportPaste({
                   locked={locked}
                   options={options}
                   onPerson={(id) => setPerson(i, id)}
+                  onEditSections={() => setEditing(i)}
                 />
               ))}
             </div>
@@ -281,6 +279,19 @@ export function ReportPaste({
 
         {error && <div className="settings-error">{error}</div>}
       </div>
+
+      {editing !== null && rows?.[editing] && (
+        <SectionEditor
+          sections={rows[editing].sections}
+          onClose={() => setEditing(null)}
+          onSave={(sections) => {
+            setRows((prev) =>
+              prev ? prev.map((row, i) => (i === editing ? { ...row, sections } : row)) : prev,
+            );
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -292,10 +303,11 @@ interface PreviewCardProps {
   locked: boolean;
   options: PersonData[];
   onPerson: (id: string) => void;
+  onEditSections: () => void;
 }
 
 /** 单份预览：序号、人员（锁定时只读）、周、覆盖/迟交/重复标记与原文摘要。 */
-function PreviewCard({ row, index, locked, options, onPerson }: PreviewCardProps) {
+function PreviewCard({ row, index, locked, options, onPerson, onEditSections }: PreviewCardProps) {
   const p = row.preview;
   const personName = options.find((o) => o.id === row.personId)?.name ?? p.personName;
   return (
@@ -333,6 +345,111 @@ function PreviewCard({ row, index, locked, options, onPerson }: PreviewCardProps
         {p.reason && <span className="report-preview-reason">{p.reason}</span>}
       </div>
       <div className="report-preview-summary">{reportSummary(p.text)}</div>
+      <div className="report-preview-sections">
+        {row.sections.map((sec) => (
+          <span key={sec.section} className="report-preview-section-chip">
+            {sec.title} <b>{sec.items.length}</b>
+          </span>
+        ))}
+        <button type="button" className="link-btn" onClick={onEditSections}>
+          调整分类
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+interface SectionEditorProps {
+  sections: EditableSection[];
+  onClose: () => void;
+  onSave: (sections: EditableSection[]) => void;
+}
+
+/** 录入时的分节校正：移动条目、改文字、删条目，不调用 AI。 */
+function SectionEditor({ sections, onClose, onSave }: SectionEditorProps) {
+  const [draft, setDraft] = useState<EditableSection[]>(() =>
+    sections.map((sec) => ({ ...sec, items: [...sec.items] })),
+  );
+  const options = sections.map((sec) => ({ section: sec.section, title: sec.title }));
+  const updateItem = (secIndex: number, itemIndex: number, text: string) => {
+    setDraft((prev) => prev.map((sec, i) => (i === secIndex
+      ? { ...sec, items: sec.items.map((item, j) => (j === itemIndex ? text : item)) }
+      : sec)));
+  };
+  const moveItem = (secIndex: number, itemIndex: number, target: string) => {
+    setDraft((prev) => {
+      const text = prev[secIndex]?.items[itemIndex] ?? "";
+      return prev.map((sec, i) => {
+        if (i === secIndex) return { ...sec, items: sec.items.filter((_, j) => j !== itemIndex) };
+        if (sec.section === target) return { ...sec, items: [...sec.items, text] };
+        return sec;
+      });
+    });
+  };
+  const removeItem = (secIndex: number, itemIndex: number) => {
+    setDraft((prev) => prev.map((sec, i) =>
+      i === secIndex ? { ...sec, items: sec.items.filter((_, j) => j !== itemIndex) } : sec));
+  };
+  const addItem = (secIndex: number) => {
+    setDraft((prev) => prev.map((sec, i) =>
+      i === secIndex ? { ...sec, items: [...sec.items, ""] } : sec));
+  };
+  return (
+    <div
+      className="modal-mask is-center is-nested"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="modal report-section-editor" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        <div className="report-paste-head">
+          <h2>调整分类</h2>
+          <button type="button" className="icon-btn" onClick={onClose} title="关闭"><Icon name="close" /></button>
+        </div>
+        <p className="settings-desc">识别不对可以直接改：移动条目、修改文字或删除。保存后后续分拣按这里来。</p>
+        <div className="report-section-columns">
+          {draft.map((sec, secIndex) => (
+            <section key={sec.section} className="report-section-column">
+              <h3>{sec.title} <span>{sec.items.length}</span></h3>
+              {sec.items.map((item, itemIndex) => (
+                <div key={itemIndex} className="report-section-item">
+                  <textarea
+                    className="field"
+                    value={item}
+                    rows={2}
+                    onChange={(e) => updateItem(secIndex, itemIndex, e.target.value)}
+                  />
+                  <div className="report-section-item-actions">
+                    <select
+                      className="field"
+                      value={sec.section}
+                      onChange={(e) => moveItem(secIndex, itemIndex, e.target.value)}
+                    >
+                      {options.map((opt) => (
+                        <option key={opt.section} value={opt.section}>{opt.title}</option>
+                      ))}
+                    </select>
+                    <button type="button" className="btn is-compact" onClick={() => removeItem(secIndex, itemIndex)}>删除</button>
+                  </div>
+                </div>
+              ))}
+              <button type="button" className="btn is-compact" onClick={() => addItem(secIndex)}>＋ 添加一条</button>
+            </section>
+          ))}
+        </div>
+        <div className="modal-buttons">
+          <button type="button" className="btn" onClick={onClose}>取消</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => onSave(draft.map((sec) => ({ ...sec, items: sec.items.map((item) => item.trim()).filter(Boolean) })))}
+          >
+            保存分类
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
