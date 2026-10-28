@@ -11,7 +11,8 @@ import type {
 export function shortSection(title: string): string {
   if (title.includes("总结") || title.includes("完成")) return "总结";
   if (title.includes("计划")) return "计划";
-  return "风险";
+  if (title.includes("其他") || title.includes("风险") || title.includes("求助")) return "其他";
+  return "其他";
 }
 
 export function sectionsOf(data: TriageData | null): TriageSectionData[] {
