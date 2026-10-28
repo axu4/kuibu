@@ -9,6 +9,8 @@ import type {
 } from "../../bindings/github.com/axu4/kuibu/app";
 import { Icon } from "./Icon";
 import { LLMSettings } from "./LLMSettings";
+import { GroupManager } from "./GroupManager";
+import { PeopleManager } from "./PeopleManager";
 import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
@@ -26,7 +28,11 @@ interface SettingsProps {
   workspace: string;
   /** 更换工作台（弹出目录选择框）。 */
   onChangeWorkspace: () => void;
+  /** 初始打开的设置页。 */
+  initialTab?: SettingsTab;
 }
+
+export type SettingsTab = "general" | "people" | "ai" | "update";
 
 /**
  * 设置弹层。目前只有「随手记快捷键」一项。
@@ -40,7 +46,10 @@ export function Settings({
   focusUpdate,
   workspace,
   onChangeWorkspace,
+  initialTab = "general",
 }: SettingsProps) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const [status, setStatus] = useState<ShortcutStatus | null>(null);
   const [recording, setRecording] = useState(false);
   const [preview, setPreview] = useState<string>("");
@@ -117,6 +126,7 @@ export function Settings({
     if (!focusUpdate) {
       return;
     }
+    setTab("update");
     const id = window.setTimeout(() => {
       document.getElementById("settings-update")?.scrollIntoView({ block: "start" });
     }, 0);
@@ -312,12 +322,38 @@ export function Settings({
   const statusError = status?.error && !registered ? status.error : "";
   // 已回退到默认值但需用户处理的提示（例如配置里的快捷键不合法）。
   const statusNotice = status?.notice ?? "";
+  const tabTitle: Record<SettingsTab, string> = {
+    general: "通用设置",
+    people: "组与成员",
+    ai: "AI 模型",
+    update: "软件更新",
+  };
 
   return (
     <div className="modal-mask is-center" onMouseDown={onClose}>
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
+        <nav className="settings-nav" aria-label="设置分类">
+          <div className="settings-nav-title">设置</div>
+          {([
+            ["general", "通用设置", "settings"],
+            ["people", "组与成员", "person"],
+            ["ai", "AI 模型", "bolt"],
+            ["update", "软件更新", "download"],
+          ] as const).map(([key, label, icon]) => (
+            <button
+              key={key}
+              type="button"
+              className={`settings-nav-item${tab === key ? " is-on" : ""}`}
+              onClick={() => setTab(key)}
+            >
+              <Icon name={icon} size={15} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="settings-main">
         <div className="settings-head">
-          <h2>设置</h2>
+          <h2>{tabTitle[tab]}</h2>
           <button type="button" className="icon-btn" title="关闭（Esc）" onClick={onClose}>
             <Icon name="close" />
           </button>
@@ -326,6 +362,8 @@ export function Settings({
         {/* 只有中间这一段滚动，标题和底部始终可见。 */}
         <div className="settings-body">
 
+        {tab === "general" && (
+          <>
         <div className="settings-row">
           <div className="settings-label">
             <span>工作台</span>
@@ -404,7 +442,6 @@ export function Settings({
           )}
         </div>
 
-        <LLMSettings />
 
         <section className="settings-section">
           <h3>命令行工具</h3>
@@ -438,7 +475,17 @@ export function Settings({
           )}
           {cliError && <div className="settings-error">{cliError}</div>}
         </section>
+          </>
+        )}
 
+        {tab === "people" && (
+          <GroupManager embedded onManagePeople={() => setPeopleOpen(true)} />
+        )}
+
+        {tab === "ai" && <LLMSettings />}
+
+        {tab === "update" && (
+          <>
         <section className="settings-section" id="settings-update">
           <h3>软件更新</h3>
 
@@ -560,6 +607,8 @@ export function Settings({
             </button>
           </div>
         </section>
+          </>
+        )}
         </div>
 
         <div className="settings-footer">
@@ -568,7 +617,10 @@ export function Settings({
             关闭
           </button>
         </div>
+        </div>
       </div>
+
+      {peopleOpen && <PeopleManager onClose={() => setPeopleOpen(false)} />}
 
       {notesOpen && checkResult?.hasUpdate && (
         <div
