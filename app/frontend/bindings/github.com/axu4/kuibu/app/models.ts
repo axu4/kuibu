@@ -170,6 +170,16 @@ export interface GroupData {
      * Warning 是本次生成的提示（模型输出不符合结构时）。
      */
     "warning": string;
+
+    /**
+     * Project 是报送项目 id；单份组报为空。
+     */
+    "project": string;
+
+    /**
+     * ProjectName 是报送项目名称。
+     */
+    "projectName": string;
 }
 
 /**
@@ -348,6 +358,21 @@ export interface PersonInput {
      * Role 是角色：member / lead，空视为 member。
      */
     "role": string;
+}
+
+/**
+ * ProjectGroupList 是第 3 步左侧项目列表的一行。
+ */
+export interface ProjectGroupList {
+    "project": string;
+    "projectName": string;
+    "exists": boolean;
+    "status": string;
+    "humanEdited": boolean;
+    "sourceChanged": boolean;
+    "candidates": number;
+    "finalizedAt": string;
+    "editedAt": string;
 }
 
 /**
@@ -1034,6 +1059,72 @@ export interface TreeItem {
      * Children 是子节点。
      */
     "children": TreeItem[] | null;
+}
+
+/**
+ * TriageCountsData 是筛选进度统计。
+ */
+export interface TriageCountsData {
+    "total": number;
+    "done": number;
+    "accepted": number;
+    "rejected": number;
+    "skipped": number;
+    "undecided": number;
+    "byProject": { [_ in string]?: number } | null;
+}
+
+/**
+ * TriageData 是第 1 步筛选台 / 第 2 步预览的全部数据。
+ */
+export interface TriageData {
+    "week": string;
+    "group": string;
+    "lead": string;
+    "sourceHash": string;
+    "projects": TriageProjectData[] | null;
+    "items": TriageItemData[] | null;
+    "sections": TriageSectionData[] | null;
+    "missing": string[] | null;
+    "counts": TriageCountsData;
+    "allJudged": boolean;
+}
+
+/**
+ * TriageItemData 是筛选台里的一条事项。
+ */
+export interface TriageItemData {
+    "id": string;
+    "person": string;
+    "name": string;
+    "section": string;
+    "sectionTitle": string;
+    "domain": string;
+    "text": string;
+    "decision": string;
+    "project": string;
+    "projectName": string;
+    "order": number;
+    "decidedAt": string;
+}
+
+/**
+ * TriageProjectData 是一个报送项目。
+ */
+export interface TriageProjectData {
+    "id": string;
+    "name": string;
+}
+
+/**
+ * TriageSectionData 是分节进度（本周总结 / 下周计划 / 风险与求助）。
+ */
+export interface TriageSectionData {
+    "section": string;
+    "title": string;
+    "done": number;
+    "total": number;
+    "undecided": number;
 }
 
 /**

@@ -25,6 +25,13 @@ import * as llm$0 from "../internal/llm/models.js";
 import * as $models from "./models.js";
 
 /**
+ * AssembleProjectGroup 按筛选结果生成/重新生成某个项目的组报草稿。
+ */
+export function AssembleProjectGroup(week: string, group: string, projectID: string, force: boolean, allowUnreviewed: boolean): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(4238372535, week, group, projectID, force, allowUnreviewed);
+}
+
+/**
  * CalendarDay 返回团队日历日视图数据，与 CLI `kuibu calendar day --json` 一致。只读。
  */
 export function CalendarDay(month: string): $CancellablePromise<core$0.CalendarDayMonth> {
@@ -69,6 +76,20 @@ export function ExportClipboard(kind: string, week: string): $CancellablePromise
 }
 
 /**
+ * ExportProjectGroup 弹出保存对话框，导出某个项目的定稿组报。
+ */
+export function ExportProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<string> {
+    return $Call.ByID(2140186137, week, group, projectID);
+}
+
+/**
+ * ExportProjectGroupClipboard 返回某个项目定稿组报的飞书 HTML 与纯文本。
+ */
+export function ExportProjectGroupClipboard(week: string, group: string, projectID: string): $CancellablePromise<$models.ExportContent> {
+    return $Call.ByID(1898621141, week, group, projectID);
+}
+
+/**
  * ExportReport 弹出保存对话框，把定稿报告导出为 Markdown。kind 为 group / product。
  * 未定稿返回 NOT_FINAL；用户取消时返回空路径且不报错。
  */
@@ -102,6 +123,13 @@ export function FinalizeMonth(month: string, level: string): $CancellablePromise
  */
 export function FinalizeProduct(week: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(2341640420, week);
+}
+
+/**
+ * FinalizeProjectGroup 定稿某个项目的组报。
+ */
+export function FinalizeProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(1487262201, week, group, projectID);
 }
 
 /**
@@ -246,6 +274,20 @@ export function ProductReport(week: string): $CancellablePromise<$models.GroupDa
 }
 
 /**
+ * ProjectGroup 读取某个项目的组报。
+ */
+export function ProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3152846815, week, group, projectID);
+}
+
+/**
+ * ProjectGroups 列出各项目的组报状态。
+ */
+export function ProjectGroups(week: string, group: string): $CancellablePromise<$models.ProjectGroupList[] | null> {
+    return $Call.ByID(2172607428, week, group);
+}
+
+/**
  * ReportWeekday 返回工作台配置的周报日（1-7）。
  */
 export function ReportWeekday(): $CancellablePromise<number> {
@@ -292,6 +334,13 @@ export function SaveMonth(month: string, level: string, body: string): $Cancella
  */
 export function SaveProduct(week: string, body: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(3665820985, week, body);
+}
+
+/**
+ * SaveProjectGroup 保存某个项目的组报修改。
+ */
+export function SaveProjectGroup(week: string, group: string, projectID: string, body: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(2231099970, week, group, projectID, body);
 }
 
 /**
@@ -397,6 +446,13 @@ export function UnfinalizeMonth(month: string, level: string): $CancellablePromi
  */
 export function UnfinalizeProduct(week: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(687041609, week);
+}
+
+/**
+ * UnfinalizeProjectGroup 取消定稿某个项目的组报。
+ */
+export function UnfinalizeProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(1705953266, week, group, projectID);
 }
 
 /**

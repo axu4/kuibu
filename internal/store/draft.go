@@ -20,6 +20,8 @@ import (
 const DraftDirName = "member-normalized"
 
 // GroupDirName 是组报目录：reports/<周>/group/<组长 personId>.md。格式与归一稿相同。
+// 配置了报送项目后，每个项目一份：kind 为 group/<项目 id>，路径是
+// reports/<周>/group/<项目 id>/<组长 personId>.md。
 const GroupDirName = "group"
 
 // LeadDraftDirName 是组长周报归一稿目录：reports/<周>/lead-normalized/<personId>.md。
@@ -45,6 +47,24 @@ func IsDraftKind(dir string) bool {
 		}
 	}
 	return false
+}
+
+// GroupReportKind 返回按项目分册的组报 kind：group/<项目 id>。
+func GroupReportKind(projectID string) string {
+	return GroupDirName + "/" + strings.TrimSpace(projectID)
+}
+
+// IsGroupKind 判断 kind 是否属于组报（含按项目分册的 group/<项目 id>）。
+func IsGroupKind(kind string) bool {
+	return kind == GroupDirName || strings.HasPrefix(kind, GroupDirName+"/")
+}
+
+// ProjectIDFromGroupKind 返回 group/<项目 id> 里的项目 id；单份组报返回空。
+func ProjectIDFromGroupKind(kind string) string {
+	if !strings.HasPrefix(kind, GroupDirName+"/") {
+		return ""
+	}
+	return strings.TrimPrefix(kind, GroupDirName+"/")
 }
 
 // NormalizedKind 返回某层级原文对应的归一稿目录：member → member-normalized，lead → lead-normalized。
@@ -188,10 +208,10 @@ func kindOrDraft(kind string) string {
 
 // kindNoun 返回提示用的名称。
 func kindNoun(kind string) string {
-	switch kind {
-	case GroupDirName:
+	switch {
+	case IsGroupKind(kind):
 		return "组报"
-	case ProductDirName:
+	case kind == ProductDirName:
 		return "产品报"
 	}
 	return "归一稿"
@@ -199,7 +219,12 @@ func kindNoun(kind string) string {
 
 // ReadDraftKind 读取任意目录的草稿 / 定稿文件。
 func (w *Workspace) ReadDraftKind(kind, week, personID string) (*Draft, error) {
-	return ReadDraftFile(w.draftPath(kind, week, personID))
+	d, err := ReadDraftFile(w.draftPath(kind, week, personID))
+	if err != nil {
+		return nil, err
+	}
+	d.Kind = kindOrDraft(kind)
+	return d, nil
 }
 
 // draftPath 返回归一稿 / 组报路径。
@@ -214,7 +239,17 @@ func (w *Workspace) ReadDraft(week, personID string) (*Draft, error) {
 
 // ReadGroupReport 读取组报；leadID 是组长的组员 ID。
 func (w *Workspace) ReadGroupReport(week, leadID string) (*Draft, error) {
-	return ReadDraftFile(w.draftPath(GroupDirName, week, leadID))
+	return w.ReadDraftKind(GroupDirName, week, leadID)
+}
+
+// ReadGroupReportProject 读取某个项目的组报草稿/定稿。
+func (w *Workspace) ReadGroupReportProject(week, projectID, leadID string) (*Draft, error) {
+	return w.ReadDraftKind(GroupReportKind(projectID), week, leadID)
+}
+
+// GroupReportProjectPath 返回某个项目的组报路径。
+func (w *Workspace) GroupReportProjectPath(week, projectID, leadID string) string {
+	return w.draftPath(GroupReportKind(projectID), week, leadID)
 }
 
 // FinalDraft 返回已定稿的归一稿，未定稿时返回 ErrNotFinal。下一级引用与导出走它。
@@ -357,6 +392,7 @@ func (w *Workspace) EditDraftKind(kind, week, personID, body string, now time.Ti
 	if err != nil {
 		return nil, err
 	}
+	d.Kind = kindOrDraft(kind)
 	if d.Status == DraftStatusFinal {
 		return nil, newReportError(ErrFinalized, "%s 的%s已定稿，请先取消定稿再修改", d.displayName(), kindNoun(kind))
 	}
@@ -387,6 +423,7 @@ func (w *Workspace) FinalizeDraftKind(kind, week, personID string, now time.Time
 	if err != nil {
 		return nil, err
 	}
+	d.Kind = kindOrDraft(kind)
 	if d.Status == DraftStatusFinal {
 		return d, nil
 	}
@@ -415,6 +452,7 @@ func (w *Workspace) UnfinalizeDraftKind(kind, week, personID string) (*Draft, er
 	if err != nil {
 		return nil, err
 	}
+	d.Kind = kindOrDraft(kind)
 	if d.Status != DraftStatusFinal {
 		return d, nil
 	}
@@ -578,7 +616,7 @@ func (w *Workspace) writeDraft(d *Draft) error {
 			return err
 		}
 	}
-	if k := kindOrDraft(d.Kind); k == GroupDirName || k == ProductDirName {
+	if k := kindOrDraft(d.Kind); IsGroupKind(k) || k == ProductDirName {
 		appendFrontMatterKey(root, "group", stringNode(d.Group))
 		if err := appendFrontMatterValue(root, "sources", nonNil(d.Sources)); err != nil {
 			return err

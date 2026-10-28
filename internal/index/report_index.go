@@ -38,7 +38,11 @@ func fileKind(ws *store.Workspace, path string) string {
 		return ""
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
-	if len(parts) != 3 || !strings.HasSuffix(parts[2], ".md") {
+	// 三层的周报/归一稿/组报：reports/<周>/<层级>/<文件>；
+	// 配置报送项目后的组报多一层：reports/<周>/group/<项目 id>/<组长>.md。
+	ok := (len(parts) == 3 && strings.HasSuffix(parts[2], ".md")) ||
+		(len(parts) == 4 && parts[1] == store.GroupDirName && strings.HasSuffix(parts[3], ".md"))
+	if !ok {
 		return ""
 	}
 	if parts[0] == store.HistoryDirName || parts[1] == store.HistoryDirName {
@@ -384,16 +388,24 @@ func deletePerson(ctx context.Context, tx *sql.Tx, path string) (string, bool, e
 }
 
 // readReportOrDraft 读取周报原文、归一稿或组报；后两者转成 level=目录名
-// （member-normalized / lead-normalized / group / product）的 Report，与原文共用 reports 表与全文索引，ID 不会与原文冲突。
+// （member-normalized / lead-normalized / group / product / group/<项目 id>）的 Report，
+// 与原文共用 reports 表与全文索引，ID 不会与原文冲突。
 func readReportOrDraft(path string) (*store.Report, error) {
-	kind := filepath.Base(filepath.Dir(path))
+	parent := filepath.Base(filepath.Dir(path))
+	kind := parent
 	if !store.IsDraftKind(kind) {
-		return store.ReadReportFile(path)
+		// reports/<周>/group/<项目 id>/<组长>.md
+		if filepath.Base(filepath.Dir(filepath.Dir(path))) == store.GroupDirName {
+			kind = store.GroupReportKind(parent)
+		} else {
+			return store.ReadReportFile(path)
+		}
 	}
 	d, err := store.ReadDraftFile(path)
 	if err != nil {
 		return nil, err
 	}
+	d.Kind = kind
 	submitted := d.EditedAt
 	if submitted.IsZero() {
 		submitted = d.GeneratedAt

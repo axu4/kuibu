@@ -15,6 +15,7 @@ import { PeopleManager } from "./PeopleManager";
 import { BatchNormalize, ReportDraft } from "./ReportDraft";
 import { ReportReview, alignmentText } from "./ReportReview";
 import { GroupReport } from "./GroupReport";
+import { TriageFlow } from "./TriageFlow";
 import {
   deadlineInfo,
   formatSubmittedAt,
@@ -76,6 +77,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
   const [saved, setSaved] = useState<{ week: string; level: ReportLevel; personId: string; name: string } | null>(null);
   const [batchOpen, setBatchOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [triageOpen, setTriageOpen] = useState(false);
   const [period, setPeriod] = useState<"week" | "month">("week");
   // 外部变化后用于强制重载当前详情（status 没变时，effect 依赖可能不触发）。
   const [refreshTick, setRefreshTick] = useState(0);
@@ -160,6 +162,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
       setLevel(next);
       saveReportLevel(next);
       setGroupOpen(false);
+      setTriageOpen(false);
       setSelectedId(null);
       setDetail(null);
       const w = weekRef.current;
@@ -171,6 +174,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
   /** 打开粘贴弹窗；personId 非空时锁定这个人，不再问「归给谁」。 */
   const openPaste = useCallback((personId: string, text = "") => {
     // 从行上或 ⌘V 进来时先收起右侧详情，别让抽屉叠在弹窗后面。
+    setTriageOpen(false);
     setSelectedId(null);
     setDetail(null);
     setDetailError(false);
@@ -179,6 +183,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
 
   const openRow = useCallback((entry: ReportPerson) => {
     setGroupOpen(false);
+    setTriageOpen(false);
     setSelectedId(entry.personId);
     setDetail(null);
     setDetailError(false);
@@ -475,11 +480,26 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
               </span>
             </div>
             <div className="report-actions">
+              {level === "member" && (
+                <button
+                  type="button"
+                  className={`btn${triageOpen ? " is-on" : ""}`}
+                  onClick={() => {
+                    setSelectedId(null);
+                    setGroupOpen(false);
+                    setTriageOpen((v) => !v);
+                  }}
+                >
+                  <Icon name="list" size={14} />
+                  周报三步流程
+                </button>
+              )}
               <button
                 type="button"
                 className={`btn${groupOpen ? " is-on" : ""}`}
                 onClick={() => {
                   setSelectedId(null);
+                  setTriageOpen(false);
                   setGroupOpen((v) => !v);
                 }}
               >
@@ -584,6 +604,15 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
         </div>
       </section>
 
+      {triageOpen && week && (
+        <TriageFlow
+          key={`triage-${week.week}`}
+          week={week.week}
+          onClose={() => setTriageOpen(false)}
+          onToast={setToast}
+        />
+      )}
+
       {groupOpen && week && (
         <GroupReport
           key={level}
@@ -595,7 +624,7 @@ export function ReportView({ initialWeek, initialPersonId, initialLevel }: Repor
         />
       )}
 
-      {!groupOpen && selectedEntry && week && (
+      {!groupOpen && !triageOpen && selectedEntry && week && (
         <ReportDetailPanel
           entry={selectedEntry}
           report={detail}

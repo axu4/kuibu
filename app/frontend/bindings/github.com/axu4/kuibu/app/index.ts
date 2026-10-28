@@ -6,6 +6,7 @@ import * as LLMService from "./llmservice.js";
 import * as ReportService from "./reportservice.js";
 import * as ShellService from "./shellservice.js";
 import * as TodoService from "./todoservice.js";
+import * as TriageService from "./triageservice.js";
 import * as UpdateService from "./updateservice.js";
 import * as WorkspaceService from "./workspaceservice.js";
 export {
@@ -14,6 +15,7 @@ export {
     ReportService,
     ShellService,
     TodoService,
+    TriageService,
     UpdateService,
     WorkspaceService
 };
@@ -34,6 +36,7 @@ export type {
     NoteData,
     PersonData,
     PersonInput,
+    ProjectGroupList,
     QuickAddPreview,
     QuickNoteSaved,
     QuickTodoSaved,
@@ -54,6 +57,11 @@ export type {
     TodoListFilter,
     TodoTag,
     TreeItem,
+    TriageCountsData,
+    TriageData,
+    TriageItemData,
+    TriageProjectData,
+    TriageSectionData,
     UpdateInfo,
     WorkspaceInfo
 } from "./models.js";

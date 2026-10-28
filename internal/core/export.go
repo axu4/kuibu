@@ -28,6 +28,11 @@ type ExportDoc struct {
 
 // ExportFinal 读取定稿报告；kind 为 group（组报）或 product（产品报）。未定稿返回 ErrNotFinal。
 func ExportFinal(ws *store.Workspace, kind, week, group string) (*ExportDoc, error) {
+	return ExportFinalProject(ws, kind, week, group, "")
+}
+
+// ExportFinalProject 同 ExportFinal，kind=group-project 时按项目导出。
+func ExportFinalProject(ws *store.Workspace, kind, week, group, projectID string) (*ExportDoc, error) {
 	switch kind {
 	case "group":
 		lead, groupName, err := ResolveLead(ws, week, group)
@@ -44,6 +49,27 @@ func ExportFinal(ws *store.Workspace, kind, week, group string) (*ExportDoc, err
 		return &ExportDoc{
 			Title:    fmt.Sprintf("%s 组报 %s", groupName, week),
 			FileName: fmt.Sprintf("%s-组报-%s.md", safeFileName(groupName), week),
+			Body:     d.Body,
+		}, nil
+	case "group-project":
+		lead, groupName, err := ResolveLead(ws, week, group)
+		if err != nil {
+			return nil, err
+		}
+		project, ok := findProject(ws, projectID)
+		if !ok {
+			return nil, fmt.Errorf("%w: 找不到报送项目 %q", store.ErrNotFound, projectID)
+		}
+		d, err := ws.FinalDraftKind(store.GroupReportKind(project.ID), week, lead.ID)
+		if err != nil {
+			return nil, err
+		}
+		if d.Group != "" {
+			groupName = d.Group
+		}
+		return &ExportDoc{
+			Title:    fmt.Sprintf("%s 组报 %s（%s）", groupName, week, project.Name),
+			FileName: fmt.Sprintf("%s-组报-%s-%s.md", safeFileName(groupName), week, safeFileName(project.Name)),
 			Body:     d.Body,
 		}, nil
 	case "product":
@@ -268,4 +294,12 @@ func MarkdownToText(body string) string {
 		prevBlank, prevHeading = false, false
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
+}
+
+func findProject(ws *store.Workspace, idOrName string) (store.ReportProject, bool) {
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return store.ReportProject{}, false
+	}
+	return store.FindReportProject(projects, idOrName)
 }
