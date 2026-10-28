@@ -50,6 +50,8 @@ export function Settings({
 }: SettingsProps) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  // 名单弹窗里新增/修改组员后，让组管理重新拉一次名单。
+  const [peopleVersion, setPeopleVersion] = useState(0);
   const [status, setStatus] = useState<ShortcutStatus | null>(null);
   const [recording, setRecording] = useState(false);
   const [preview, setPreview] = useState<string>("");
@@ -485,7 +487,7 @@ export function Settings({
         )}
 
         {tab === "people" && (
-          <GroupManager embedded onManagePeople={() => setPeopleOpen(true)} />
+          <GroupManager key={peopleVersion} embedded onManagePeople={() => setPeopleOpen(true)} />
         )}
 
         {tab === "ai" && <LLMSettings />}
@@ -626,7 +628,14 @@ export function Settings({
         </div>
       </div>
 
-      {peopleOpen && <PeopleManager onClose={() => setPeopleOpen(false)} />}
+      {peopleOpen && (
+        <PeopleManager
+          onClose={() => {
+            setPeopleOpen(false);
+            setPeopleVersion((v) => v + 1);
+          }}
+        />
+      )}
 
       {notesOpen && checkResult?.hasUpdate && (
         <div
