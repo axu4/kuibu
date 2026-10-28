@@ -57,6 +57,13 @@ export function TriageDecide(week: string, group: string, itemID: string, decisi
 }
 
 /**
+ * TriageRebuild 按当前周报原文/录入分类重新生成筛选记录，并清空本周决策。
+ */
+export function TriageRebuild(week: string, group: string): $CancellablePromise<$models.TriageData> {
+    return $Call.ByID(2984287116, week, group);
+}
+
+/**
  * TriageReset 清空本周筛选决策（保留条目）。
  */
 export function TriageReset(week: string, group: string): $CancellablePromise<$models.TriageData> {

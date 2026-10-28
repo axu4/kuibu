@@ -56,6 +56,16 @@ func reportTriage(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	if err != nil {
 		return err
 	}
+	if sub == "rebuild" {
+		if !*yes {
+			return fmt.Errorf("%w：重新梳理会清空本周筛选决策；确认请加 --yes", store.ErrNeedsConfirm)
+		}
+		t, err := core.RebuildTriage(ws, week, *group)
+		if err != nil {
+			return err
+		}
+		return triageDone(ws, t, common, stdout)
+	}
 	t, _, err := core.LoadTriage(ws, week, *group)
 	if err != nil {
 		return err
@@ -154,7 +164,7 @@ func reportTriage(args []string, common *commonFlags, stdout, stderr io.Writer, 
 		fmt.Fprintln(stdout, "已清空本周筛选决策")
 		return nil
 	default:
-		return usagef("未知 report triage 子命令 %q（list/set/move/reset）", sub)
+		return usagef("未知 report triage 子命令 %q（list/set/move/reset/rebuild）", sub)
 	}
 }
 

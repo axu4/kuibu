@@ -5893,3 +5893,8 @@ body.is-resizing-x * {
 .report-section-column > .btn {
   align-self: flex-start;
 }
+
+.triage-rebuild-modal { width: min(480px, 90vw); padding: 20px; }
+.triage-rebuild-modal h2 { margin: 0 0 8px; font-family: var(--font-serif); font-size: 20px; }
+.triage-rebuild-modal p { margin: 0 0 12px; color: var(--ink-2); line-height: 1.75; font-size: 12.5px; }
+.triage-rebuild-modal .modal-buttons { margin-top: 16px; }

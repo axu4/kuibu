@@ -205,6 +205,20 @@ func (s *TriageService) TriageDecide(week, group, itemID, decision, projectID st
 	return toTriageData(t), nil
 }
 
+// TriageRebuild 按当前周报原文/录入分类重新生成筛选记录，并清空本周决策。
+func (s *TriageService) TriageRebuild(week, group string) (TriageData, error) {
+	ws, err := s.ws()
+	if err != nil {
+		return TriageData{}, err
+	}
+	t, err := core.RebuildTriage(ws, week, group)
+	if err != nil {
+		return TriageData{}, err
+	}
+	s.emitTriage(week)
+	return toTriageData(t), nil
+}
+
 // TriageReset 清空本周筛选决策（保留条目）。
 func (s *TriageService) TriageReset(week, group string) (TriageData, error) {
 	ws, err := s.ws()

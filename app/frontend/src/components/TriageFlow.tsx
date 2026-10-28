@@ -98,6 +98,8 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
   const [excerpts, setExcerpts] = useState<Record<string, ExcerptState>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [rebuildOpen, setRebuildOpen] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [reportsReady, setReportsReady] = useState(false);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [dirtyCount, setDirtyCount] = useState(0);
@@ -509,6 +511,33 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
     [step],
   );
 
+  const rebuildWeek = useCallback(async () => {
+    if (!activeGroup || rebuilding) return;
+    setRebuilding(true);
+    try {
+      if (step === 3) {
+        const ok = await reportsRef.current?.flush();
+        if (ok === false) return;
+      }
+      const fresh = await TriageService.TriageRebuild(week, activeGroup);
+      setData(fresh);
+      setStep(1);
+      setFilter("本周完成");
+      setCurrentId(null);
+      setHistory([]);
+      setLastAction(null);
+      setExcerptOpen(false);
+      setReportsReady(false);
+      setActiveProject(null);
+      setRebuildOpen(false);
+      onToast("已重新梳理本周周报；原有组报会标「候选已更新」");
+    } catch (err) {
+      onToast(`重新梳理失败：${readableError(err)}`);
+    } finally {
+      setRebuilding(false);
+    }
+  }, [activeGroup, onToast, rebuilding, step, week]);
+
   const closeFlow = useCallback(async () => {
     if (step === 3) {
       const ok = await reportsRef.current?.flush();
@@ -871,6 +900,11 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
         )}
         <span className="triage-topbar-spacer" />
         {undecided > 0 && <span className="triage-topbar-progress">未判 {undecided} 条</span>}
+        {activeGroup && (
+          <button type="button" className="btn btn-ghost" onClick={() => setRebuildOpen(true)}>
+            重新梳理
+          </button>
+        )}
         <button type="button" className="btn btn-ghost" onClick={() => setSettingsOpen(true)}>
           项目设置
         </button>
@@ -995,6 +1029,31 @@ export function TriageFlow({ week, group = DEFAULT_GROUP, onClose, onToast }: Tr
           />
         )}
       </div>
+
+      {rebuildOpen && (
+        <div className="modal-mask is-center is-nested" onMouseDown={(e) => {
+          if (e.target === e.currentTarget && !rebuilding) setRebuildOpen(false);
+        }}>
+          <div className="modal triage-rebuild-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <h2>重新梳理本周周报？</h2>
+            <p>
+              会按当前组员原文和录入时保存的分类，重新生成「{activeGroup}」本周的筛选条目，
+              并清空已经做过的筛选决策。
+            </p>
+            <div className="delete-box">
+              各项目的组报草稿不会删除，但会被标记为「候选已更新」；需要时再到第 3 步逐份重新生成。
+            </div>
+            <div className="modal-buttons">
+              <button type="button" className="btn" disabled={rebuilding} onClick={() => setRebuildOpen(false)}>
+                取消
+              </button>
+              <button type="button" className="btn btn-danger" disabled={rebuilding} onClick={() => void rebuildWeek()}>
+                {rebuilding ? "梳理中…" : "重新梳理"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <TriageProjectSettings
