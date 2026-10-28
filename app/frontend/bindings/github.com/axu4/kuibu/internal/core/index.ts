@@ -20,6 +20,10 @@ export type {
     MonthWeekRow,
     NormalizeSkip,
     PlanReview,
+    ProjectGroupDelivery,
+    ProjectInbox,
+    ProjectInboxEntry,
+    ProjectInboxSource,
     ReviewCounts,
     ReviewResult,
     TodoCandidate

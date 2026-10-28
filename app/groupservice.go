@@ -33,6 +33,8 @@ type GroupData struct {
 	Project string `json:"project"`
 	// ProjectName 是报送项目名称。
 	ProjectName string `json:"projectName"`
+	// Delivery 是按项目组报 / 月报的去向（我是 SE / 交给谁、是否已交）；其他报告为空。
+	Delivery *core.ProjectGroupDelivery `json:"delivery"`
 }
 
 // GroupPlanData 是组报外发预览。

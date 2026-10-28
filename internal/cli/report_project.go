@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
+	"github.com/axu4/kuibu/internal/core"
 	"github.com/axu4/kuibu/internal/store"
 )
 
@@ -35,20 +37,34 @@ func reportProjects(args []string, common *commonFlags, stdout, stderr io.Writer
 		return nil
 	}
 	for i, p := range projects {
-		fmt.Fprintf(stdout, "%d. %s  (%s)\n", i+1, p.Name, p.ID)
+		fmt.Fprintf(stdout, "%d. %s  (%s)  %s\n", i+1, p.Name, p.ID, projectSELabel(p))
 	}
 	return nil
 }
 
-// reportProject 实现 report project add|rename|rm。
+// projectSELabel 返回项目 SE 的说明。
+func projectSELabel(p store.ReportProject) string {
+	if p.Mine {
+		return "我是 SE"
+	}
+	if p.SE != "" {
+		return "交给 " + p.SE
+	}
+	return "SE 未设置"
+}
+
+// reportProject 实现 report project add|rename|rm|se。
 func reportProject(args []string, common *commonFlags, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report project 需要子命令: add|rename|rm")
+		return usagef("report project 需要子命令: add|rename|rm|se")
 	}
 	sub, rest := args[0], args[1:]
 	fs := newFlagSet("report project " + sub)
 	addCommonFlags(fs, common)
 	yes := fs.Bool("yes", false, "确认删除项目（连带影响筛选记录）")
+	mine := fs.Bool("mine", false, "se: 我是这个项目的 SE")
+	seName := fs.String("se", "", "se: 项目 SE 的称呼（不是我时，组报交给谁）")
+	groupsFlag := fs.String("groups", "", "se: 我当 SE 时应交项目报的组（逗号分隔，id 或名称；默认全部组）")
 	pos, err := parseCommand(fs, rest)
 	if err != nil {
 		return err
@@ -103,6 +119,40 @@ func reportProject(args []string, common *commonFlags, stdout, stderr io.Writer,
 			return writeJSON(stdout, map[string]any{"projects": projects, "removed": removed})
 		}
 		fmt.Fprintf(stdout, "已删除「%s」；旧筛选记录会在下次打开该周筛选时把相关条目退回待定\n", removed.Name)
+		return nil
+	case "se":
+		if err := requireArgs(pos, 1, "用法: kuibu report project se <id|名称> (--mine [--groups 组1,组2] | --se <称呼>)"); err != nil {
+			return err
+		}
+		if *mine == (*seName != "") {
+			return usagef("report project se 需要 --mine 或 --se <称呼>（二选一）")
+		}
+		var groupIDs []string
+		if *mine && strings.TrimSpace(*groupsFlag) != "" {
+			groups, err := core.EnsureGroups(ws, time.Now())
+			if err != nil {
+				return err
+			}
+			for _, name := range strings.Split(*groupsFlag, ",") {
+				name = strings.TrimSpace(name)
+				if name == "" {
+					continue
+				}
+				g, ok := store.ReportGroupByID(groups, name)
+				if !ok {
+					return fmt.Errorf("%w: 找不到组 %q", store.ErrNotFound, name)
+				}
+				groupIDs = append(groupIDs, g.ID)
+			}
+		}
+		projects, project, err := ws.SetReportProjectSE(pos[0], *mine, *seName, groupIDs)
+		if err != nil {
+			return err
+		}
+		if common.json {
+			return writeJSON(stdout, map[string]any{"projects": projects, "project": project})
+		}
+		fmt.Fprintf(stdout, "「%s」：%s\n", project.Name, projectSELabel(project))
 		return nil
 	default:
 		return usagef("未知 report project 子命令 %q", sub)

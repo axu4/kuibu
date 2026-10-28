@@ -10,8 +10,25 @@ export type Due = any;
  * ReportProject 是一个报送项目（组报按项目分别成稿）。
  * 
  * 项目只是报送口径，不改变组员名单里的产品线；id 稳定、名称可改。
+ * 每个项目有一位 SE：Mine 表示我就是这个项目的 SE，各组（DE）交来的项目报
+ * 在 SE 页汇总；否则 SE 记的是要交给谁，组里定稿的项目报复制给对方后标记已交。
  */
 export interface ReportProject {
     "id": string;
     "name": string;
+
+    /**
+     * Mine 表示我是这个项目的 SE。
+     */
+    "mine"?: boolean;
+
+    /**
+     * SE 是项目 SE 的称呼（Mine 为 false 时表示交给谁）。
+     */
+    "se"?: string;
+
+    /**
+     * Groups 是我当 SE 时应交项目报的组 id；为空表示全部组。
+     */
+    "groups"?: string[] | null;
 }

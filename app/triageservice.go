@@ -16,6 +16,12 @@ const triageChangedEvent = "triage:changed"
 type TriageProjectData struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Mine 表示我是这个项目的 SE。
+	Mine bool `json:"mine"`
+	// SE 是对方 SE 的称呼（Mine 为 false 时，组报交给谁）。
+	SE string `json:"se"`
+	// Groups 是我当 SE 时应交的组 id；空表示全部组。
+	Groups []string `json:"groups"`
 }
 
 // TriageItemData 是筛选台里的一条事项。
@@ -151,6 +157,21 @@ func (s *TriageService) RenameProject(idOrName, newName string) ([]TriageProject
 	return toProjectData(projects), nil
 }
 
+// SetProjectSE 设置项目的 SE：mine 为 true 表示我是 SE（groups 为应交的组 id，空表示全部组），
+// 否则 se 是对方 SE 的称呼。
+func (s *TriageService) SetProjectSE(idOrName string, mine bool, se string, groups []string) ([]TriageProjectData, error) {
+	ws, err := s.ws()
+	if err != nil {
+		return nil, err
+	}
+	projects, _, err := ws.SetReportProjectSE(idOrName, mine, se, groups)
+	if err != nil {
+		return nil, err
+	}
+	s.emitTriage("")
+	return toProjectData(projects), nil
+}
+
 // RemoveProject 删除报送项目；旧筛选记录在下次读取时把相关条目标为待定。
 func (s *TriageService) RemoveProject(idOrName string) ([]TriageProjectData, error) {
 	ws, err := s.ws()
@@ -245,7 +266,7 @@ func (s *TriageService) TriageReset(week, group string) (TriageData, error) {
 func toProjectData(projects []store.ReportProject) []TriageProjectData {
 	out := make([]TriageProjectData, 0, len(projects))
 	for _, p := range projects {
-		out = append(out, TriageProjectData{ID: p.ID, Name: p.Name})
+		out = append(out, TriageProjectData{ID: p.ID, Name: p.Name, Mine: p.Mine, SE: p.SE, Groups: nonNilStrings(p.Groups)})
 	}
 	return out
 }
@@ -317,15 +338,17 @@ func toTriageData(t *store.Triage) TriageData {
 
 // ProjectGroupList 是第 3 步左侧项目列表的一行。
 type ProjectGroupList struct {
-	Project       string `json:"project"`
-	ProjectName   string `json:"projectName"`
-	Exists        bool   `json:"exists"`
-	Status        string `json:"status"`
-	HumanEdited   bool   `json:"humanEdited"`
-	SourceChanged bool   `json:"sourceChanged"`
-	Candidates    int    `json:"candidates"`
-	FinalizedAt   string `json:"finalizedAt"`
-	EditedAt      string `json:"editedAt"`
+	Project     string `json:"project"`
+	ProjectName string `json:"projectName"`
+	// Delivery 是这个项目组报的去向：我是 SE / 交给谁、是否已交。
+	Delivery      core.ProjectGroupDelivery `json:"delivery"`
+	Exists        bool                      `json:"exists"`
+	Status        string                    `json:"status"`
+	HumanEdited   bool                      `json:"humanEdited"`
+	SourceChanged bool                      `json:"sourceChanged"`
+	Candidates    int                       `json:"candidates"`
+	FinalizedAt   string                    `json:"finalizedAt"`
+	EditedAt      string                    `json:"editedAt"`
 }
 
 // ProjectGroups 列出各项目的组报状态。
@@ -353,9 +376,10 @@ func (s *ReportService) ProjectGroups(week, group string) ([]ProjectGroupList, e
 	}
 	out := make([]ProjectGroupList, 0, len(projects))
 	for _, p := range projects {
-		row := ProjectGroupList{Project: p.ID, ProjectName: p.Name, Status: "none", Candidates: accepted[p.ID]}
+		row := ProjectGroupList{Project: p.ID, ProjectName: p.Name, Status: "none", Candidates: accepted[p.ID], Delivery: core.DeliveryOf(p, nil)}
 		d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), week, lead.ID)
 		if err == nil {
+			row.Delivery = core.DeliveryOf(p, d)
 			row.Exists = true
 			row.Status = d.Status
 			row.HumanEdited = d.HumanEdited
@@ -390,8 +414,9 @@ func (s *ReportService) ProjectGroup(week, group, projectID string) (GroupData, 
 	}
 	d, err := ws.ReadDraftKind(store.GroupReportKind(project.ID), week, lead.ID)
 	if errors.Is(err, store.ErrNotFound) {
+		delivery := core.DeliveryOf(project, nil)
 		return GroupData{LeadID: lead.ID, LeadName: lead.Name, Group: group, Week: week, Status: "none",
-			Missing: []string{}, Project: project.ID, ProjectName: project.Name}, nil
+			Missing: []string{}, Project: project.ID, ProjectName: project.Name, Delivery: &delivery}, nil
 	}
 	if err != nil {
 		return GroupData{}, err
@@ -482,6 +507,8 @@ func toProjectGroupData(ws *store.Workspace, d *store.Draft, lead *store.Person,
 	out.ProjectName = project.Name
 	out.SourceChanged = core.ProjectGroupSourceChanged(ws, d)
 	out.Submitted = false
+	delivery := core.DeliveryOf(project, d)
+	out.Delivery = &delivery
 	return out
 }
 

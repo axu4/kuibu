@@ -79,6 +79,8 @@ func runReport(ctx context.Context, args []string, common *commonFlags, stdin io
 		return reportExport(rest, common, stdout, stderr, env)
 	case "month":
 		return reportMonth(ctx, rest, common, stdin, stdout, stderr, env)
+	case "se":
+		return reportSE(rest, common, stdin, stdout, stderr, env)
 	default:
 		return usagef("未知 report 子命令 %q", sub)
 	}

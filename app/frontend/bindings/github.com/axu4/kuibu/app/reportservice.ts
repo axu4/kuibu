@@ -19,6 +19,9 @@ import * as core$0 from "../internal/core/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as llm$0 from "../internal/llm/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as store$0 from "../internal/store/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -235,6 +238,13 @@ export function Groups(): $CancellablePromise<string[] | null> {
 }
 
 /**
+ * MarkProjectDelivered 记录（或撤销）按项目组报 / 月报已交给对方 SE。
+ */
+export function MarkProjectDelivered(period: string, group: string, project: string, delivered: boolean): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3720113929, period, group, project, delivered);
+}
+
+/**
  * Month 返回月份信息。ref 为 ""/this/last/next/YYYY-MM/日期。
  */
 export function Month(ref: string): $CancellablePromise<$models.ReportMonth> {
@@ -402,6 +412,91 @@ export function Review(week: string, person: string): $CancellablePromise<core$0
  */
 export function ReviewSuggest(week: string, person: string, model: string): $CancellablePromise<core$0.ReviewResult> {
     return $Call.ByID(256109043, week, person, model);
+}
+
+/**
+ * SEExport 弹出保存对话框，导出定稿项目报。
+ */
+export function SEExport(period: string, project: string): $CancellablePromise<string> {
+    return $Call.ByID(664422649, period, project);
+}
+
+/**
+ * SEExportClipboard 返回定稿项目报的飞书 HTML 与纯文本；未定稿返回 NOT_FINAL。
+ */
+export function SEExportClipboard(period: string, project: string): $CancellablePromise<$models.ExportContent> {
+    return $Call.ByID(3700728309, period, project);
+}
+
+/**
+ * SEFinalize 项目报定稿。
+ */
+export function SEFinalize(period: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(135446897, period, project);
+}
+
+/**
+ * SEGenerate 合并各组交来的内容生成项目报草稿（不调 AI）。有组没交且 allowMissing 为
+ * false 时返回 NOT_FINAL；已人工修改或已定稿且 force 为 false 时返回 HUMAN_EDITS_EXIST。
+ */
+export function SEGenerate(period: string, project: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(834036908, period, project, allowMissing, force);
+}
+
+/**
+ * SEInbox 返回某项目某期各组的交报情况。
+ */
+export function SEInbox(period: string, project: string): $CancellablePromise<core$0.ProjectInbox> {
+    return $Call.ByID(1831747449, period, project);
+}
+
+/**
+ * SEInboxDelete 删除某组交来的项目报（移入历史）。
+ */
+export function SEInboxDelete(period: string, project: string, group: string): $CancellablePromise<core$0.ProjectInbox> {
+    return $Call.ByID(2721038110, period, project, group);
+}
+
+/**
+ * SEInboxSource 读取某组交来的内容（粘贴原文或引用的定稿组报）。
+ */
+export function SEInboxSource(period: string, project: string, group: string): $CancellablePromise<core$0.ProjectInboxSource> {
+    return $Call.ByID(240742116, period, project, group);
+}
+
+/**
+ * SEInboxSubmit 把某组 DE 交来的项目报粘贴归档，返回刷新后的交报情况。
+ */
+export function SEInboxSubmit(period: string, project: string, group: string, body: string): $CancellablePromise<core$0.ProjectInbox> {
+    return $Call.ByID(1653281681, period, project, group, body);
+}
+
+/**
+ * SEProjects 返回我是 SE 的项目。
+ */
+export function SEProjects(): $CancellablePromise<store$0.ReportProject[] | null> {
+    return $Call.ByID(2686514537);
+}
+
+/**
+ * SEReport 返回某项目某期的 SE 项目报；还没生成时 Exists 为 false。
+ */
+export function SEReport(period: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(1501442525, period, project);
+}
+
+/**
+ * SESave 保存项目报人工修改。
+ */
+export function SESave(period: string, project: string, body: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3374996350, period, project, body);
+}
+
+/**
+ * SEUnfinalize 项目报取消定稿。
+ */
+export function SEUnfinalize(period: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3811080766, period, project);
 }
 
 /**

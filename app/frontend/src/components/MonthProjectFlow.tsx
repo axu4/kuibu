@@ -19,6 +19,7 @@ import type {
 import { copyRich } from "../lib/clipboard";
 import { readableError } from "../lib/todo";
 import { Icon } from "./Icon";
+import { DeliveryBar } from "./DeliveryBar";
 import { formatClock, normalizeBody } from "./triage/shared";
 
 type Step = 1 | 2 | 3;
@@ -696,6 +697,27 @@ export function MonthProjectFlow({
       onToast(`复制失败：${readableError(err)}`);
     }
   }, [activeGroup, activeProject, flush, month, onToast]);
+
+  const markDelivered = useCallback(
+    async (delivered: boolean) => {
+      const project = activeProject;
+      if (!project) return;
+      busyRef.current = true;
+      setBusy(true);
+      try {
+        const data = await ReportService.MarkProjectDelivered(month, activeGroup, project, delivered);
+        applyReport(data);
+        onToast(delivered ? `已标记交给 ${data.delivery?.se || "SE"}` : "已撤销已交标记");
+        void loadRows();
+      } catch (err) {
+        onToast(`操作失败：${readableError(err)}`);
+      } finally {
+        busyRef.current = false;
+        setBusy(false);
+      }
+    },
+    [activeGroup, activeProject, applyReport, loadRows, month, onToast],
+  );
 
   /* ------------------------------ 导航 ------------------------------ */
 
@@ -1451,6 +1473,17 @@ export function MonthProjectFlow({
                       </button>
                     </div>
                   </div>
+
+                  {report.data?.exists && (
+                    <DeliveryBar
+                      delivery={report.data.delivery ?? activeRow?.delivery}
+                      projectName={activeProjectInfo.name}
+                      isFinal={report.data.status === "final"}
+                      busy={busy}
+                      onCopy={() => void copyFeishu()}
+                      onMark={(d) => void markDelivered(d)}
+                    />
+                  )}
 
                   {cand && (cand.missing ?? []).length > 0 && (
                     <div className="month-notice">

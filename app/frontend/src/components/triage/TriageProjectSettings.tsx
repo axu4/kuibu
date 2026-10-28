@@ -1,14 +1,16 @@
-// 项目设置：报送项目新增 / 改名 / 删除（最多 4 个，删除前确认）。
+// 项目设置：报送项目新增 / 改名 / 删除（最多 4 个，删除前确认），以及每个项目的 SE：
+// 我是 SE（各组交来的项目报在「项目汇总」里合并）或交给谁（定稿后复制给对方、标记已交）。
 
 import { useCallback, useEffect, useState } from "react";
-import { TriageService } from "../../../bindings/github.com/axu4/kuibu/app";
-import type { TriageItemData, TriageProjectData } from "../../../bindings/github.com/axu4/kuibu/app";
+import { ReportService, TriageService } from "../../../bindings/github.com/axu4/kuibu/app";
+import type { GroupInfoData, TriageItemData, TriageProjectData } from "../../../bindings/github.com/axu4/kuibu/app";
 import { readableError } from "../../lib/todo";
 import { Icon } from "../Icon";
 
 const MAX_PROJECTS = 4;
 
 interface TriageProjectSettingsProps {
+  /** 筛选台的条目，用于删除前提示有多少条会退回待定；在筛选台之外打开时传空。 */
   items: TriageItemData[];
   onClose: () => void;
   /** 项目增删改之后通知流程重新读取筛选记录与草稿状态。 */
@@ -24,6 +26,8 @@ export function TriageProjectSettings({
 }: TriageProjectSettingsProps) {
   const [projects, setProjects] = useState<TriageProjectData[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [seNames, setSeNames] = useState<Record<string, string>>({});
+  const [groups, setGroups] = useState<GroupInfoData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,6 +40,7 @@ export function TriageProjectSettings({
   const applyList = useCallback((list: TriageProjectData[]) => {
     setProjects(list);
     setNames(Object.fromEntries(list.map((p) => [p.id, p.name])));
+    setSeNames(Object.fromEntries(list.map((p) => [p.id, p.se ?? ""])));
   }, []);
 
   const load = useCallback(async () => {
@@ -50,7 +55,30 @@ export function TriageProjectSettings({
 
   useEffect(() => {
     void load();
+    ReportService.GroupList()
+      .then((list) => setGroups(list ?? []))
+      .catch(() => setGroups([]));
   }, [load]);
+
+  const saveSE = async (project: TriageProjectData, mine: boolean, se: string, groupIds: string[]) => {
+    setBusy(true);
+    try {
+      const list = (await TriageService.SetProjectSE(project.id, mine, se.trim(), groupIds)) ?? [];
+      applyList(list);
+      onChanged();
+    } catch (err) {
+      setSeNames((prev) => ({ ...prev, [project.id]: project.se ?? "" }));
+      onToast(`保存 SE 失败：${readableError(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleGroup = (project: TriageProjectData, groupId: string) => {
+    const current = project.groups ?? [];
+    const next = current.includes(groupId) ? current.filter((g) => g !== groupId) : [...current, groupId];
+    void saveSE(project, true, "", next);
+  };
 
   const candidatesOf = (projectId: string) =>
     items.filter((i) => i.decision === "accepted" && i.project === projectId).length;
@@ -129,7 +157,7 @@ export function TriageProjectSettings({
         <div className="triage-settings-head">
           <div>
             <h2>报送项目</h2>
-            <p>筛选时每条事项归入一个项目；第 3 步每个项目单独一份草稿、单独保存。</p>
+            <p>筛选时每条事项归入一个项目；第 3 步每个项目单独一份草稿、单独保存。每个项目标明 SE：我是 SE，或交给谁。</p>
           </div>
           <button type="button" className="icon-btn" title="关闭" onClick={onClose}>
             <Icon name="close" />
@@ -143,7 +171,8 @@ export function TriageProjectSettings({
           ) : (
             <>
               {projects.map((project, idx) => (
-                <div key={project.id} className="triage-proj-row">
+                <div key={project.id} className="triage-proj-block">
+                <div className="triage-proj-row">
                   <span className="triage-proj-idx">{idx + 1}</span>
                   <input
                     className="field triage-proj-input"
@@ -177,6 +206,64 @@ export function TriageProjectSettings({
                     <Icon name="close" size={14} />
                   </button>
                 </div>
+                <div className="triage-proj-se">
+                  <div className="segmented">
+                    <button
+                      type="button"
+                      className={`segmented-btn${project.mine ? " is-active" : ""}`}
+                      disabled={busy}
+                      onClick={() => !project.mine && void saveSE(project, true, "", [])}
+                    >
+                      我是 SE
+                    </button>
+                    <button
+                      type="button"
+                      className={`segmented-btn${!project.mine ? " is-active" : ""}`}
+                      disabled={busy}
+                      onClick={() => project.mine && void saveSE(project, false, seNames[project.id] ?? "", [])}
+                    >
+                      交给别人
+                    </button>
+                  </div>
+                  {project.mine ? (
+                    <span className="triage-proj-se-hint">各组交来的项目报在「项目汇总」里合并</span>
+                  ) : (
+                    <input
+                      className="field triage-proj-se-input"
+                      placeholder="这个项目的 SE（交给谁）"
+                      value={seNames[project.id] ?? ""}
+                      maxLength={20}
+                      spellCheck={false}
+                      disabled={busy}
+                      onChange={(e) => setSeNames((prev) => ({ ...prev, [project.id]: e.target.value }))}
+                      onBlur={() => {
+                        const v = (seNames[project.id] ?? "").trim();
+                        if (v !== (project.se ?? "")) void saveSE(project, false, v, []);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                    />
+                  )}
+                </div>
+                {project.mine && groups.length > 0 && (
+                  <div className="triage-proj-groups">
+                    <span>应交的组{(project.groups ?? []).length === 0 ? "（未勾选＝全部组）" : ""}：</span>
+                    {groups.map((g) => (
+                      <label key={g.id} className="triage-proj-group">
+                        <input
+                          type="checkbox"
+                          checked={(project.groups ?? []).includes(g.id)}
+                          disabled={busy}
+                          onChange={() => toggleGroup(project, g.id)}
+                        />
+                        {g.name}
+                        {g.leadName ? <small>{g.leadName}</small> : null}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                </div>
               ))}
 
               {projects.length < MAX_PROJECTS ? (
@@ -207,6 +294,12 @@ export function TriageProjectSettings({
                 <div className="triage-note-box">最多 4 个报送项目。</div>
               )}
 
+              <div className="triage-note-box">
+                <b>我是 SE：</b>本组这个项目的定稿直接进「项目汇总」，不用再贴；其他组的 DE 交来的内容在「项目汇总」里粘贴归档。没有的组先在组管理里加上（填组名和 DE）。
+              </div>
+              <div className="triage-note-box">
+                <b>交给别人：</b>定稿后在第 3 步复制给对方 SE，再点「标记已交」。
+              </div>
               <div className="triage-note-box">
                 <b>只配置 1 个项目时：</b>筛选界面不出现项目选择，按 ↵ 直接采纳；第 3 步只有一份草稿。
               </div>

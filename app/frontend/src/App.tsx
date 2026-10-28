@@ -17,6 +17,7 @@ import { Settings } from "./components/Settings";
 import { TodoView } from "./components/TodoView";
 import { ReportHome } from "./components/ReportHome";
 import { CalendarView } from "./components/CalendarView";
+import { MonthHome } from "./components/MonthHome";
 import { Icon } from "./components/Icon";
 import type { IconName } from "./components/Icon";
 import { MoreMenu } from "./components/Menu";
@@ -31,6 +32,7 @@ const MAIN_VIEWS: { key: MainView; label: string; icon: IconName }[] = [
   { key: "notes", label: "笔记", icon: "note" },
   { key: "todo", label: "待办", icon: "todo" },
   { key: "report", label: "周报", icon: "report" },
+  { key: "month", label: "月报", icon: "month" },
   { key: "calendar", label: "日历", icon: "calendar" },
 ];
 
@@ -891,7 +893,7 @@ export default function App() {
               <div className="tree" />
             )}
           </>
-        ) : view === "report" || view === "calendar" ? (
+        ) : view === "report" || view === "month" || view === "calendar" ? (
           <div className="sidebar-slot" />
         ) : (
           <div className="sidebar-slot" ref={setTodoNavHost} />
@@ -951,6 +953,18 @@ export default function App() {
               initialPersonId={reportJump?.personId}
               initialLevel={reportJump?.level}
             />
+          </div>
+        ) : (
+          <main className="content">
+            <div className="toolbar" />
+            {welcome}
+          </main>
+        )
+      ) : view === "month" ? (
+        workspace ? (
+          <div className="report-shell">
+            {shortcutBanners}
+            <MonthHome key={workspace} />
           </div>
         ) : (
           <main className="content">

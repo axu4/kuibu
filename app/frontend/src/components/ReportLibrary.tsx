@@ -177,7 +177,7 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
             <span>{week?.week ?? "…"}</span>
             <button type="button" className="icon-btn" onClick={() => void shift(1)} title="下一周">›</button>
           </div>
-          <span>组报定稿后自动归档，不需要再交给任何角色或组。</span>
+          <span>组报定稿后自动归档；按项目交给 SE 的情况在「我的组」第 3 步和「项目汇总」里看。</span>
         </div>
       </div>
 

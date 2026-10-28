@@ -13,7 +13,7 @@ const MaxReportGroups = 50
 
 // ReportGroup 是周报组织单位：名称、组长；成员由组员的 group 决定。
 //
-// 组是唯一组织单位，不再有「SE 组」或额外的汇总角色。
+// 组的组长就是 DE；项目 SE 记在报送项目上（见 ReportProject），不另设「SE 组」。
 type ReportGroup struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`

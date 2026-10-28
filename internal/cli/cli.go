@@ -62,6 +62,10 @@ const usageText = `用法:
   report carry <week> <person>           把未完成计划顺延到本周下周计划
   report group generate [--week W] ...   AI 合并组员定稿为组报（不带 --yes 只预览，退出 8）
   report group show|edit|finalize|unfinalize|submit  组报查看、修改、定稿、带入 SE
+  report group deliver --project P [--week W|--month M] [--undo]  项目组报 / 月报复制给对方 SE 后标记已交
+  report project se <项目> --mine [--groups 组1,组2] | --se <称呼>  设置项目 SE：我是 SE / 交给谁
+  report se status|generate|report|edit|finalize|unfinalize --project P [--week W|--month M]  我当 SE：各组交报状态、合并项目报
+  report se add|show|rm --project P --group G [--week W|--month M]  归档 / 查看 / 删除某组交来的项目报（add 从 stdin 或 --file 读）
   report product generate [--week W] ... SE 按产品线汇总组长定稿（不带 --yes 只预览，退出 8）
   report product show [--product p]|edit|finalize|unfinalize  产品报查看、修改、定稿
   report month sources|list [--month M] [--group G]  月报来源与各项目状态（配置报送项目后）
@@ -73,7 +77,7 @@ const usageText = `用法:
   report month show|edit|finalize|unfinalize --project P [--month M]  项目月报查看、修改、定稿
   report month generate|show|edit|finalize|unfinalize [--month M] [--level group|product]  旧路径：未配置项目时 LLM 组月报 / 产品月报
   report add|status --month M            组长月报归档 / 提交状态（收集日 report config --month-day）
-  report export group|product|month-group|month-product [--project P] [--format f] [--out file]  导出定稿（未定稿退出 7）
+  report export group|product|se|month-group|month-product|month-se [--project P] [--format f] [--out file]  导出定稿（未定稿退出 7）
   calendar month [--month M] [--group g] [--perspective member|lead]  团队日历月视图（人 × 周）
   calendar day [--month M]                         团队日历日视图（月历格）
   template list|show|edit <名称>         报告模板（templates/<名称>.md）

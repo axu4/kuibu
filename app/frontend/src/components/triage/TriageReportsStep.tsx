@@ -20,6 +20,7 @@ import type {
 import { copyRich } from "../../lib/clipboard";
 import { readableError } from "../../lib/todo";
 import { Editor } from "../LazyEditor";
+import { DeliveryBar, deliveryShort } from "../DeliveryBar";
 import { Icon } from "../Icon";
 import { formatClock, normalizeBody } from "./shared";
 
@@ -365,6 +366,21 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
       }
     };
 
+    const [marking, setMarking] = useState(false);
+    const markDelivered = async (delivered: boolean) => {
+      if (!active) return;
+      setMarking(true);
+      try {
+        const data = await ReportService.MarkProjectDelivered(week, group, active, delivered);
+        patchDraft(active, (state) => ({ ...state, data }));
+        onToast(delivered ? `已标记交给 ${data.delivery?.se || "SE"}` : "已撤销已交标记");
+      } catch (err) {
+        onToast(`操作失败：${readableError(err)}`);
+      } finally {
+        setMarking(false);
+      }
+    };
+
     const stale = Boolean(activeData?.sourceChanged || (active && rowMap.get(active)?.sourceChanged));
 
     if (projects.length === 0) {
@@ -397,6 +413,9 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
                     <span className="triage-rl-count">{candidates(project.id)} 条</span>
                   </span>
                   <span className={`triage-rl-status ${state.cls}`}>{state.text}</span>
+                  <span className="triage-rl-to">
+                    {deliveryShort(drafts[project.id]?.data?.delivery ?? rowMap.get(project.id)?.delivery)}
+                  </span>
                 </button>
               );
             })}
@@ -448,6 +467,17 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
                   </button>
                 </div>
               </div>
+
+              {activeData?.exists && (
+                <DeliveryBar
+                  delivery={activeData.delivery ?? rowMap.get(active)?.delivery}
+                  projectName={activeProject.name}
+                  isFinal={isFinal}
+                  busy={marking}
+                  onCopy={() => void copyFeishu()}
+                  onMark={(d) => void markDelivered(d)}
+                />
+              )}
 
               {stale && (
                 <div className="triage-re-banner">

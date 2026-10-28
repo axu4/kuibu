@@ -5345,6 +5345,63 @@ body.is-resizing-x * {
   font-size: 12.5px;
 }
 
+.delivery-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 10px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.delivery-to b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.delivery-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.delivery-chip.is-done,
+.delivery-chip.is-sent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.delivery-chip.is-stale {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.delivery-spacer {
+  flex: 1;
+}
+
+.delivery-hint {
+  flex-basis: 100%;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.triage-rl-to {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
 .triage-re-banner {
   flex: 0 0 auto;
   display: flex;
@@ -5463,6 +5520,58 @@ body.is-resizing-x * {
 
 .triage-proj-input {
   flex: 1;
+}
+
+.triage-proj-block {
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.triage-proj-block .triage-proj-row {
+  margin-bottom: 6px;
+}
+
+.triage-proj-se {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 26px;
+}
+
+.triage-proj-se .segmented-btn {
+  font-size: 11.5px;
+}
+
+.triage-proj-se-input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.triage-proj-se-hint {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.triage-proj-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 8px 0 0 26px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.triage-proj-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink-2);
+}
+
+.triage-proj-group small {
+  color: var(--ink-3);
 }
 
 .triage-proj-add {
@@ -6553,4 +6662,24 @@ button.month-src-cell:hover {
   .month-pool-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ---------- 项目汇总（SE） ---------- */
+
+.se-paste-modal {
+  width: min(620px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.se-paste-text {
+  min-height: 260px;
+  resize: vertical;
+  font: 13px/1.7 var(--font);
+}
+
+.month-project-head.is-delivery,
+.month-project-row.is-delivery {
+  grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(110px, 1fr) 120px 68px;
 }

@@ -117,6 +117,24 @@ func ExportFinalProject(ws *store.Workspace, kind, week, group, projectID string
 			FileName: fmt.Sprintf("%s-组月报-%s-%s.md", safeFileName(groupName), week, safeFileName(project.Name)),
 			Body:     d.Body,
 		}, nil
+	case "se", "month-se":
+		project, ok := findProject(ws, projectID)
+		if !ok {
+			return nil, fmt.Errorf("%w: 找不到报送项目 %q", store.ErrNotFound, projectID)
+		}
+		d, err := ws.FinalDraftKind(store.ProjectReportDirName, week, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		noun := "项目周报"
+		if kind == "month-se" {
+			noun = "项目月报"
+		}
+		return &ExportDoc{
+			Title:    fmt.Sprintf("%s %s %s", project.Name, noun, week),
+			FileName: fmt.Sprintf("%s-%s-%s.md", safeFileName(project.Name), noun, week),
+			Body:     d.Body,
+		}, nil
 	case "month-product":
 		d, err := ws.FinalDraftKind(store.ProductDirName, week, store.ProductReportID)
 		if err != nil {
@@ -124,7 +142,7 @@ func ExportFinalProject(ws *store.Workspace, kind, week, group, projectID string
 		}
 		return &ExportDoc{Title: "产品月报 " + week, FileName: fmt.Sprintf("产品月报-%s.md", week), Body: d.Body}, nil
 	}
-	return nil, fmt.Errorf("%w: 未知报告类型 %q（group|product|month-group|month-group-project|month-product）", store.ErrInvalid, kind)
+	return nil, fmt.Errorf("%w: 未知报告类型 %q（group|product|se|month-group|month-group-project|month-product|month-se）", store.ErrInvalid, kind)
 }
 
 // Render 按格式输出正文。

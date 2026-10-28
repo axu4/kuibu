@@ -37,7 +37,7 @@ const ProductDirName = "product"
 const ProductReportID = "product"
 
 // DraftKinds 是所有草稿 / 定稿类文件的目录名，索引据此识别。
-var DraftKinds = []string{DraftDirName, LeadDraftDirName, LeadMonthDraftDirName, GroupDirName, ProductDirName}
+var DraftKinds = []string{DraftDirName, LeadDraftDirName, LeadMonthDraftDirName, GroupDirName, ProductDirName, ProjectReportDirName}
 
 // IsDraftKind 判断目录名是否是草稿 / 定稿类文件。
 func IsDraftKind(dir string) bool {
@@ -128,6 +128,8 @@ type Draft struct {
 	Sources []string
 	// Missing 是组报生成时未定稿、未纳入的组员姓名（仅组报）。
 	Missing []string
+	// DeliveredAt 是按项目的组报交给对方 SE 的时间（只用于 SE 不是我的项目），未交为零值。
+	DeliveredAt time.Time
 	// Extra 保存 front matter 中未识别的字段。
 	Extra map[string]any
 
@@ -138,7 +140,7 @@ type Draft struct {
 var knownDraftKeys = map[string]bool{
 	"person": true, "name": true, "week": true, "status": true, "sourceHash": true,
 	"model": true, "generatedAt": true, "editedAt": true, "finalizedAt": true, "humanEdited": true,
-	"review": true, "group": true, "sources": true, "missing": true,
+	"review": true, "group": true, "sources": true, "missing": true, "deliveredAt": true,
 }
 
 // 对照状态。
@@ -213,6 +215,8 @@ func kindNoun(kind string) string {
 		return "组报"
 	case kind == ProductDirName:
 		return "产品报"
+	case kind == ProjectReportDirName:
+		return "项目报"
 	}
 	return "归一稿"
 }
@@ -464,6 +468,30 @@ func (w *Workspace) UnfinalizeDraftKind(kind, week, personID string) (*Draft, er
 	return d, nil
 }
 
+// MarkDraftDelivered 记录（delivered 为 false 时清除）按项目组报已交给对方 SE。
+// 只认定稿：未定稿返回 ErrNotFinal，避免把草稿交出去。
+func (w *Workspace) MarkDraftDelivered(kind, week, personID string, delivered bool, now time.Time) (*Draft, error) {
+	d, err := w.ReadDraftKind(kind, week, personID)
+	if err != nil {
+		return nil, err
+	}
+	if delivered {
+		if d.Status != DraftStatusFinal {
+			return nil, newReportError(ErrNotFinal, "%s 的 %s %s尚未定稿，定稿后才能标记已交", d.displayName(), week, kindNoun(kind))
+		}
+		if now.IsZero() {
+			now = time.Now()
+		}
+		d.DeliveredAt = now.Truncate(time.Second)
+	} else {
+		d.DeliveredAt = time.Time{}
+	}
+	if err := w.writeDraft(d); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
 // DraftState 汇总某人某周的归一状态，供列表和状态展示。
 type DraftState struct {
 	// Status 是 none / draft / final。
@@ -577,6 +605,8 @@ func ReadDraftFile(path string) (*Draft, error) {
 					_ = val.Decode(&d.Sources)
 				case "missing":
 					_ = val.Decode(&d.Missing)
+				case "deliveredAt":
+					d.DeliveredAt = decodeTime(val)
 				default:
 					var v any
 					if err := val.Decode(&v); err == nil {
@@ -616,7 +646,7 @@ func (w *Workspace) writeDraft(d *Draft) error {
 			return err
 		}
 	}
-	if k := kindOrDraft(d.Kind); IsGroupKind(k) || k == ProductDirName {
+	if k := kindOrDraft(d.Kind); IsGroupKind(k) || k == ProductDirName || k == ProjectReportDirName {
 		appendFrontMatterKey(root, "group", stringNode(d.Group))
 		if err := appendFrontMatterValue(root, "sources", nonNil(d.Sources)); err != nil {
 			return err
@@ -624,6 +654,9 @@ func (w *Workspace) writeDraft(d *Draft) error {
 		if err := appendFrontMatterValue(root, "missing", nonNil(d.Missing)); err != nil {
 			return err
 		}
+	}
+	if !d.DeliveredAt.IsZero() {
+		appendFrontMatterKey(root, "deliveredAt", stringNode(optTime(d.DeliveredAt)))
 	}
 	if err := appendExtraFrontMatter(root, d.Extra, d.extraNodes, knownDraftKeys); err != nil {
 		return err

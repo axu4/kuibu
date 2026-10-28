@@ -55,7 +55,7 @@ function shortWeek(week: string): string {
 }
 
 /** 月视角各项目月报列表的状态文案。 */
-function projectMonthStatus(row: ProjectMonthList): { text: string; cls: string } {
+export function projectMonthStatus(row: ProjectMonthList): { text: string; cls: string } {
   if (!row.exists) return { text: "未生成", cls: "is-none" };
   if (row.status === "final") return { text: "已定稿", cls: "is-final" };
   if (row.sourceChanged) return { text: "来源已更新", cls: "is-stale" };
@@ -67,7 +67,7 @@ function projectMonthStatus(row: ProjectMonthList): { text: string; cls: string 
  * 读取月视角各项目月报列表。组长带多个组时服务端无法用空组名解析，
  * 这里退化为逐组尝试，取第一个配置了报送项目的组。
  */
-async function loadMonthProjectRows(
+export async function loadMonthProjectRows(
   month: string,
 ): Promise<{ rows: ProjectMonthList[]; group: string }> {
   try {

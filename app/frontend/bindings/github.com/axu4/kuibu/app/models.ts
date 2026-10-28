@@ -180,6 +180,11 @@ export interface GroupData {
      * ProjectName 是报送项目名称。
      */
     "projectName": string;
+
+    /**
+     * Delivery 是按项目组报 / 月报的去向（我是 SE / 交给谁、是否已交）；其他报告为空。
+     */
+    "delivery": core$0.ProjectGroupDelivery | null;
 }
 
 /**
@@ -386,6 +391,11 @@ export interface PersonInput {
 export interface ProjectGroupList {
     "project": string;
     "projectName": string;
+
+    /**
+     * Delivery 是这个项目组报的去向：我是 SE / 交给谁、是否已交。
+     */
+    "delivery": core$0.ProjectGroupDelivery;
     "exists": boolean;
     "status": string;
     "humanEdited": boolean;
@@ -401,6 +411,11 @@ export interface ProjectGroupList {
 export interface ProjectMonthList {
     "project": string;
     "projectName": string;
+
+    /**
+     * Delivery 是这个项目月报的去向：我是 SE / 交给谁、是否已交。
+     */
+    "delivery": core$0.ProjectGroupDelivery;
     "status": string;
     "exists": boolean;
     "humanEdited": boolean;
@@ -1185,6 +1200,21 @@ export interface TriageItemData {
 export interface TriageProjectData {
     "id": string;
     "name": string;
+
+    /**
+     * Mine 表示我是这个项目的 SE。
+     */
+    "mine": boolean;
+
+    /**
+     * SE 是对方 SE 的称呼（Mine 为 false 时，组报交给谁）。
+     */
+    "se": string;
+
+    /**
+     * Groups 是我当 SE 时应交的组 id；空表示全部组。
+     */
+    "groups": string[] | null;
 }
 
 /**

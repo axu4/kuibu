@@ -43,6 +43,14 @@ export function RenameProject(idOrName: string, newName: string): $CancellablePr
 }
 
 /**
+ * SetProjectSE 设置项目的 SE：mine 为 true 表示我是 SE（groups 为应交的组 id，空表示全部组），
+ * 否则 se 是对方 SE 的称呼。
+ */
+export function SetProjectSE(idOrName: string, mine: boolean, se: string, groups: string[] | null): $CancellablePromise<$models.TriageProjectData[] | null> {
+    return $Call.ByID(586409884, idOrName, mine, se, groups);
+}
+
+/**
  * Triage 读取/重建本周筛选记录。来源或项目变化时自动重建；新条目为未判。
  */
 export function Triage(week: string, group: string): $CancellablePromise<$models.TriageData> {

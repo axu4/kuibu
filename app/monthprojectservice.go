@@ -21,9 +21,11 @@ import (
 type ProjectMonthList struct {
 	Project     string `json:"project"`
 	ProjectName string `json:"projectName"`
-	Status      string `json:"status"`
-	Exists      bool   `json:"exists"`
-	HumanEdited bool   `json:"humanEdited"`
+	// Delivery 是这个项目月报的去向：我是 SE / 交给谁、是否已交。
+	Delivery    core.ProjectGroupDelivery `json:"delivery"`
+	Status      string                    `json:"status"`
+	Exists      bool                      `json:"exists"`
+	HumanEdited bool                      `json:"humanEdited"`
 	// Candidates 是会进入月报的候选条目数（总结 + 计划）。
 	Candidates int `json:"candidates"`
 	// Missing 是本期范围内这个项目未定稿 / 未提交的周。
@@ -155,8 +157,9 @@ func (s *ReportService) MonthProjectReport(month, group, project string) (GroupD
 	}
 	d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), m, lead.ID)
 	if errors.Is(err, store.ErrNotFound) {
+		delivery := core.DeliveryOf(p, nil)
 		return GroupData{LeadID: lead.ID, LeadName: lead.Name, Group: groupName, Week: m, Status: "none",
-			Missing: []string{}, Project: p.ID, ProjectName: p.Name}, nil
+			Missing: []string{}, Project: p.ID, ProjectName: p.Name, Delivery: &delivery}, nil
 	}
 	if err != nil {
 		return GroupData{}, err
@@ -273,10 +276,12 @@ func (s *ReportService) MonthProjectList(month, group string) ([]ProjectMonthLis
 			Candidates:  c.Counts.Total,
 			Missing:     nonNilStrings(c.Missing),
 			PlanFrom:    c.PlanFrom,
+			Delivery:    core.DeliveryOf(p, nil),
 		}
 		d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), m, lead.ID)
 		switch {
 		case err == nil:
+			row.Delivery = core.DeliveryOf(p, d)
 			row.Exists = true
 			row.Status = d.Status
 			row.HumanEdited = d.HumanEdited
@@ -312,6 +317,8 @@ func toProjectMonthData(ws *store.Workspace, d *store.Draft, project store.Repor
 		Project:       project.ID,
 		ProjectName:   project.Name,
 	}
+	delivery := core.DeliveryOf(project, d)
+	out.Delivery = &delivery
 	if !d.GeneratedAt.IsZero() {
 		out.GeneratedAt = formatTime(d.GeneratedAt)
 	}
