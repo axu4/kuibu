@@ -5734,3 +5734,58 @@ body.is-resizing-x * {
   border-radius: 6px;
   font-size: 11.5px;
 }
+
+/* 三步流程：多组时先选组 */
+.triage-group-choose {
+  width: min(720px, 88vw);
+  margin: 8vh auto 0;
+  text-align: center;
+}
+.triage-group-choose .triage-lede {
+  max-width: 520px;
+  margin: 0 auto;
+}
+.triage-group-picks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 26px 0 16px;
+}
+.triage-group-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  text-align: left;
+}
+.triage-group-pick:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.triage-group-pick b {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+}
+.triage-group-pick span {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.triage-group-actions {
+  margin-top: 10px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.triage-group-select {
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink-2);
+  padding: 0 22px 0 8px;
+  font-size: 11.5px;
+}
