@@ -66,6 +66,10 @@ func ParseDraftItems(body string) map[string][]DraftItem {
 // sectionOf 把标题行映射成固定节名，其他标题返回空。
 func sectionOf(heading string) string {
 	title := strings.TrimSpace(strings.TrimLeft(heading, "#"))
+	// 组长的说法是「本周总结」；数据层固定节名仍是「本周完成」，两者都认。
+	if strings.HasPrefix(title, "本周总结") {
+		return SectionDone
+	}
 	for _, s := range []string{SectionDone, SectionPlan, SectionRisk} {
 		if strings.HasPrefix(title, s) {
 			return s

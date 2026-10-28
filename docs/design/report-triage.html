@@ -1,0 +1,2228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>跬步 · 周报三步流程（交互原型）</title>
+<style>
+  /* ---------- 基础：沿用 App 的素纸 + 松青墨色 ---------- */
+  :root {
+    --paper: #fcfcfb;
+    --sidebar: #f2f3f1;
+    --panel: #ffffff;
+    --raised: #ffffff;
+    --hover: rgba(30, 40, 36, 0.055);
+    --pressed: rgba(30, 40, 36, 0.09);
+    --line: #e6e7e4;
+    --line-strong: #d6d8d4;
+    --ink: #1e2120;
+    --ink-2: #5b605e;
+    --ink-3: #979c99;
+    --ink-4: #c3c7c4;
+    --accent: #2c7362;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(44, 115, 98, 0.1);
+    --accent-line: rgba(44, 115, 98, 0.35);
+    --seal: #c4432c;
+    --seal-soft: rgba(196, 67, 44, 0.09);
+    --amber: #a86d12;
+    --amber-soft: rgba(168, 109, 18, 0.1);
+    --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 8px 28px rgba(20, 30, 26, 0.16);
+    --shadow-modal: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 24px 64px rgba(20, 30, 26, 0.26);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --font-serif: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC",
+      "Noto Serif SC", Georgia, serif;
+    --font-mono: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1a1c1b;
+      --sidebar: #212423;
+      --panel: #1e2120;
+      --raised: #3a3f3d;
+      --hover: rgba(230, 240, 235, 0.06);
+      --pressed: rgba(230, 240, 235, 0.1);
+      --line: #2d3130;
+      --line-strong: #3a3f3d;
+      --ink: #e4e7e5;
+      --ink-2: #a5aba8;
+      --ink-3: #737976;
+      --ink-4: #4e5452;
+      --accent: #5db39c;
+      --accent-ink: #0f1a17;
+      --accent-soft: rgba(93, 179, 156, 0.14);
+      --accent-line: rgba(93, 179, 156, 0.4);
+      --seal: #e8664d;
+      --seal-soft: rgba(232, 102, 77, 0.13);
+      --amber: #d9a24a;
+      --amber-soft: rgba(217, 162, 74, 0.13);
+      --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 8px 28px rgba(0, 0, 0, 0.5);
+      --shadow-modal: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 24px 64px rgba(0, 0, 0, 0.6);
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input, textarea { user-select: text; -webkit-user-select: text; }
+  button { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; }
+  kbd {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1;
+    padding: 3px 4px;
+    min-width: 16px;
+    text-align: center;
+    border-radius: 4px;
+    border: 1px solid var(--line-strong);
+    background: var(--panel);
+    color: var(--ink-2);
+    box-shadow: 0 1px 0 var(--line);
+  }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  .screen { display: none; flex: 1; min-height: 0; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    flex: 0 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 14px 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 20;
+  }
+  .tb-left, .tb-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tb-brand { font-family: var(--font-serif); font-size: 14px; font-weight: 600; letter-spacing: 0.06em; }
+  .tb-divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+  .tb-back {
+    height: 26px; padding: 0 8px; border-radius: 6px;
+    color: var(--ink-2); font-size: 12px;
+  }
+  .tb-back:hover { background: var(--hover); color: var(--ink); }
+  .tb-title { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+  .tb-week {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+    border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; background: var(--panel);
+  }
+  .tb-group { font-size: 11.5px; color: var(--ink-3); }
+  .tb-progress { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-2); margin-right: 4px; }
+  .tb-bar { width: 104px; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .tb-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.25s ease; }
+  .tb-btn { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--ink-2); }
+  .tb-btn:hover { background: var(--hover); color: var(--ink); }
+  .tb-btn.is-primary { background: var(--panel); border: 1px solid var(--line-strong); color: var(--ink); }
+  .tb-btn.is-primary:hover { background: var(--hover); }
+
+  /* ---------- 入口 ---------- */
+  body[data-screen="intro"] .screen-intro { display: flex; overflow: auto; }
+  .screen-intro {
+    align-items: center;
+    justify-content: center;
+    background:
+      radial-gradient(90% 70% at 50% -10%, rgba(44, 115, 98, 0.06), transparent 62%),
+      var(--paper);
+    padding: 32px;
+  }
+  .intro { width: min(840px, 100%); }
+  .eyebrow { font-size: 11px; letter-spacing: 0.16em; color: var(--ink-3); text-transform: uppercase; }
+  .intro h1 {
+    font-family: var(--font-serif);
+    font-size: 34px;
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin: 12px 0 10px;
+  }
+  .lede { font-size: 13px; line-height: 1.95; color: var(--ink-2); max-width: 640px; margin: 0; }
+  .pipeline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 28px 0 20px; }
+  .step {
+    font-size: 11.5px; color: var(--ink-3); padding: 5px 10px;
+    border-radius: 6px; background: var(--sidebar); border: 1px solid transparent;
+  }
+  .step.is-on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); font-weight: 500; }
+  .step-arrow { color: var(--ink-4); font-size: 11px; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 22px 0 4px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px; }
+  .stat b { display: block; font-family: var(--font-serif); font-size: 24px; font-weight: 600; line-height: 1.2; }
+  .stat span { font-size: 11.5px; color: var(--ink-3); }
+  .projects-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 18px 0 0; font-size: 12px; color: var(--ink-3); }
+  .proj-pill {
+    border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 500;
+  }
+  .intro-actions { display: flex; align-items: center; gap: 10px; margin-top: 26px; flex-wrap: wrap; }
+  .btn-primary {
+    height: 34px; padding: 0 18px; border-radius: 8px;
+    background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 500;
+  }
+  .btn-primary:hover { filter: brightness(1.07); }
+  .btn {
+    height: 34px; padding: 0 14px; border-radius: 8px;
+    border: 1px solid var(--line-strong); background: var(--panel); font-size: 13px;
+  }
+  .btn:hover { background: var(--hover); }
+  .footnote { font-size: 11px; color: var(--ink-3); margin-top: 26px; line-height: 1.8; }
+  .link-btn { color: var(--ink-2); font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px; }
+  .link-btn:hover { color: var(--accent); }
+
+  /* ---------- 分拣主界面 ---------- */
+  body[data-screen="triage"] .screen-triage { display: flex; }
+  .queue {
+    flex: 0 0 292px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--sidebar);
+    border-right: 1px solid var(--line);
+  }
+  .queue-head { padding: 13px 14px 10px; border-bottom: 1px solid var(--line); }
+  .queue-title { display: flex; align-items: baseline; justify-content: space-between; font-size: 11.5px; color: var(--ink-3); }
+  .queue-title b { font-size: 12.5px; color: var(--ink); font-weight: 600; letter-spacing: 0.02em; }
+  .filters { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+  .filter {
+    height: 24px; padding: 0 9px; border-radius: 6px; font-size: 11.5px;
+    color: var(--ink-2); border: 1px solid transparent;
+  }
+  .filter:hover { background: var(--hover); }
+  .filter.is-on { background: var(--panel); border-color: var(--line); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+  .queue-body { flex: 1; overflow: auto; padding: 2px 8px 16px; }
+  .member { margin-top: 8px; }
+  .member-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 6px 8px 4px; color: var(--ink-3); font-size: 10.5px;
+  }
+  .member-head b {
+    font-family: var(--font-serif); font-size: 13px; font-weight: 600;
+    color: var(--ink); letter-spacing: 0.02em;
+  }
+  .qitem {
+    display: flex; gap: 7px; width: 100%; text-align: left; padding: 7px 8px;
+    border-radius: 7px; align-items: flex-start; margin-bottom: 1px;
+  }
+  .qitem:hover { background: var(--hover); }
+  .qitem.is-current { background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(20, 30, 26, 0.05); }
+  .qmark { flex: 0 0 12px; width: 12px; font-size: 10.5px; line-height: 17px; text-align: center; color: var(--ink-4); }
+  .qmark.accept { color: var(--accent); }
+  .qmark.reject { color: var(--seal); }
+  .qmark.skip { color: var(--amber); }
+  .qtext { min-width: 0; flex: 1; }
+  .qtext > span:first-child {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px; line-height: 17px; color: var(--ink);
+  }
+  .qsub { display: block; margin-top: 1px; font-size: 10px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qitem.reject .qtext > span:first-child { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .qitem.skip .qtext > span:first-child { color: var(--ink-2); }
+  .queue-foot {
+    border-top: 1px solid var(--line); padding: 8px 14px; font-size: 10.5px; color: var(--ink-3);
+    display: flex; justify-content: space-between; gap: 8px; line-height: 1.7;
+  }
+  .queue-empty { padding: 24px 14px; font-size: 12px; color: var(--ink-3); line-height: 1.8; }
+
+  .focus {
+    flex: 1; min-width: 0; min-height: 0; display: flex;
+    background: radial-gradient(80% 55% at 50% 0%, rgba(44, 115, 98, 0.045), transparent 70%);
+  }
+  .focus-scroll { flex: 1; overflow: auto; display: flex; }
+  .focus-inner {
+    width: min(820px, 100%); margin: auto; padding: 34px 36px 18px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .deck { position: relative; }
+  .deck::before, .deck::after {
+    content: ""; position: absolute; inset: 0; border-radius: 16px;
+    background: var(--panel); border: 1px solid var(--line); z-index: 0;
+  }
+  .deck::before { transform: translateY(9px) scale(0.992) rotate(0.35deg); opacity: 0.65; }
+  .deck::after { transform: translateY(17px) scale(0.984) rotate(-0.5deg); opacity: 0.4; }
+  .card {
+    position: relative; z-index: 2; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 16px;
+    padding: 26px 30px 24px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 18px 40px -18px rgba(20, 30, 26, 0.2);
+    transition: transform 0.16s ease, opacity 0.16s ease;
+    will-change: transform;
+  }
+  .card.is-fresh { animation: cardIn 0.22s cubic-bezier(0.2, 0.7, 0.3, 1); }
+  .card.is-out-right { transform: translateX(64px) rotate(1.4deg); opacity: 0; }
+  .card.is-out-left { transform: translateX(-64px) rotate(-1.4deg); opacity: 0; }
+  .card.is-out-down { transform: translateY(44px) scale(0.985); opacity: 0; }
+  @keyframes cardIn {
+    from { opacity: 0.35; transform: translateY(8px) scale(0.994); }
+    to { opacity: 1; transform: none; }
+  }
+  .card-index {
+    position: absolute; top: 22px; right: 26px;
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-4);
+    letter-spacing: 0.04em;
+  }
+  .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-right: 64px; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--sidebar); border: 1px solid var(--line);
+    font-family: var(--font-serif); font-size: 13px; color: var(--ink-2);
+  }
+  .who { font-size: 12.5px; font-weight: 600; color: var(--ink); letter-spacing: 0.02em; }
+  .pill {
+    height: 20px; padding: 0 7px; border-radius: 5px;
+    display: inline-flex; align-items: center;
+    background: var(--hover); color: var(--ink-2); font-size: 11px;
+  }
+  .pill.is-domain { background: var(--accent-soft); color: var(--accent); }
+  .src-note { font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.02em; margin-left: auto; }
+  .decided-note {
+    margin-top: 16px; padding: 6px 10px; border-radius: 7px;
+    font-size: 11.5px; color: var(--ink-2); background: var(--sidebar);
+    border-left: 2px solid var(--line-strong);
+  }
+  .decided-note.is-accept { border-left-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .decided-note.is-reject { border-left-color: var(--seal); color: var(--seal); background: var(--seal-soft); }
+  .decided-note.is-skip { border-left-color: var(--amber); color: var(--amber); background: var(--amber-soft); }
+  .card-text {
+    font-family: var(--font-serif);
+    font-size: 24px; line-height: 1.85; letter-spacing: 0.01em;
+    margin: 20px 0 16px; word-break: break-word;
+  }
+  .excerpt-toggle-row { display: flex; justify-content: flex-start; margin: -4px 0 2px; }
+  .excerpt-toggle-row .link-btn { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink-3); }
+  .excerpt-toggle-row .link-btn:hover { color: var(--ink-2); }
+  .excerpt {
+    margin: 2px 0 4px; padding: 10px 12px 10px 14px;
+    border-left: 2px solid var(--line); background: color-mix(in srgb, var(--sidebar) 60%, transparent);
+    border-radius: 0 7px 7px 0; font-size: 12px; line-height: 1.85; color: var(--ink-2);
+    max-height: 260px; overflow: auto;
+  }
+  .ex-head { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--ink-3); margin-bottom: 6px; }
+  .ex-h { font-family: var(--font-serif); font-size: 12px; color: var(--ink); margin-top: 6px; }
+  .ex-line { padding: 0 4px; margin-left: -4px; border-radius: 4px; }
+  .ex-line.is-hit { background: var(--accent-soft); color: var(--ink); }
+  .actions {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line);
+  }
+  .action-label { font-size: 11.5px; color: var(--ink-3); margin-right: 2px; }
+  .seal-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 13px; border-radius: 9px;
+    border: 1px solid var(--accent-line); background: var(--accent-soft);
+    color: var(--accent); font-size: 13px; font-weight: 500;
+    transition: background 0.12s ease, transform 0.08s ease;
+  }
+  .seal-btn:hover { background: rgba(44, 115, 98, 0.17); }
+  .seal-btn:active { transform: scale(0.97); }
+  .seal-btn kbd { border-color: var(--accent-line); color: var(--accent); background: var(--panel); }
+  .seal-btn.is-chosen { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .seal-btn.is-chosen kbd { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.3); color: inherit; }
+  .seal-btn.is-single { height: 38px; padding: 0 16px; font-size: 13.5px; }
+  .project-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .secondary-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .ghost-btn {
+    height: 32px; padding: 0 10px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--ink-2); font-size: 12px;
+  }
+  .ghost-btn:hover { background: var(--hover); color: var(--ink); }
+  .ghost-btn.is-danger:hover { background: var(--seal-soft); color: var(--seal); }
+  .action-hint { margin: 12px 0 0; font-size: 10.5px; color: var(--ink-4); }
+  .focus-foot {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    padding: 0 4px 10px; font-size: 11px; color: var(--ink-3); flex-wrap: wrap;
+  }
+  .focus-foot .last { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .focus-foot .last span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .focus-foot .hints { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .focus-foot .hk { display: inline-flex; align-items: center; gap: 4px; }
+  .focus-empty {
+    margin: auto; text-align: center; padding: 40px; color: var(--ink-3); font-size: 13px; line-height: 2;
+  }
+  .focus-empty b { display: block; font-family: var(--font-serif); font-size: 22px; color: var(--ink); font-weight: 600; margin-bottom: 6px; }
+
+  /* ---------- 分拣结果 ---------- */
+  body[data-screen="summary"] .screen-summary { display: block; overflow: auto; }
+  .summary { padding: 34px 40px 44px; }
+  .summary-inner { width: min(1080px, 100%); margin: 0 auto; }
+  .summary h1 { font-family: var(--font-serif); font-size: 30px; font-weight: 600; letter-spacing: 0.02em; margin: 8px 0 8px; }
+  .summary .lede { max-width: 720px; }
+  .summary-stats { display: flex; gap: 10px; margin: 22px 0 24px; flex-wrap: wrap; }
+  .sumcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px 10px; min-width: 120px; }
+  .sumcard b { display: block; font-family: var(--font-serif); font-size: 22px; font-weight: 600; line-height: 1.25; }
+  .sumcard span { font-size: 11px; color: var(--ink-3); }
+  .sumcard.is-accept b { color: var(--accent); }
+  .sumcard.is-reject b { color: var(--seal); }
+  .sumcard.is-skip b { color: var(--amber); }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; align-items: start; }
+  .pool { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 10px; min-width: 0; }
+  .pool-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+  .pool h3 { font-family: var(--font-serif); font-size: 15px; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  .pool .count { font-size: 11px; color: var(--ink-3); }
+  .pool .meta { font-size: 10.5px; color: var(--ink-3); margin: 2px 0 10px; line-height: 1.7; }
+  .pool-item {
+    display: flex; gap: 8px; width: 100%; text-align: left;
+    padding: 7px 6px; border-radius: 7px; font-size: 12px; line-height: 1.65; color: var(--ink);
+  }
+  .pool-item:hover { background: var(--hover); }
+  .pool-item .pi-src { flex: 0 0 auto; color: var(--ink-3); font-size: 10.5px; line-height: 1.9; }
+  .pool-item.is-rejected .pi-text { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .pool-empty { font-size: 11.5px; color: var(--ink-3); padding: 8px 6px 12px; line-height: 1.8; }
+  .pool-section { margin-top: 4px; }
+  .pool-section h4 {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 10px 0 3px; padding: 0 6px;
+    font-family: var(--font-serif); font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  }
+  .pool-section h4 span { font-family: var(--font); font-size: 10px; font-weight: 400; color: var(--ink-3); }
+  .pool-item[draggable="true"] { cursor: grab; }
+  .pool-item.is-dragging { opacity: 0.35; }
+  .drag-grip { flex: 0 0 auto; color: var(--ink-4); font-size: 11px; line-height: 1.9; cursor: grab; }
+  .pool.is-droppable { transition: outline-color 0.12s ease, background 0.12s ease; outline: 2px solid transparent; }
+  .pool.is-drop-target { outline: 2px dashed var(--accent-line); background: var(--accent-soft); }
+  .pool.is-drop-target .pool-head h3 { color: var(--accent); }
+  .summary-actions { display: flex; align-items: center; gap: 10px; margin-top: 26px; flex-wrap: wrap; }
+  .summary-actions .spacer { flex: 1; }
+  .summary-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 40px; border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: blur(10px);
+  }
+  .summary-bar .spacer { flex: 1; }
+  .summary { padding-bottom: 104px; }
+  .summary-tip { margin-top: 14px; font-size: 11px; color: var(--ink-3); line-height: 1.8; }
+
+  /* ---------- 组报预览 ---------- */
+  body[data-screen="report"] .screen-report { display: block; overflow: auto; }
+  .report-wrap { padding: 28px 40px 44px; }
+  .report-inner { width: min(900px, 100%); margin: 0 auto; }
+  .report-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+  .report-head h1 { font-family: var(--font-serif); font-size: 26px; font-weight: 600; letter-spacing: 0.02em; margin: 6px 0 6px; }
+  .report-head p { font-size: 12px; color: var(--ink-2); line-height: 1.8; margin: 0; max-width: 640px; }
+  .report-tabs { display: flex; gap: 6px; margin: 18px 0 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; flex-wrap: wrap; }
+  .report-tab { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 12px; color: var(--ink-2); border: 1px solid transparent; }
+  .report-tab:hover { background: var(--hover); }
+  .report-tab.is-on { background: var(--panel); border-color: var(--line); color: var(--ink); font-weight: 500; }
+  .report-doc {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 30px; font-size: 13px; line-height: 1.95;
+  }
+  .report-doc h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 600; margin: 22px 0 8px; letter-spacing: 0.02em; }
+  .report-doc h2:first-child { margin-top: 0; }
+  .report-doc h3 { font-family: var(--font-serif); font-size: 15px; font-weight: 600; margin: 14px 0 4px; color: var(--ink-2); letter-spacing: 0.02em; }
+  .report-doc ul { margin: 0; padding-left: 18px; }
+  .report-doc li { margin: 4px 0; }
+  .report-doc .src { color: var(--ink-3); font-size: 11.5px; margin-left: 4px; }
+  .report-doc .doc-note { color: var(--ink-3); font-size: 12px; }
+  .report-note {
+    margin: 14px 0 0; padding: 9px 12px; border-radius: 8px;
+    background: var(--amber-soft); color: var(--amber); font-size: 11.5px; line-height: 1.8;
+  }
+  .report-actions { display: flex; align-items: center; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+  .report-actions .spacer { flex: 1; }
+
+  /* ---------- 抽屉 / 弹窗 / 提示 ---------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(20, 30, 26, 0.2);
+    opacity: 0; pointer-events: none; transition: opacity 0.18s ease; z-index: 40;
+  }
+  body.config-open .overlay { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw;
+    display: flex; flex-direction: column; z-index: 50;
+    background: var(--panel); border-left: 1px solid var(--line);
+    box-shadow: var(--shadow-pop);
+    transform: translateX(101%); transition: transform 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+  }
+  body.config-open .drawer { transform: none; }
+  .drawer-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
+  }
+  .drawer-head h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .drawer-head p { font-size: 11.5px; color: var(--ink-3); margin: 0; line-height: 1.7; }
+  .drawer-body { flex: 1; overflow: auto; padding: 16px 20px 24px; }
+  .proj-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .proj-idx { flex: 0 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-3); text-align: center; }
+  .proj-row input {
+    flex: 1; min-width: 0; height: 32px; padding: 0 10px;
+    border-radius: 7px; border: 1px solid var(--line-strong);
+    background: var(--paper); color: var(--ink); font-size: 13px;
+  }
+  .proj-row input:focus { border-color: var(--accent-line); outline: 2px solid var(--accent-soft); }
+  .icon-btn { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); }
+  .icon-btn:hover { background: var(--hover); color: var(--ink); }
+  .icon-btn.is-danger:hover { background: var(--seal-soft); color: var(--seal); }
+  .add-proj { height: 30px; padding: 0 10px; border-radius: 7px; border: 1px dashed var(--line-strong); color: var(--ink-2); font-size: 12px; width: 100%; margin-top: 2px; }
+  .add-proj:hover { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+  .note-box { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: var(--sidebar); font-size: 11.5px; line-height: 1.85; color: var(--ink-2); }
+  .note-box b { color: var(--ink); font-weight: 600; }
+  .drawer-foot { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+  .modal {
+    position: fixed; inset: 0; z-index: 60; display: none;
+    align-items: center; justify-content: center; background: rgba(20, 30, 26, 0.22);
+    padding: 24px;
+  }
+  body.help-open .modal { display: flex; }
+  .modal-card {
+    width: min(480px, 100%); max-height: 86vh; overflow: auto;
+    background: var(--panel); border-radius: 14px; box-shadow: var(--shadow-modal);
+    padding: 22px 24px 18px;
+  }
+  .modal-card h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .modal-card .sub { font-size: 11.5px; color: var(--ink-3); margin: 0 0 14px; line-height: 1.8; }
+  .keyrow { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 7px 0; border-bottom: 1px dashed var(--line); font-size: 12px; color: var(--ink-2); }
+  .keyrow:last-of-type { border-bottom: none; }
+  .keys { display: flex; gap: 4px; flex-wrap: wrap; }
+  .modal-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 10px);
+    max-width: 72vw; padding: 8px 14px; border-radius: 8px;
+    background: var(--ink); color: var(--paper); font-size: 12px;
+    opacity: 0; pointer-events: none; transition: 0.18s ease; z-index: 80;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+  .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 1060px) {
+    .queue { flex-basis: 258px; }
+    .focus-inner { padding: 24px 22px 14px; }
+    .card { padding: 22px 22px 20px; }
+    .card-text { font-size: 21px; }
+  }
+
+
+  /* ---------- 步骤条 ---------- */
+  body[data-screen="preview"] .screen-preview { display: block; overflow: auto; }
+  body[data-screen="reports"] .screen-reports { display: flex; }
+  body[data-screen="intro"] .stepper { display: none; }
+  .stepper {
+    flex: 0 0 58px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 0 20px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 94%, transparent);
+    z-index: 16;
+  }
+  .flow-steps { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .flow-step {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 8px; text-align: left; color: var(--ink-3);
+  }
+  .flow-step:hover { background: var(--hover); }
+  .flow-step.is-on { color: var(--ink); background: var(--panel); box-shadow: 0 0 0 1px var(--line); }
+  .flow-step.is-done { color: var(--ink-2); }
+  .flow-step.is-locked { opacity: 0.55; }
+  .flow-num {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    border: 1px solid var(--line-strong); background: var(--panel);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .flow-step.is-on .flow-num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .flow-step.is-done .flow-num { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+  .flow-text { display: flex; flex-direction: column; min-width: 0; }
+  .flow-title { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+  .flow-sub { margin-top: 1px; font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+  .flow-line { flex: 0 0 22px; width: 22px; height: 1px; background: var(--line-strong); }
+  .flow-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .flow-actions .btn, .flow-actions .btn-primary { height: 30px; padding: 0 12px; font-size: 12px; }
+  .flow-hint { font-size: 10.5px; color: var(--ink-3); }
+  @media (max-width: 1120px) {
+    .flow-sub { display: none; }
+    .flow-step { padding: 6px; }
+  }
+
+  /* ---------- 第 3 步：各项目草稿 ---------- */
+  .reports { flex: 1; display: flex; min-height: 0; width: 100%; }
+  .report-list {
+    flex: 0 0 280px; width: 280px; min-height: 0;
+    display: flex; flex-direction: column;
+    background: var(--sidebar); border-right: 1px solid var(--line);
+  }
+  .rl-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+    font-size: 10.5px; color: var(--ink-3);
+  }
+  .rl-head b { font-family: var(--font-serif); font-size: 13px; font-weight: 600; color: var(--ink); }
+  .report-list-body { flex: 1; overflow: auto; padding: 8px; }
+  .report-list-item {
+    display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
+    padding: 10px; border-radius: 8px; margin-bottom: 4px;
+  }
+  .report-list-item:hover { background: var(--hover); }
+  .report-list-item.is-active { background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(20, 30, 26, 0.05); }
+  .pr-name { display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-serif); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .pr-count { font-family: var(--font); font-size: 10.5px; font-weight: 400; color: var(--ink-3); white-space: nowrap; }
+  .pr-status { font-size: 10.5px; color: var(--ink-3); }
+  .rl-foot { padding: 10px 16px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-3); line-height: 1.7; }
+  .report-editor { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 18px 26px 14px; }
+  .re-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .re-head h2 { font-family: var(--font-serif); font-size: 23px; font-weight: 600; letter-spacing: 0.02em; margin: 5px 0 5px; }
+  .re-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3); }
+  .re-status { font-size: 11px; }
+  .re-status.is-saved { color: var(--accent); }
+  .re-status.is-dirty, .re-status.is-stale { color: var(--amber); }
+  .re-status.is-final { color: var(--accent); font-weight: 500; }
+  .re-status.is-none { color: var(--ink-3); }
+  .pr-status.is-saved { color: var(--accent); }
+  .pr-status.is-dirty, .pr-status.is-stale { color: var(--amber); }
+  .pr-status.is-final { color: var(--accent); font-weight: 500; }
+  .pr-status.is-none { color: var(--ink-3); }
+  .re-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .re-actions .btn, .re-actions .btn-primary { height: 30px; padding: 0 12px; font-size: 12px; }
+  .btn.btn-primary { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 500; }
+  .btn.btn-primary:hover { background: var(--accent); filter: brightness(1.07); }
+  .btn:disabled, .btn-primary:disabled { opacity: 0.4; pointer-events: none; }
+  .draft-editor {
+    flex: 1; min-height: 0; width: 100%; resize: none;
+    padding: 20px 24px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink); font-family: var(--font); font-size: 13px; line-height: 2;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  }
+  .draft-editor:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .draft-editor[readonly] { background: var(--sidebar); color: var(--ink-2); }
+  .re-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; border-radius: 8px; font-size: 11.5px;
+    background: var(--amber-soft); color: var(--amber);
+  }
+  .re-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+    min-height: 200px; border: 1px dashed var(--line-strong); border-radius: 12px;
+    color: var(--ink-3); font-size: 12px;
+  }
+  .re-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--ink-3); }
+  .summary { padding-bottom: 44px; }
+
+  /* ---------- 报告预览弹层 ---------- */
+  body.preview-open .modal { display: flex; }
+  .modal-card.is-wide { width: min(720px, 100%); }
+  .preview-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+  .preview-head h2 { font-family: var(--font-serif); font-size: 21px; font-weight: 600; margin: 6px 0 4px; }
+  .preview-head .sub { margin: 0; font-size: 11.5px; color: var(--ink-3); }
+  .md-preview {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--paper);
+    padding: 18px 22px; max-height: 52vh; overflow: auto;
+    font-size: 13px; line-height: 1.95;
+  }
+  .md-preview h2 { font-family: var(--font-serif); font-size: 17px; font-weight: 600; margin: 14px 0 6px; }
+  .md-preview h2:first-child { margin-top: 0; }
+  .md-preview ul { margin: 0; padding-left: 18px; }
+  .md-preview li { margin: 4px 0; }
+  .md-preview p { margin: 8px 0; color: var(--ink-2); }
+
+</style>
+</head>
+<body data-screen="intro">
+<div id="app">
+  <header class="topbar" id="topbar"></header>
+  <div class="stepper" id="stepper"></div>
+
+  <main class="screen screen-intro" id="screen-intro"></main>
+
+  <main class="screen screen-triage" id="screen-triage">
+    <aside class="queue" id="queue"></aside>
+    <section class="focus" id="focus"></section>
+  </main>
+
+  <main class="screen screen-preview" id="screen-preview"></main>
+  <main class="screen screen-reports" id="screen-reports"></main>
+</div>
+
+<div class="overlay" id="overlay" data-act="close-config"></div>
+<aside class="drawer" id="drawer"></aside>
+<div class="modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================== 示例数据 ============================== */
+  const PEOPLE = [
+    { id: "zhang", name: "张三" },
+    { id: "li", name: "李四" },
+    { id: "wang", name: "王五" },
+  ];
+
+  const SECTIONS = ["本周总结", "下周计划", "风险与求助"];
+
+  const ITEMS = [
+    { id: "z1", personId: "zhang", section: "本周总结", domain: "支付", text: "完成退款接口联调，覆盖 12 条用例，剩余 2 条异常分支待补。" },
+    { id: "z2", personId: "zhang", section: "本周总结", domain: "支付", text: "排查线上超时问题，定位为连接池配置过小，调整后观察 3 天无复现。" },
+    { id: "z3", personId: "zhang", section: "本周总结", domain: "对账", text: "对账服务设计评审，共 8 条意见，已修改 5 条。" },
+    { id: "z4", personId: "zhang", section: "本周总结", domain: "协作", text: "参加周会与需求宣讲，整理会议纪要 1 份。" },
+    { id: "z5", personId: "zhang", section: "下周计划", domain: "支付", text: "补齐退款异常分支用例，周四前提测。" },
+    { id: "z6", personId: "zhang", section: "下周计划", domain: "对账", text: "按评审意见完成剩余 3 条改造。" },
+    { id: "z7", personId: "zhang", section: "风险与求助", domain: "测试", text: "测试环境资源不足，压测排期可能延后 1 天。" },
+    { id: "l1", personId: "li", section: "本周总结", domain: "数据", text: "报表导出支持 Excel，10 万行导出耗时 8 秒。" },
+    { id: "l2", personId: "li", section: "本周总结", domain: "数据", text: "修复报表日期筛选跨月错误，已上线。" },
+    { id: "l3", personId: "li", section: "本周总结", domain: "客户", text: "支持客户现场部署，解决证书链配置问题。" },
+    { id: "l4", personId: "li", section: "下周计划", domain: "数据", text: "梳理报表权限模型，输出方案文档。" },
+    { id: "l5", personId: "li", section: "风险与求助", domain: "排期", text: "客户验收时间未定，可能挤压下周联调窗口。" },
+    { id: "w1", personId: "wang", section: "本周总结", domain: "平台", text: "完成登录鉴权改造，灰度 20%。" },
+    { id: "w2", personId: "wang", section: "本周总结", domain: "平台", text: "梳理慢查询 6 条，优化 2 条，QPS 提升约 15%。" },
+    { id: "w3", personId: "wang", section: "下周计划", domain: "平台", text: "灰度扩到 50%，准备回滚预案。" },
+  ];
+
+  const DEFAULT_PROJECTS = [
+    { id: "p1", name: "云平台项目" },
+    { id: "p2", name: "数据中台项目" },
+  ];
+
+  const WEEK = "2026-W44";
+  const STORAGE_KEY = "kuibu.report.triage.proto.v5";
+
+  /* ============================== 状态 ============================== */
+  const state = {
+    screen: "intro", // intro | triage | preview | reports
+    projects: DEFAULT_PROJECTS.map((p) => ({ ...p })),
+    decisions: {}, // itemId -> { dec: 'accept' | 'reject' | 'skip', project }
+    drafts: {}, // projectId -> { content, savedContent, generatedContent, sourceHash, finalized, savedAt, dirty }
+    activeProject: null,
+    filter: "本周总结",
+    currentId: ITEMS[0].id,
+    history: [],
+    excerptOpen: false,
+    lastAction: null,
+    previewProject: null,
+    regenArmed: null,
+    _lastFocusId: null,
+    _animating: false,
+  };
+
+  /* ============================== 工具 ============================== */
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const prefersReduced = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const itemById = (id) => ITEMS.find((i) => i.id === id) || null;
+  const personById = (id) => PEOPLE.find((p) => p.id === id) || null;
+  const projectById = (id) => state.projects.find((p) => p.id === id) || null;
+  const countSection = (section) => ITEMS.filter((i) => i.section === section).length;
+  const decidedCount = () => ITEMS.filter((i) => state.decisions[i.id]).length;
+  const undecidedCount = () => ITEMS.length - decidedCount();
+  const allJudged = () => undecidedCount() === 0;
+  const acceptedItems = (projectId) =>
+    ITEMS.filter((i) => {
+      const d = state.decisions[i.id];
+      return d && d.dec === "accept" && d.project === projectId;
+    });
+  const acceptedTotal = () => ITEMS.filter((i) => state.decisions[i.id] && state.decisions[i.id].dec === "accept").length;
+  const skippedItems = () => ITEMS.filter((i) => state.decisions[i.id] && state.decisions[i.id].dec === "skip");
+  const rejectedItems = () => ITEMS.filter((i) => state.decisions[i.id] && state.decisions[i.id].dec === "reject");
+
+  function sectionItems(section) {
+    return ITEMS.filter((i) => i.section === section);
+  }
+  function firstUndecidedInSection(section) {
+    return sectionItems(section).find((i) => !state.decisions[i.id]) || null;
+  }
+  function filteredItems() {
+    return sectionItems(state.filter);
+  }
+  function filterShortName(f) {
+    return f === "本周总结" ? "总结" : f === "下周计划" ? "计划" : "风险";
+  }
+  function nextUndecidedInSection(afterId) {
+    const list = filteredItems();
+    const start = afterId ? list.findIndex((i) => i.id === afterId) + 1 : 0;
+    for (let k = 0; k < list.length; k++) {
+      const it = list[(start + k) % list.length];
+      if (!state.decisions[it.id]) return it;
+    }
+    return null;
+  }
+  function nextSectionWithUndecided(fromSection) {
+    const start = SECTIONS.indexOf(fromSection);
+    for (let k = 1; k <= SECTIONS.length; k++) {
+      const sec = SECTIONS[(start + k) % SECTIONS.length];
+      if (sectionItems(sec).some((i) => !state.decisions[i.id])) return sec;
+    }
+    return null;
+  }
+  function candidateHash(projectId) {
+    return acceptedItems(projectId).map((i) => i.id).join("|");
+  }
+  function timeText(ts) {
+    if (!ts) return "";
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function sourceNames(projectId) {
+    const names = [];
+    acceptedItems(projectId).forEach((i) => {
+      const n = personById(i.personId).name;
+      if (names.indexOf(n) < 0) names.push(n);
+    });
+    return names;
+  }
+
+  /* ============================== 持久化 ============================== */
+  function saveLocal() {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ projects: state.projects, decisions: state.decisions, drafts: state.drafts })
+      );
+    } catch (err) {
+      /* 本地文件打开时可能不可用 */
+    }
+  }
+
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved.projects) && saved.projects.length) {
+        const list = saved.projects.filter((p) => p && p.id && p.name).slice(0, 4);
+        if (list.length) state.projects = list;
+      }
+      if (saved.decisions && typeof saved.decisions === "object") {
+        Object.keys(saved.decisions).forEach((id) => {
+          const v = saved.decisions[id];
+          if (!itemById(id) || !v || ["accept", "reject", "skip"].indexOf(v.dec) < 0) return;
+          if (v.dec === "accept" && !projectById(v.project)) return;
+          state.decisions[id] = { dec: v.dec, project: v.dec === "accept" ? v.project : null };
+        });
+      }
+      if (saved.drafts && typeof saved.drafts === "object") {
+        Object.keys(saved.drafts).forEach((pid) => {
+          if (!projectById(pid)) return;
+          const d = saved.drafts[pid];
+          if (!d || typeof d.content !== "string") return;
+          state.drafts[pid] = {
+            content: d.content,
+            savedContent: typeof d.savedContent === "string" ? d.savedContent : d.content,
+            generatedContent: typeof d.generatedContent === "string" ? d.generatedContent : d.content,
+            sourceHash: typeof d.sourceHash === "string" ? d.sourceHash : "",
+            finalized: Boolean(d.finalized),
+            savedAt: d.savedAt || null,
+            dirty: false,
+          };
+          state.drafts[pid].dirty = state.drafts[pid].content !== state.drafts[pid].savedContent;
+        });
+      }
+      state.activeProject = state.projects[0] ? state.projects[0].id : null;
+    } catch (err) {
+      /* 忽略坏数据 */
+    }
+  }
+
+  /* ============================== 组报草稿 ============================== */
+  function buildProjectReport(projectId) {
+    const items = acceptedItems(projectId);
+    let out = "";
+    SECTIONS.forEach((sec) => {
+      const list = items.filter((i) => i.section === sec);
+      if (!list.length) return;
+      out += "## " + sec + "\n\n";
+      list.forEach((i) => {
+        out += "- " + i.text + "\n";
+      });
+      out += "\n";
+    });
+    return out.trim() ? out.trim() + "\n" : "本周没有归入该项目的条目。\n";
+  }
+
+  function newDraft(projectId) {
+    const content = buildProjectReport(projectId);
+    return {
+      content: content,
+      savedContent: content,
+      generatedContent: content,
+      sourceHash: candidateHash(projectId),
+      finalized: false,
+      savedAt: Date.now(),
+      dirty: false,
+    };
+  }
+
+  function ensureDrafts() {
+    state.projects.forEach((p) => {
+      if (!state.drafts[p.id]) state.drafts[p.id] = newDraft(p.id);
+    });
+    if (!state.activeProject || !projectById(state.activeProject)) {
+      state.activeProject = state.projects[0] ? state.projects[0].id : null;
+    }
+    saveLocal();
+  }
+
+  function draftStatus(pid) {
+    const d = state.drafts[pid];
+    if (!d) return { text: "未生成", cls: "is-none" };
+    if (d.finalized) return { text: "已定稿", cls: "is-final" };
+    if (d.dirty) return { text: "未保存", cls: "is-dirty" };
+    if (d.sourceHash !== candidateHash(pid)) return { text: "候选已更新", cls: "is-stale" };
+    return { text: "已保存" + (d.savedAt ? " · " + timeText(d.savedAt) : ""), cls: "is-saved" };
+  }
+
+  function staleDrafts() {
+    return state.projects.filter((p) => {
+      const d = state.drafts[p.id];
+      return d && d.sourceHash !== candidateHash(p.id);
+    });
+  }
+
+  function dirtyDrafts() {
+    return state.projects.filter((p) => state.drafts[p.id] && state.drafts[p.id].dirty);
+  }
+
+  /* ============================== 渲染：顶栏 ============================== */
+  function renderTopbar() {
+    const intro = state.screen === "intro";
+    let html = '<div class="tb-left">';
+    if (!intro) {
+      html += '<button class="tb-back" data-act="back-intro">‹ 周报</button><span class="tb-divider"></span>';
+      html += '<span class="tb-title">周报整理</span>';
+    } else {
+      html += '<span class="tb-brand">跬步</span><span class="tb-divider"></span><span class="tb-title">周报</span>';
+    }
+    html += '<span class="tb-week">' + WEEK + '</span><span class="tb-group">框架组</span></div>';
+    html += '<div class="tb-right">';
+    html += '<button class="tb-btn" data-act="config">项目设置</button>';
+    html += '<button class="tb-btn" data-act="help">键盘</button>';
+    html += "</div>";
+    $("#topbar").innerHTML = html;
+  }
+
+  /* ============================== 渲染：步骤条 ============================== */
+  function flowStep(n, title, sub, on, done, locked) {
+    const num = done && !on ? "✓" : String(n);
+    return (
+      '<button class="flow-step' + (on ? " is-on" : "") + (done ? " is-done" : "") + (locked ? " is-locked" : "") +
+      '" data-act="go-step" data-step="' + n + '">' +
+      '<span class="flow-num">' + num + "</span>" +
+      '<span class="flow-text"><span class="flow-title">' + title + '</span><span class="flow-sub">' + sub + "</span></span>" +
+      "</button>"
+    );
+  }
+
+  function renderStepper() {
+    const el = $("#stepper");
+    if (!el) return;
+    if (state.screen === "intro") {
+      el.innerHTML = "";
+      return;
+    }
+    const undecided = undecidedCount();
+    const accepted = acceptedTotal();
+    const drafts = state.projects.filter((p) => state.drafts[p.id]).map((p) => state.drafts[p.id]);
+    const dirty = drafts.filter((d) => d.dirty).length;
+    const finalized = drafts.filter((d) => d.finalized).length;
+    const stale = staleDrafts().length;
+    const step2Locked = !allJudged();
+    const step3Locked = !allJudged() || drafts.length === 0;
+
+    const sub1 = SECTIONS.map((sec) => {
+      const items = sectionItems(sec);
+      const done = items.filter((i) => state.decisions[i.id]).length;
+      return filterShortName(sec) + " " + done + "/" + items.length;
+    }).join(" · ");
+    const sub2 = allJudged()
+      ? state.projects.length + " 个项目 · " + accepted + " 条候选"
+      : "筛选完成后可预览";
+    const allFinal = drafts.length > 0 && drafts.every((d) => d.finalized);
+    const sub3 = drafts.length
+      ? allFinal
+        ? drafts.length + " 份已定稿"
+        : drafts.length + " 份草稿" + (dirty ? " · " + dirty + " 份未保存" : "") +
+          (finalized ? " · " + finalized + " 份定稿" : "") + (stale ? " · " + stale + " 份需更新" : "")
+      : "预览后开始整理";
+
+    let actions = "";
+    if (state.screen === "triage") {
+      actions += undecided
+        ? '<span class="flow-hint">还有 ' + undecided + " 条未判</span>"
+        : '<span class="flow-hint">筛选完成</span>';
+      actions += '<button class="btn-primary" data-act="next-preview"' + (undecided ? " disabled" : "") + ">下一步：项目分拣预览</button>";
+    } else if (state.screen === "preview") {
+      actions += '<button class="btn" data-act="prev-step">上一步</button>';
+      actions += accepted
+        ? '<button class="btn-primary" data-act="next-reports">开始整理周报</button>'
+        : '<button class="btn-primary" disabled>没有候选条目</button>';
+    } else if (state.screen === "reports") {
+      actions += '<button class="btn" data-act="prev-step">上一步</button>';
+      actions += '<button class="btn" data-act="save-all"' + (dirty ? "" : " disabled") + ">保存全部" + (dirty ? "（" + dirty + "）" : "") + "</button>";
+      actions += '<button class="btn" data-act="finish-flow">完成</button>';
+    }
+
+    el.innerHTML =
+      '<div class="flow-steps">' +
+      flowStep(1, "筛选", sub1, state.screen === "triage", allJudged()) +
+      '<span class="flow-line"></span>' +
+      flowStep(2, "项目分拣预览", sub2, state.screen === "preview", allJudged(), step2Locked) +
+      '<span class="flow-line"></span>' +
+      flowStep(3, "整理周报", sub3, state.screen === "reports", allFinal, step3Locked) +
+      "</div>" +
+      '<div class="flow-actions">' + actions + "</div>";
+  }
+
+  /* ============================== 渲染：入口 ============================== */
+  function renderIntro() {
+    const decided = decidedCount();
+    const accepted = acceptedTotal();
+    const drafts = Object.keys(state.drafts).length;
+    const finalized = state.projects.filter((p) => state.drafts[p.id] && state.drafts[p.id].finalized).length;
+
+    let primaryAct = "start";
+    let primaryLabel = "开始筛选";
+    if (drafts > 0 && allJudged()) {
+      primaryAct = "go-step3";
+      primaryLabel = "继续整理周报";
+    } else if (allJudged()) {
+      primaryAct = "go-step2";
+      primaryLabel = "查看项目分拣预览";
+    } else if (decided > 0) {
+      primaryAct = "resume";
+      primaryLabel = "继续筛选（已判 " + decided + "/" + ITEMS.length + "）";
+    }
+
+    const progress =
+      decided > 0
+        ? '<p class="footnote" style="margin-top:8px">筛选 ' + decided + " / " + ITEMS.length +
+          " · 候选 " + accepted + " 条 · 草稿 " + drafts + " 份" + (finalized ? "（" + finalized + " 份已定稿）" : "") + "</p>"
+        : "";
+
+    $("#screen-intro").innerHTML =
+      '<div class="intro">' +
+      '<div class="eyebrow">框架组 · ' + WEEK + " · 10/26–11/01</div>" +
+      "<h1>本周周报整理</h1>" +
+      '<p class="lede">三步走完：先过「本周总结」、再过「下周计划」，逐条筛选组员的事项；然后预览每个项目会拿到什么（可拖动调整）；最后分别整理各项目的周报——每份草稿独立保存。</p>' +
+      '<div class="pipeline">' +
+      '<span class="step is-on">1 筛选</span><span class="step-arrow">→</span>' +
+      '<span class="step">2 项目分拣预览</span><span class="step-arrow">→</span>' +
+      '<span class="step">3 整理周报</span>' +
+      "</div>" +
+      '<div class="stats">' +
+      '<div class="stat"><b>' + PEOPLE.length + '</b><span>位组员 · 归一稿全部已定稿</span></div>' +
+      '<div class="stat"><b>' + ITEMS.length + '</b><span>条待筛选：总结 ' + countSection("本周总结") + " · 计划 " + countSection("下周计划") + " · 风险 " + countSection("风险与求助") + "</span></div>" +
+      '<div class="stat"><b>' + state.projects.length + '</b><span>个报送项目（可配置，各自一份草稿）</span></div>' +
+      "</div>" +
+      '<div class="projects-row"><span>报送项目</span>' +
+      state.projects.map((p) => '<span class="proj-pill">' + esc(p.name) + "</span>").join("") +
+      '<button class="link-btn" data-act="config" style="margin-left:4px">配置</button></div>' +
+      progress +
+      '<div class="intro-actions">' +
+      '<button class="btn-primary" data-act="' + primaryAct + '">' + primaryLabel + "</button>" +
+      '<button class="btn" data-act="config">项目设置</button>' +
+      '<button class="btn" data-act="help">键盘说明</button>' +
+      "</div>" +
+      '<p class="footnote">交互原型 · 示例数据 · 进度保存在本机浏览器；项目可随时增删，明年只剩 1 个项目时删掉多余的即可。</p>' +
+      "</div>";
+  }
+
+  /* ============================== 渲染：第 1 步队列 ============================== */
+  function renderQueue() {
+    const list = filteredItems();
+    const sectionTotal = list.length;
+    const sectionDone = list.filter((i) => state.decisions[i.id]).length;
+    const head =
+      '<div class="queue-head">' +
+      '<div class="queue-title"><b>' + state.filter + '</b><span>已判 ' + sectionDone + " / " + sectionTotal + "</span></div>" +
+      '<div class="filters">' +
+      SECTIONS.map((f) => {
+        const items = sectionItems(f);
+        const done = items.filter((i) => state.decisions[i.id]).length;
+        return '<button class="filter ' + (state.filter === f ? "is-on" : "") + '" data-filter="' + f + '">' +
+          filterShortName(f) + " " + done + "/" + items.length + "</button>";
+      }).join("") +
+      "</div></div>";
+
+    const groups = PEOPLE.map((p) => ({ person: p, items: list.filter((i) => i.personId === p.id) })).filter((g) => g.items.length);
+
+    let body = '<div class="queue-body">';
+    if (!groups.length) body += '<div class="queue-empty">这一栏没有条目。</div>';
+    groups.forEach((g) => {
+      const done = g.items.filter((i) => state.decisions[i.id]).length;
+      body += '<div class="member"><div class="member-head"><b>' + esc(g.person.name) + "</b><span>" + done + " / " + g.items.length + "</span></div>";
+      g.items.forEach((i) => {
+        const d = state.decisions[i.id];
+        const cls = d ? d.dec : "";
+        const mark = !d ? "○" : d.dec === "accept" ? "●" : d.dec === "reject" ? "✕" : "–";
+        const proj = d && d.dec === "accept" ? projectById(d.project) : null;
+        body +=
+          '<button class="qitem ' + cls + (i.id === state.currentId ? " is-current" : "") + '" data-goto="' + i.id + '">' +
+          '<span class="qmark ' + cls + '">' + mark + "</span>" +
+          '<span class="qtext"><span>' + esc(i.text) + "</span>" +
+          '<span class="qsub">' + i.section + " · " + esc(i.domain) + (proj ? " · " + esc(proj.name) : "") + "</span></span>" +
+          "</button>";
+      });
+      body += "</div>";
+    });
+    body += "</div>";
+
+    const perProject = state.projects.map((p) => esc(p.name) + " " + acceptedItems(p.id).length).join(" · ");
+    const summaryText =
+      state.projects.length > 1
+        ? perProject + " · 移除 " + rejectedItems().length + " · 待定 " + skippedItems().length
+        : "采纳 " + acceptedTotal() + " · 移除 " + rejectedItems().length + " · 待定 " + skippedItems().length;
+    const foot = '<div class="queue-foot"><span>' + summaryText + "</span></div>";
+
+    $("#queue").innerHTML = head + body + foot;
+    const current = $("#queue .qitem.is-current");
+    if (current) current.scrollIntoView({ block: "nearest" });
+  }
+
+  /* ============================== 渲染：第 1 步卡片 ============================== */
+  function renderFocus() {
+    const it = itemById(state.currentId) || ITEMS[0];
+    if (!it) return;
+    const person = personById(it.personId);
+    const d = state.decisions[it.id] || null;
+    const fresh = state._lastFocusId !== it.id;
+    state._lastFocusId = it.id;
+
+    const globalIdx = ITEMS.findIndex((i) => i.id === it.id) + 1;
+    const projectChips = state.projects
+      .map((p, idx) => {
+        const isChosen = d && d.dec === "accept" && d.project === p.id;
+        const kbd = state.projects.length === 1 ? "↵" : String(idx + 1);
+        const label = state.projects.length === 1 ? "采纳 · " + esc(p.name) : esc(p.name);
+        return (
+          '<button class="seal-btn' + (isChosen ? " is-chosen" : "") + (state.projects.length === 1 ? " is-single" : "") +
+          '" data-project="' + p.id + '"><kbd>' + kbd + "</kbd>" + label + "</button>"
+        );
+      })
+      .join("");
+
+    let decidedNote = "";
+    if (d) {
+      const proj = d.project ? projectById(d.project) : null;
+      if (d.dec === "accept") {
+        decidedNote = '<div class="decided-note is-accept">已放入「' + esc(proj ? proj.name : "已删除的项目") + "」 · 按项目键可改，U 撤销</div>";
+      } else if (d.dec === "reject") {
+        decidedNote = '<div class="decided-note is-reject">已移除 · 仍留在「已移除」里，随时可恢复</div>';
+      } else {
+        decidedNote = '<div class="decided-note is-skip">已待定 · 不会自动进任何项目的草稿，预览时可以回去处理</div>';
+      }
+    }
+
+    const excerpt = state.excerptOpen
+      ? '<div class="excerpt">' +
+        '<div class="ex-head"><span>' + esc(person.name) + " 的归一稿 · 已定稿 · 只读</span><span>当前条目高亮</span></div>" +
+        draftHTML(it.personId, it.id) +
+        "</div>"
+      : "";
+
+    const hint =
+      state.projects.length === 1
+        ? "按 ↵ 采纳并放入「" + esc(state.projects[0].name) + "」；移除和待定随时可撤销。"
+        : "点项目名或用数字键 = 采纳并归入该项目；移除和待定随时可撤销。";
+
+    const last = state.lastAction ? "上次：" + esc(state.lastAction.text) : "一条一条过，决定会立刻记下";
+
+    const card =
+      '<div class="deck">' +
+      '<article class="card' + (fresh ? " is-fresh" : "") + '" id="card">' +
+      '<span class="card-index">第 ' + globalIdx + " / " + ITEMS.length + " 条</span>" +
+      '<div class="card-meta">' +
+      '<span class="avatar">' + esc(person.name.charAt(0)) + "</span>" +
+      '<span class="who">' + esc(person.name) + "</span>" +
+      '<span class="pill">' + it.section + "</span>" +
+      '<span class="pill is-domain">' + esc(it.domain) + "</span>" +
+      '<span class="src-note">组员原文 · 按条</span>' +
+      "</div>" +
+      decidedNote +
+      '<div class="card-text">' + esc(it.text) + "</div>" +
+      '<div class="excerpt-toggle-row"><button class="link-btn" data-act="excerpt">' +
+      (state.excerptOpen ? "收起原文" : "看原文") + " <kbd>E</kbd></button></div>" +
+      excerpt +
+      '<div class="actions">' +
+      '<span class="action-label">' + (state.projects.length === 1 ? "" : "归入") + "</span>" +
+      '<span class="project-chips">' + projectChips + "</span>" +
+      '<span class="secondary-actions">' +
+      '<button class="ghost-btn is-danger" data-decide="reject">移除 <kbd>X</kbd></button>' +
+      '<button class="ghost-btn" data-decide="skip">待定 <kbd>空格</kbd></button>' +
+      "</span>" +
+      "</div>" +
+      '<p class="action-hint">' + hint + "</p>" +
+      "</article></div>" +
+      '<div class="focus-foot">' +
+      '<div class="last"><span>' + last + "</span>" +
+      '<button class="link-btn" data-act="undo">撤销 <kbd>U</kbd></button></div>' +
+      '<div class="hints">' +
+      '<span class="hk"><kbd>↑</kbd><kbd>↓</kbd> 翻看</span>' +
+      '<span class="hk"><kbd>E</kbd> 原文</span>' +
+      '<span class="hk"><kbd>U</kbd> 撤销</span>' +
+      '<span class="hk"><kbd>?</kbd> 键盘</span>' +
+      "</div></div>";
+
+    $("#focus").innerHTML = '<div class="focus-scroll"><div class="focus-inner">' + card + "</div></div>";
+  }
+
+  function draftHTML(personId, hitId) {
+    let html = "";
+    SECTIONS.forEach((sec) => {
+      const list = ITEMS.filter((i) => i.personId === personId && i.section === sec);
+      if (!list.length) return;
+      html += '<div class="ex-h">## ' + sec + "</div>";
+      list.forEach((i) => {
+        html += '<div class="ex-line' + (i.id === hitId ? " is-hit" : "") + '">- 【' + esc(i.domain) + "】" + esc(i.text) + "</div>";
+      });
+    });
+    return html;
+  }
+
+  /* ============================== 渲染：第 2 步预览 ============================== */
+  function renderPreview() {
+    const rejected = rejectedItems();
+    const skipped = skippedItems();
+    const accepted = acceptedTotal();
+    const stale = staleDrafts().length;
+    const drafts = Object.keys(state.drafts).length;
+
+    const poolItem = (i, extra) => {
+      return (
+        '<button class="pool-item' + (extra || "") + '" draggable="true" data-item-id="' + i.id + '" data-goto="' + i.id + '">' +
+        '<span class="drag-grip" title="拖动换项目">⠿</span>' +
+        '<span class="pi-src">' + esc(personById(i.personId).name) + "</span>" +
+        '<span class="pi-text">' + esc(i.text) + "</span></button>"
+      );
+    };
+    const sectionBlock = (list, sec) => {
+      const items = list.filter((i) => i.section === sec);
+      if (!items.length) return "";
+      return '<div class="pool-section"><h4>' + sec + '<span>' + items.length + " 条</span></h4>" +
+        items.map((i) => poolItem(i)).join("") + "</div>";
+    };
+
+    const pools = state.projects
+      .map((p) => {
+        const items = acceptedItems(p.id);
+        const blocks = SECTIONS.map((sec) => sectionBlock(items, sec)).filter(Boolean).join("");
+        const rows = items.length ? blocks : '<div class="pool-empty">还没有归入这个项目的条目。</div>';
+        return (
+          '<div class="pool is-droppable" data-drop-project="' + p.id + '">' +
+          '<div class="pool-head"><h3>' + esc(p.name) + '</h3><span class="count">' + items.length + " 条</span></div>" +
+          '<div class="meta">这些条目会进入该项目的独立草稿 · <button class="link-btn" data-act="preview-project" data-proj-id="' + p.id + '">报告预览</button></div>' +
+          rows + "</div>"
+        );
+      })
+      .join("");
+
+    const rejectedRows = rejected.length
+      ? rejected.map((i) => poolItem(i, " is-rejected")).join("")
+      : '<div class="pool-empty">没有移除的条目。</div>';
+
+    const skippedRows = skipped.length
+      ? skipped.map((i) => poolItem(i)).join("")
+      : '<div class="pool-empty">没有待定的条目。</div>';
+
+    const staleNote = stale
+      ? '<div class="report-note">筛选结果改过了：已有 ' + stale + " 份草稿基于旧候选，进入第 3 步后可逐份重新生成。</div>"
+      : "";
+    const skippedNote = skipped.length
+      ? '<div class="report-note">' + skipped.length + " 条待定没有进入任何项目的候选。</div>"
+      : "";
+
+    $("#screen-preview").innerHTML =
+      '<div class="summary"><div class="summary-inner">' +
+      '<div class="eyebrow">第 2 步 · ' + WEEK + " · 框架组</div>" +
+      "<h1>项目分拣预览</h1>" +
+      '<p class="lede">' + ITEMS.length + " 条已过完：" + accepted + " 条进入候选（按项目分开），" + rejected.length + " 条移除，" + skipped.length + " 条待定。" +
+      "这里可以<b>直接拖动条目</b>，在项目 / 待定 / 已移除之间调整；点条目则回到第 1 步改判。确认后进入第 3 步，按项目分别生成独立草稿。</p>" +
+      '<div class="summary-stats">' +
+      '<div class="sumcard is-accept"><b>' + accepted + '</b><span>条候选 · 按项目分开</span></div>' +
+      '<div class="sumcard is-reject"><b>' + rejected.length + '</b><span>条已移除 · 可恢复</span></div>' +
+      '<div class="sumcard is-skip"><b>' + skipped.length + '</b><span>条待定 · 不带入</span></div>' +
+      '<div class="sumcard"><b>' + drafts + '</b><span>份已有草稿</span></div>' +
+      "</div>" +
+      '<div class="summary-grid">' + pools +
+      '<div class="pool is-droppable" data-drop-decision="reject"><div class="pool-head"><h3>已移除</h3><span class="count">' + rejected.length + ' 条</span></div><div class="meta">拖到这里 = 移除；点条目回第 1 步</div>' + rejectedRows + "</div>" +
+      '<div class="pool is-droppable" data-drop-decision="skip"><div class="pool-head"><h3>待定</h3><span class="count">' + skipped.length + ' 条</span></div><div class="meta">拖到这里 = 待定；不会自动进任何项目</div>' + skippedRows + "</div>" +
+      "</div>" +
+      staleNote + skippedNote +
+      '<p class="summary-tip">拖动只在项目之间调整归口，不改草稿内容；已有草稿的项目会标「候选已更新」。下一步会为每个项目生成一份独立草稿；草稿已在的项目不会覆盖。</p>' +
+      "</div></div>";
+  }
+
+  function markdownLite(text) {
+    const lines = String(text).split("\n");
+    let html = "";
+    let inList = false;
+    const closeList = () => {
+      if (inList) {
+        html += "</ul>";
+        inList = false;
+      }
+    };
+    lines.forEach((line) => {
+      if (/^##\s+/.test(line)) {
+        closeList();
+        html += "<h2>" + esc(line.replace(/^##\s+/, "")) + "</h2>";
+      } else if (/^-\s+/.test(line)) {
+        if (!inList) {
+          html += "<ul>";
+          inList = true;
+        }
+        html += "<li>" + esc(line.replace(/^-\s+/, "")) + "</li>";
+      } else if (line.trim() === "") {
+        closeList();
+      } else {
+        closeList();
+        html += "<p>" + esc(line) + "</p>";
+      }
+    });
+    closeList();
+    return html;
+  }
+
+  function renderPreviewModal() {
+    const pid = state.previewProject;
+    const p = projectById(pid);
+    if (!p) return;
+    const content = buildProjectReport(pid);
+    const items = acceptedItems(pid);
+    $("#modal").innerHTML =
+      '<div class="modal-card is-wide">' +
+      '<div class="preview-head"><div>' +
+      '<div class="eyebrow">候选稿预览 · 未定稿</div>' +
+      "<h2>" + esc(p.name) + " · " + WEEK + "</h2>" +
+      '<p class="sub">' + items.length + " 条候选 · 只按「栏目 → 条目」排版，不调 AI、不改措辞；正文不含姓名。</p>" +
+      "</div><button class=\"icon-btn\" data-act=\"close-preview\" title=\"关闭\">✕</button></div>" +
+      '<div class="md-preview">' + markdownLite(content) + "</div>" +
+      '<div class="modal-foot"><button class="btn" data-act="close-preview">关闭</button>' +
+      '<button class="btn-primary" data-act="edit-project" data-proj-id="' + pid + '">去整理这份</button></div>' +
+      "</div>";
+  }
+
+  /* ============================== 渲染：第 3 步整理 ============================== */
+  function renderReports() {
+    if (!state.projects.length) return;
+    if (!state.activeProject || !projectById(state.activeProject)) state.activeProject = state.projects[0].id;
+    const p = projectById(state.activeProject);
+    const d = state.drafts[p.id] || null;
+    const st = draftStatus(p.id);
+    const items = acceptedItems(p.id);
+    const stale = d && d.sourceHash !== candidateHash(p.id);
+    const readOnly = Boolean(d && d.finalized);
+    const sourceCount = sourceNames(p.id).length;
+
+    const rows = state.projects
+      .map((pr) => {
+        const dr = state.drafts[pr.id];
+        const s = draftStatus(pr.id);
+        const count = acceptedItems(pr.id).length;
+        return (
+          '<button class="report-list-item' + (pr.id === p.id ? " is-active" : "") + '" data-act="select-project" data-proj-id="' + pr.id + '">' +
+          '<span class="pr-name">' + esc(pr.name) + '<span class="pr-count">' + count + " 条</span></span>" +
+          '<span class="pr-status ' + s.cls + '">' + esc(s.text) + "</span>" +
+          "</button>"
+        );
+      })
+      .join("");
+
+    const banner = stale
+      ? '<div class="re-banner"><span>' + (readOnly
+          ? "筛选结果有更新；这份已定稿，如需重做先取消定稿。"
+          : "筛选结果有更新，这份草稿基于旧候选。") + "</span>" +
+        (readOnly ? "" : '<button class="link-btn" data-act="regen-draft">按当前候选重新生成</button>') + "</div>"
+      : "";
+
+    const body = d
+      ? '<textarea id="draft-editor" class="draft-editor" spellcheck="false"' + (readOnly ? " readonly" : "") + ">" + esc(d.content) + "</textarea>"
+      : '<div class="re-empty"><span>还没有为这个项目生成草稿。</span><button class="btn-primary" data-act="regen-draft">生成草稿</button></div>';
+
+    $("#screen-reports").innerHTML =
+      '<div class="reports">' +
+      '<aside class="report-list">' +
+      '<div class="rl-head"><b>' + state.projects.length + " 个项目</b><span>每份独立保存</span></div>" +
+      '<div class="report-list-body">' + rows + "</div>" +
+      '<div class="rl-foot">草稿是 Markdown，各自一份；定稿后只读。</div>' +
+      "</aside>" +
+      '<section class="report-editor">' +
+      '<div class="re-head">' +
+      "<div>" +
+      '<div class="eyebrow">第 3 步 · 各项目组报</div>' +
+      "<h2>" + esc(p.name) + " · " + WEEK + "</h2>" +
+      '<div class="re-meta">' + items.length + " 条候选" +
+      (sourceCount ? " · 来源 " + sourceCount + " 位组员" : "") +
+      ' · <span id="draft-status" class="re-status ' + st.cls + '">' + esc(st.text) + "</span>" +
+      "</div></div>" +
+      '<div class="re-actions">' +
+      '<button id="btn-save-draft" class="btn btn-primary" data-act="save-draft"' + (readOnly || !d ? " disabled" : "") + ">保存 <kbd>⌘S</kbd></button>" +
+      '<button class="btn" data-act="toggle-final"' + (!d ? " disabled" : "") + ">" + (readOnly ? "取消定稿" : "定稿") + "</button>" +
+      '<button class="btn btn-ghost" data-act="export-draft">导出</button>' +
+      '<button class="btn btn-ghost" data-act="copy-draft">复制飞书</button>' +
+      "</div></div>" +
+      banner +
+      body +
+      '<div class="re-foot"><span>每个项目单独一份草稿（draft），独立保存，互不影响。</span>' +
+      '<span id="draft-foot-hint">' + (readOnly ? "已定稿，取消定稿后才能改。" : d && d.dirty ? "当前有未保存修改；按 ⌘S 保存。" : "编辑后按 ⌘S 或点保存。") + "</span></div>" +
+      "</section></div>";
+  }
+
+  function refreshDraftChrome() {
+    const pid = state.activeProject;
+    const d = state.drafts[pid];
+    if (!d) return;
+    const st = draftStatus(pid);
+    const status = $("#draft-status");
+    if (status) {
+      status.textContent = st.text;
+      status.className = "re-status " + st.cls;
+    }
+    const saveBtn = $("#btn-save-draft");
+    if (saveBtn) saveBtn.disabled = d.finalized || !d.dirty;
+    const hint = $("#draft-foot-hint");
+    if (hint) hint.textContent = d.finalized ? "已定稿，取消定稿后才能改。" : d.dirty ? "当前有未保存修改；按 ⌘S 保存。" : "编辑后按 ⌘S 或点保存。";
+    const row = document.querySelector('.report-list-item[data-proj-id="' + pid + '"] .pr-status');
+    if (row) {
+      row.textContent = st.text;
+      row.className = "pr-status " + st.cls;
+    }
+    renderStepper();
+  }
+
+  /* ============================== 渲染 ============================== */
+  function render() {
+    document.body.dataset.screen = state.screen;
+    renderTopbar();
+    renderStepper();
+    if (state.screen === "intro") {
+      renderIntro();
+    } else if (state.screen === "triage") {
+      renderQueue();
+      renderFocus();
+    } else if (state.screen === "preview") {
+      renderPreview();
+    } else if (state.screen === "reports") {
+      renderReports();
+    }
+    if (document.body.classList.contains("config-open")) renderDrawer();
+  }
+
+  /* ============================== 步骤导航 ============================== */
+  function goStep(n) {
+    if (n === 1) {
+      state.screen = "triage";
+      state._lastFocusId = null;
+      state.excerptOpen = false;
+      render();
+      return;
+    }
+    if (!allJudged()) {
+      toast("还有 " + undecidedCount() + " 条未判，先过完再进入这一步");
+      return;
+    }
+    if (n === 2) {
+      state.screen = "preview";
+      render();
+      return;
+    }
+    if (!Object.keys(state.drafts).length) {
+      toast("先在「项目分拣预览」确认，再开始整理周报");
+      return;
+    }
+    state.screen = "reports";
+    render();
+  }
+
+  function startReports() {
+    if (!allJudged()) {
+      toast("还有 " + undecidedCount() + " 条未判，先过完再进入这一步");
+      return;
+    }
+    ensureDrafts();
+    state.screen = "reports";
+    render();
+  }
+
+  function startOrResume() {
+    const section = SECTIONS.find((sec) => firstUndecidedInSection(sec)) || SECTIONS[0];
+    const next = firstUndecidedInSection(section) || sectionItems(section)[0];
+    state.screen = "triage";
+    state.filter = section;
+    if (next) state.currentId = next.id;
+    state._lastFocusId = null;
+    state.excerptOpen = false;
+    render();
+  }
+
+  /* ============================== 第 1 步交互 ============================== */
+  let resetArmed = false;
+
+  function setFilter(f) {
+    state.filter = f;
+    const list = filteredItems();
+    const firstUndecided = list.find((i) => !state.decisions[i.id]);
+    state.currentId = (firstUndecided || list[0]).id;
+    state.excerptOpen = false;
+    render();
+  }
+
+  function gotoItem(id) {
+    if (!itemById(id)) return;
+    state.screen = "triage";
+    state.currentId = id;
+    state.filter = itemById(id).section;
+    state.excerptOpen = false;
+    render();
+  }
+
+  function move(delta) {
+    if (state._animating) return;
+    const list = filteredItems();
+    if (!list.length) return;
+    let idx = list.findIndex((i) => i.id === state.currentId);
+    if (idx < 0) idx = 0;
+    idx = Math.max(0, Math.min(list.length - 1, idx + delta));
+    state.currentId = list[idx].id;
+    state.excerptOpen = false;
+    render();
+  }
+
+  function decide(dec, projectId) {
+    if (state.screen !== "triage" || state._animating) return;
+    const it = itemById(state.currentId);
+    if (!it) return;
+    if (dec === "accept") {
+      if (!projectId) {
+        if (state.projects.length === 1) projectId = state.projects[0].id;
+        else {
+          toast("先按 1 / 2 选择项目，或点一下项目名");
+          return;
+        }
+      }
+      if (!projectById(projectId)) return;
+    }
+    const wasDecided = Boolean(state.decisions[it.id]);
+    const prev = wasDecided ? { ...state.decisions[it.id] } : null;
+    state.decisions[it.id] = { dec: dec, project: dec === "accept" ? projectId : null, at: Date.now() };
+    state.history.push({ id: it.id, prev: prev });
+    const person = personById(it.personId);
+    const proj = dec === "accept" ? projectById(projectId) : null;
+    state.lastAction = {
+      text:
+        dec === "accept"
+          ? "放入「" + (proj ? proj.name : "项目") + "」· " + person.name
+          : dec === "reject"
+          ? "移除 · " + person.name
+          : "待定 · " + person.name,
+      id: it.id,
+    };
+    saveLocal();
+
+    const card = document.getElementById("card");
+    if (card && !prefersReduced()) {
+      card.classList.add(dec === "accept" ? "is-out-right" : dec === "reject" ? "is-out-left" : "is-out-down");
+    }
+    state._animating = true;
+    window.setTimeout(
+      function () {
+        state._animating = false;
+        advanceAfter(it, wasDecided);
+        render();
+      },
+      card && !prefersReduced() ? 160 : 0
+    );
+  }
+
+  function advanceAfter(it, wasDecided) {
+    if (wasDecided) {
+      const list = filteredItems();
+      const idx = list.findIndex((i) => i.id === it.id);
+      if (idx >= 0 && idx + 1 < list.length) {
+        state.currentId = list[idx + 1].id;
+        state.excerptOpen = false;
+        return;
+      }
+      toast("「" + state.filter + "」已回看完毕");
+      return;
+    }
+    const next = nextUndecidedInSection(it.id);
+    if (next) {
+      state.currentId = next.id;
+      state.excerptOpen = false;
+      return;
+    }
+    const nextSection = nextSectionWithUndecided(state.filter);
+    if (nextSection) {
+      const sectionMessage = "「" + state.filter + "」已过完，进入「" + nextSection + "」";
+      state.filter = nextSection;
+      state.currentId = firstUndecidedInSection(nextSection).id;
+      state.excerptOpen = false;
+      toast(sectionMessage);
+      return;
+    }
+    state.screen = "preview";
+    state.excerptOpen = false;
+    toast("筛选完成，进入「项目分拣预览」");
+  }
+
+  function undo() {
+    if (state._animating) return;
+    const h = state.history.pop();
+    if (!h) {
+      toast("没有可撤销的操作");
+      return;
+    }
+    if (h.prev) state.decisions[h.id] = h.prev;
+    else delete state.decisions[h.id];
+    saveLocal();
+    state.screen = "triage";
+    state.currentId = h.id;
+    state.filter = itemById(h.id).section;
+    state.excerptOpen = false;
+    state._lastFocusId = null;
+    state.lastAction = null;
+    toast("已撤销上一步");
+    render();
+  }
+
+  /* ============================== 第 3 步交互 ============================== */
+  function saveActiveDraft() {
+    const pid = state.activeProject;
+    const d = state.drafts[pid];
+    if (!d || d.finalized) return false;
+    d.savedContent = d.content;
+    d.savedAt = Date.now();
+    d.dirty = false;
+    saveLocal();
+    return true;
+  }
+
+  function saveAllDrafts() {
+    const list = dirtyDrafts();
+    if (!list.length) {
+      toast("没有未保存的草稿");
+      return;
+    }
+    list.forEach((p) => {
+      const d = state.drafts[p.id];
+      d.savedContent = d.content;
+      d.savedAt = Date.now();
+      d.dirty = false;
+    });
+    saveLocal();
+    renderReports();
+    renderStepper();
+    toast("已保存 " + list.length + " 份草稿");
+  }
+
+  function toggleFinal() {
+    const pid = state.activeProject;
+    const d = state.drafts[pid];
+    if (!d) {
+      toast("先生成这个项目的草稿");
+      return;
+    }
+    if (!d.finalized) {
+      if (d.dirty) {
+        saveActiveDraft();
+      }
+      d.finalized = true;
+      saveLocal();
+      renderReports();
+      renderStepper();
+      toast("已定稿：" + projectById(pid).name + "。取消定稿后才能再改。");
+    } else {
+      d.finalized = false;
+      saveLocal();
+      renderReports();
+      renderStepper();
+      toast("已取消定稿：" + projectById(pid).name);
+    }
+  }
+
+  function regenerateDraft(pid) {
+    const p = projectById(pid);
+    if (!p) return;
+    const d = state.drafts[pid];
+    if (!d) {
+      state.drafts[pid] = newDraft(pid);
+      state.regenArmed = null;
+      saveLocal();
+      renderReports();
+      renderStepper();
+      toast("已为「" + p.name + "」生成草稿");
+      return;
+    }
+    if (d.finalized) {
+      toast("已定稿，先取消定稿再重新生成");
+      return;
+    }
+    if (d.content !== d.generatedContent && state.regenArmed !== pid) {
+      state.regenArmed = pid;
+      toast("再点一次：用当前候选覆盖这份草稿，人工修改会丢");
+      window.setTimeout(function () {
+        if (state.regenArmed === pid) state.regenArmed = null;
+      }, 3000);
+      return;
+    }
+    state.drafts[pid] = newDraft(pid);
+    state.regenArmed = null;
+    saveLocal();
+    renderReports();
+    renderStepper();
+    toast("已按当前候选重新生成「" + p.name + "」");
+  }
+
+  function finishFlow() {
+    if (dirtyDrafts().length) {
+      dirtyDrafts().forEach((p) => {
+        const d = state.drafts[p.id];
+        d.savedContent = d.content;
+        d.savedAt = Date.now();
+        d.dirty = false;
+      });
+      saveLocal();
+    }
+    state.screen = "intro";
+    state._lastFocusId = null;
+    render();
+    const drafts = Object.keys(state.drafts).length;
+    const finals = state.projects.filter((p) => state.drafts[p.id] && state.drafts[p.id].finalized).length;
+    toast("本周周报已整理：" + drafts + " 份草稿" + (finals ? "（" + finals + " 份已定稿）" : "") + "。可在入口继续修改。");
+  }
+
+  function exportDraft() {
+    const p = projectById(state.activeProject);
+    toast("原型示意：导出「" + (p ? p.name : "项目") + "」的组报 Markdown，单独一份文件");
+  }
+  function copyDraft() {
+    const p = projectById(state.activeProject);
+    toast("原型示意：复制「" + (p ? p.name : "项目") + "」为飞书格式，单独一份");
+  }
+
+  /* ============================== 抽屉 / 弹层 / 提示 ============================== */
+  function openConfig() {
+    document.body.classList.add("config-open");
+    renderDrawer();
+  }
+  function closeConfig() {
+    document.body.classList.remove("config-open");
+  }
+  function openHelp() {
+    renderHelp();
+    document.body.classList.add("help-open");
+  }
+  function closeHelp() {
+    document.body.classList.remove("help-open");
+  }
+  function openPreviewModal(pid) {
+    state.previewProject = pid;
+    document.body.classList.add("preview-open");
+    renderPreviewModal();
+  }
+  function closePreviewModal() {
+    state.previewProject = null;
+    document.body.classList.remove("preview-open");
+  }
+
+  function renderDrawer() {
+    const rows = state.projects
+      .map((p, idx) => {
+        return (
+          '<div class="proj-row">' +
+          '<span class="proj-idx">' + (idx + 1) + "</span>" +
+          '<input data-proj-id="' + p.id + '" value="' + esc(p.name) + '" maxlength="20" spellcheck="false" />' +
+          '<button class="icon-btn is-danger" data-act="remove-project" data-proj-id="' + p.id + '" title="删除项目（已分到它的条目退回待定）">✕</button>' +
+          "</div>"
+        );
+      })
+      .join("");
+    const add =
+      state.projects.length < 4
+        ? '<button class="add-proj" data-act="add-project">+ 添加项目</button>'
+        : '<div class="note-box">最多 4 个报送项目。</div>';
+
+    $("#drawer").innerHTML =
+      '<div class="drawer-head"><div><h2>报送项目</h2><p>筛选时每条事项归入一个项目；第 3 步每个项目单独一份草稿、单独保存。</p></div>' +
+      '<button class="icon-btn" data-act="close-config" title="关闭">✕</button></div>' +
+      '<div class="drawer-body">' + rows + add +
+      '<div class="note-box"><b>只配置 1 个项目时：</b>筛选界面不出现项目选择，按 ↵ 直接采纳；第 3 步只有一份草稿。</div>' +
+      '<div class="note-box"><b>删除项目不会静默改归属：</b>已经分到该项目的条目会退回「待定」，需要重新过一遍。</div>' +
+      '<div class="note-box"><b>编号只是快捷键：</b>项目名可随时改，快捷键按当前顺序重新编号。</div>' +
+      '<div class="drawer-foot"><button class="link-btn" data-act="reset">清空筛选与各项目草稿，重新开始</button></div>' +
+      "</div>";
+  }
+
+  function renderHelp() {
+    $("#modal").innerHTML =
+      '<div class="modal-card"><h2>键盘</h2>' +
+      '<p class="sub">第 1 步：先过「本周总结」，再过「下周计划」，一条按一次键；第 2 步可以直接拖动条目换项目；第 3 步按 ⌘S 保存当前项目草稿。</p>' +
+      '<div class="keyrow"><span>放进第 N 个项目的候选</span><span class="keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span></div>' +
+      '<div class="keyrow"><span>只有一个项目时直接采纳</span><span class="keys"><kbd>↵</kbd></span></div>' +
+      '<div class="keyrow"><span>移除（留在「已移除」可恢复）</span><span class="keys"><kbd>X</kbd><kbd>⌫</kbd></span></div>' +
+      '<div class="keyrow"><span>待定，先不做决定</span><span class="keys"><kbd>空格</kbd></span></div>' +
+      '<div class="keyrow"><span>上一条 / 下一条</span><span class="keys"><kbd>↑</kbd><kbd>↓</kbd><kbd>K</kbd><kbd>J</kbd></span></div>' +
+      '<div class="keyrow"><span>展开 / 收起组员原文</span><span class="keys"><kbd>E</kbd></span></div>' +
+      '<div class="keyrow"><span>撤销上一步</span><span class="keys"><kbd>U</kbd><kbd>⌘Z</kbd></span></div>' +
+      '<div class="keyrow"><span>保存当前项目草稿</span><span class="keys"><kbd>⌘S</kbd></span></div>' +
+      '<div class="keyrow"><span>关闭 / 返回上一步</span><span class="keys"><kbd>Esc</kbd></span></div>' +
+      '<p class="sub" style="margin:14px 0 0">鼠标：点项目名 = 采纳；点左侧任意条目 = 跳过去改判；第 2 步拖动条目 = 换项目 / 待定 / 移除；点步骤条 = 回到某一步。</p>' +
+      '<div class="modal-foot"><button class="btn" data-act="close-help">知道了</button></div>' +
+      "</div>";
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("is-on");
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      el.classList.remove("is-on");
+    }, 2400);
+  }
+
+  function addProject() {
+    if (state.projects.length >= 4) {
+      toast("最多 4 个报送项目");
+      return;
+    }
+    state.projects.push({ id: "p" + (Date.now() % 100000), name: "新项目" });
+    saveLocal();
+    render();
+    renderDrawer();
+    const inputs = document.querySelectorAll(".proj-row input");
+    if (inputs.length) {
+      inputs[inputs.length - 1].focus();
+      inputs[inputs.length - 1].select();
+    }
+    toast("已添加项目，改个名字即可");
+  }
+
+  function removeProject(id) {
+    if (state.projects.length <= 1) {
+      toast("至少要保留 1 个项目");
+      return;
+    }
+    const proj = projectById(id);
+    if (!proj) return;
+    state.projects = state.projects.filter((p) => p.id !== id);
+    delete state.drafts[id];
+    let moved = 0;
+    Object.keys(state.decisions).forEach((itemId) => {
+      const d = state.decisions[itemId];
+      if (d.dec === "accept" && d.project === id) {
+        state.decisions[itemId] = { dec: "skip", project: null, at: Date.now() };
+        moved++;
+      }
+    });
+    if (state.activeProject === id) state.activeProject = state.projects[0].id;
+    saveLocal();
+    render();
+    renderDrawer();
+    toast(moved ? "已删除「" + proj.name + "」，" + moved + " 条已分到它的条目退回待定" : "已删除「" + proj.name + "」");
+  }
+
+  function requestReset() {
+    if (resetArmed) {
+      resetArmed = false;
+      resetAll();
+      return;
+    }
+    resetArmed = true;
+    toast("再点一次「重新开始」即可清空筛选与草稿");
+    window.setTimeout(function () {
+      resetArmed = false;
+    }, 3000);
+  }
+
+  function resetAll() {
+    state.decisions = {};
+    state.drafts = {};
+    state.history = [];
+    state.filter = "本周总结";
+    state.currentId = ITEMS[0].id;
+    state.lastAction = null;
+    state.screen = "intro";
+    state.activeProject = null;
+    state.previewProject = null;
+    state.regenArmed = null;
+    state._lastFocusId = null;
+    saveLocal();
+    closeConfig();
+    closePreviewModal();
+    render();
+    toast("已清空筛选与草稿");
+  }
+
+  /* ============================== 第 2 步拖拽 ============================== */
+  let dragItemId = null;
+  let dragEndedAt = 0;
+
+  function clearDropTargets() {
+    document.querySelectorAll(".pool.is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+    document.querySelectorAll(".pool-item.is-dragging").forEach((el) => el.classList.remove("is-dragging"));
+  }
+
+  function moveItemTo(itemId, target) {
+    const it = itemById(itemId);
+    const pool = target.closest("[data-drop-project],[data-drop-decision]");
+    if (!it || !pool) return;
+    const projId = pool.dataset.dropProject;
+    const dec = pool.dataset.dropDecision;
+    if (projId) {
+      const proj = projectById(projId);
+      if (!proj) return;
+      const d = state.decisions[it.id];
+      if (d && d.dec === "accept" && d.project === projId) {
+        toast("已经在「" + proj.name + "」");
+        return;
+      }
+      state.decisions[it.id] = { dec: "accept", project: projId, at: Date.now() };
+      toast("已移到「" + proj.name + "」");
+    } else if (dec === "reject" || dec === "skip") {
+      state.decisions[it.id] = { dec: dec, project: null, at: Date.now() };
+      toast(dec === "reject" ? "已移到「已移除」" : "已移到「待定」");
+    } else {
+      return;
+    }
+    saveLocal();
+    renderPreview();
+    renderStepper();
+  }
+
+  document.addEventListener("dragstart", (e) => {
+    const item = e.target.closest(".pool-item[data-item-id]");
+    if (!item) return;
+    dragItemId = item.dataset.itemId;
+    item.classList.add("is-dragging");
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragItemId);
+    }
+  });
+
+  document.addEventListener("dragend", () => {
+    clearDropTargets();
+    dragItemId = null;
+    dragEndedAt = Date.now();
+  });
+
+  document.addEventListener("dragover", (e) => {
+    const pool = e.target.closest("[data-drop-project],[data-drop-decision]");
+    if (!pool || !dragItemId) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+    if (!pool.classList.contains("is-drop-target")) {
+      clearDropTargets();
+      pool.classList.add("is-drop-target");
+    }
+  });
+
+  document.addEventListener("dragleave", (e) => {
+    const pool = e.target.closest("[data-drop-project],[data-drop-decision]");
+    if (pool && !pool.contains(e.relatedTarget)) pool.classList.remove("is-drop-target");
+  });
+
+  document.addEventListener("drop", (e) => {
+    const pool = e.target.closest("[data-drop-project],[data-drop-decision]");
+    if (!pool) return;
+    e.preventDefault();
+    const id = (e.dataTransfer && e.dataTransfer.getData("text/plain")) || dragItemId;
+    dragEndedAt = Date.now();
+    clearDropTargets();
+    if (id) moveItemTo(id, pool);
+  });
+
+  /* ============================== 事件 ============================== */
+  document.addEventListener("click", function (e) {
+    const target = e.target.closest("[data-act],[data-project],[data-decide],[data-goto],[data-filter]");
+    if (!target) return;
+    if (target.dataset.goto && Date.now() - dragEndedAt < 300) {
+      e.preventDefault();
+      return;
+    }
+
+    if (target.dataset.filter) {
+      setFilter(target.dataset.filter);
+      return;
+    }
+    if (target.dataset.goto) {
+      gotoItem(target.dataset.goto);
+      return;
+    }
+    if (target.dataset.project) {
+      decide("accept", target.dataset.project);
+      return;
+    }
+    if (target.dataset.decide) {
+      decide(target.dataset.decide);
+      return;
+    }
+
+    const act = target.dataset.act;
+    switch (act) {
+      case "start":
+      case "resume":
+        startOrResume();
+        break;
+      case "go-step":
+        goStep(Number(target.dataset.step));
+        break;
+      case "go-step2":
+        goStep(2);
+        break;
+      case "go-step3":
+        goStep(3);
+        break;
+      case "next-preview":
+        goStep(2);
+        break;
+      case "next-reports":
+        startReports();
+        break;
+      case "prev-step":
+        if (state.screen === "reports") goStep(2);
+        else if (state.screen === "preview") goStep(1);
+        break;
+      case "back-intro":
+        state.screen = "intro";
+        state._lastFocusId = null;
+        render();
+        break;
+      case "config":
+        openConfig();
+        break;
+      case "close-config":
+        closeConfig();
+        break;
+      case "help":
+        openHelp();
+        break;
+      case "close-help":
+        closeHelp();
+        break;
+      case "excerpt":
+        state.excerptOpen = !state.excerptOpen;
+        renderFocus();
+        break;
+      case "undo":
+        undo();
+        break;
+      case "add-project":
+        addProject();
+        break;
+      case "remove-project":
+        removeProject(target.dataset.projId);
+        break;
+      case "reset":
+        requestReset();
+        break;
+      case "preview-project":
+        openPreviewModal(target.dataset.projId);
+        break;
+      case "close-preview":
+        closePreviewModal();
+        break;
+      case "edit-project":
+        closePreviewModal();
+        state.activeProject = target.dataset.projId;
+        startReports();
+        break;
+      case "select-project":
+        state.activeProject = target.dataset.projId;
+        renderReports();
+        renderStepper();
+        break;
+      case "save-draft":
+        if (saveActiveDraft()) {
+          renderReports();
+          renderStepper();
+          toast("已保存「" + projectById(state.activeProject).name + "」");
+        }
+        break;
+      case "save-all":
+        saveAllDrafts();
+        break;
+      case "finish-flow":
+        finishFlow();
+        break;
+      case "toggle-final":
+        toggleFinal();
+        break;
+      case "regen-draft":
+        regenerateDraft(state.activeProject);
+        break;
+      case "export-draft":
+        exportDraft();
+        break;
+      case "copy-draft":
+        copyDraft();
+        break;
+      default:
+        break;
+    }
+  });
+
+  document.addEventListener("input", function (e) {
+    if (!e.target || e.target.id !== "draft-editor") return;
+    const d = state.drafts[state.activeProject];
+    if (!d || d.finalized) return;
+    d.content = e.target.value;
+    d.dirty = d.content !== d.savedContent;
+    saveLocal();
+    refreshDraftChrome();
+  });
+
+  document.addEventListener("change", function (e) {
+    const input = e.target.closest("input[data-proj-id]");
+    if (!input) return;
+    const p = projectById(input.dataset.projId);
+    if (!p) return;
+    const name = input.value.trim();
+    if (!name) {
+      input.value = p.name;
+      toast("项目名不能为空");
+      return;
+    }
+    if (name === p.name) return;
+    p.name = name;
+    saveLocal();
+    render();
+    renderDrawer();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    const inField = e.target && e.target.closest && e.target.closest("input, textarea");
+
+    if (inField && (e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "s") {
+      e.preventDefault();
+      if (state.screen === "reports" && saveActiveDraft()) {
+        renderReports();
+        renderStepper();
+        toast("已保存「" + projectById(state.activeProject).name + "」");
+      }
+      return;
+    }
+
+    if (!inField && (e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === "z") {
+      e.preventDefault();
+      undo();
+      return;
+    }
+
+    if (document.body.classList.contains("preview-open")) {
+      if (e.key === "Escape") closePreviewModal();
+      return;
+    }
+    if (document.body.classList.contains("help-open")) {
+      if (e.key === "Escape") closeHelp();
+      return;
+    }
+    if (document.body.classList.contains("config-open")) {
+      if (e.key === "Escape") closeConfig();
+      return;
+    }
+    if (inField) return;
+
+    if (e.key === "Escape") {
+      if (state.screen === "reports") goStep(2);
+      else if (state.screen === "preview") goStep(1);
+      else if (state.screen === "triage") {
+        state.screen = "intro";
+        render();
+      }
+      return;
+    }
+    if (e.key === "?") {
+      openHelp();
+      return;
+    }
+    if (state.screen !== "triage") return;
+
+    if (e.key === " ") {
+      e.preventDefault();
+      decide("skip");
+      return;
+    }
+    if (/^[1-9]$/.test(e.key)) {
+      const idx = Number(e.key) - 1;
+      if (state.projects[idx]) decide("accept", state.projects[idx].id);
+      else toast("没有第 " + e.key + " 个项目");
+      return;
+    }
+    if (e.key === "Enter") {
+      if (state.projects.length === 1) decide("accept", state.projects[0].id);
+      else toast("先按 1 / 2 选择项目，或点一下项目名");
+      return;
+    }
+    const key = String(e.key).toLowerCase();
+    if (key === "x" || e.key === "Backspace") {
+      e.preventDefault();
+      decide("reject");
+      return;
+    }
+    if (key === "u") {
+      undo();
+      return;
+    }
+    if (key === "e") {
+      state.excerptOpen = !state.excerptOpen;
+      renderFocus();
+      return;
+    }
+    if (e.key === "ArrowUp" || key === "k") {
+      e.preventDefault();
+      move(-1);
+      return;
+    }
+    if (e.key === "ArrowDown" || key === "j") {
+      e.preventDefault();
+      move(1);
+    }
+  });
+
+  /* ============================== 启动 ============================== */
+  loadLocal();
+  state.currentId = ITEMS[0].id;
+  render();
+
+  window.__triage = {
+    state: state,
+    items: ITEMS,
+    render: render,
+    goStep: goStep,
+    decide: decide,
+    undo: undo,
+    gotoItem: gotoItem,
+    setFilter: setFilter,
+    openConfig: openConfig,
+    closeConfig: closeConfig,
+    openHelp: openHelp,
+    closeHelp: closeHelp,
+    openPreviewModal: openPreviewModal,
+    closePreviewModal: closePreviewModal,
+    ensureDrafts: ensureDrafts,
+    renderReports: renderReports,
+    saveAll: saveAllDrafts,
+    resetAll: resetAll,
+    toast: toast,
+  };
+})();
+
+</script>
+</body>
+</html>

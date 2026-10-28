@@ -18,6 +18,10 @@
         ├── member-normalized/    # 组员周报的 AI 归一稿（草稿 / 定稿）
         │   └── <personId>.md
         ├── group/                # 组报（合并组员定稿，草稿 / 定稿）
+        │   ├── <组长 personId>.md
+        │   └── <项目 id>/        # 配置报送项目后，每个项目一份组报
+        │       └── <组长 personId>.md
+        ├── triage/               # 三步流程的逐条筛选记录（只有 front matter）
         │   └── <组长 personId>.md
         ├── lead-normalized/      # 组长周报原文的归一稿（结构同组报）
         │   └── <组长 personId>.md
@@ -505,3 +509,18 @@ App 侧栏第三个视图「周报」，服务是 `app/reportservice.go`（`Repo
   编辑、转组（新组 + 生效日期）、设为离职/恢复。
 - 前端监听 `report:changed` 事件自动刷新（App 自己写入或 CLI 外部改文件都会
   触发），刷新不打断正在打开的粘贴弹窗。
+
+## 三步流程与按项目组报（2026-10 新增）
+
+配置了 `reportProjects` 的工作台，可以在组报面板走「筛选 → 项目分拣预览 → 分别整理各项目
+周报」三步：
+
+- 筛选记录：`reports/<周>/triage/<组长>.md`，只有 front matter；每条记 `decision`
+  （accepted / rejected / skipped）与 `project`。
+- 按项目组报：`reports/<周>/group/<项目 id>/<组长>.md`，格式与普通组报相同，按项目独立
+  保存 / 定稿 / 导出；正文按「本周总结 / 下周计划 / 风险与求助」分节，不带姓名。
+- 索引里按项目组报的 `level = group/<项目 id>`，`report list` 不指定 level 时默认仍只列
+  member / lead。
+- 筛选读取组员归一稿的**草稿或定稿**，不要求先逐人定稿；组报定稿仍是导出/带入 SE 的闸门。
+- 项目配置在 `.kuibu/config.json` 的 `reportProjects`，最多 4 个；设计说明见
+  [design/report-triage.md](design/report-triage.md)。

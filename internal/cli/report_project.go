@@ -1,0 +1,138 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/axu4/kuibu/internal/store"
+)
+
+// reportProjects 实现 report projects：列出报送项目。
+func reportProjects(args []string, common *commonFlags, stdout, stderr io.Writer, env func(string) string) error {
+	fs := newFlagSet("report projects")
+	addCommonFlags(fs, common)
+	pos, err := parseCommand(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("report projects 不接受位置参数")
+	}
+	ws, err := resolveWorkspace(common, env)
+	if err != nil {
+		return err
+	}
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return err
+	}
+	if common.json {
+		return writeJSON(stdout, projects)
+	}
+	if len(projects) == 0 {
+		fmt.Fprintln(stdout, "还没有配置报送项目（report project add <名称>）")
+		return nil
+	}
+	for i, p := range projects {
+		fmt.Fprintf(stdout, "%d. %s  (%s)\n", i+1, p.Name, p.ID)
+	}
+	return nil
+}
+
+// reportProject 实现 report project add|rename|rm。
+func reportProject(args []string, common *commonFlags, stdout, stderr io.Writer, env func(string) string) error {
+	if len(args) == 0 {
+		return usagef("report project 需要子命令: add|rename|rm")
+	}
+	sub, rest := args[0], args[1:]
+	fs := newFlagSet("report project " + sub)
+	addCommonFlags(fs, common)
+	yes := fs.Bool("yes", false, "确认删除项目（连带影响筛选记录）")
+	pos, err := parseCommand(fs, rest)
+	if err != nil {
+		return err
+	}
+	ws, err := resolveWorkspace(common, env)
+	if err != nil {
+		return err
+	}
+	switch sub {
+	case "add":
+		if err := requireArgs(pos, 1, "用法: kuibu report project add <名称>"); err != nil {
+			return err
+		}
+		projects, project, err := ws.AddReportProject(pos[0])
+		if err != nil {
+			return err
+		}
+		if common.json {
+			return writeJSON(stdout, map[string]any{"projects": projects, "project": project})
+		}
+		fmt.Fprintf(stdout, "已添加报送项目「%s」（%s）\n", project.Name, project.ID)
+		return nil
+	case "rename":
+		if err := requireArgs(pos, 2, "用法: kuibu report project rename <id|名称> <新名称>"); err != nil {
+			return err
+		}
+		projects, project, err := ws.RenameReportProject(pos[0], pos[1])
+		if err != nil {
+			return err
+		}
+		if common.json {
+			return writeJSON(stdout, map[string]any{"projects": projects, "project": project})
+		}
+		fmt.Fprintf(stdout, "已改名为「%s」（%s）\n", project.Name, project.ID)
+		return nil
+	case "rm":
+		if err := requireArgs(pos, 1, "用法: kuibu report project rm <id|名称> [--yes]"); err != nil {
+			return err
+		}
+		project, ok := store.FindReportProject(mustProjects(ws), pos[0])
+		if !ok {
+			return fmt.Errorf("%w: 找不到报送项目 %q", store.ErrNotFound, pos[0])
+		}
+		if !*yes {
+			return fmt.Errorf("%w：删除「%s」后，已分到它的筛选条目会退回待定；确认请加 --yes", store.ErrNeedsConfirm, project.Name)
+		}
+		projects, removed, err := ws.RemoveReportProject(pos[0])
+		if err != nil {
+			return err
+		}
+		if common.json {
+			return writeJSON(stdout, map[string]any{"projects": projects, "removed": removed})
+		}
+		fmt.Fprintf(stdout, "已删除「%s」；旧筛选记录会在下次打开该周筛选时把相关条目退回待定\n", removed.Name)
+		return nil
+	default:
+		return usagef("未知 report project 子命令 %q", sub)
+	}
+}
+
+func mustProjects(ws *store.Workspace) []store.ReportProject {
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return nil
+	}
+	return projects
+}
+
+func projectByIDOrName(ws *store.Workspace, idOrName string) (store.ReportProject, error) {
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return store.ReportProject{}, err
+	}
+	p, ok := store.FindReportProject(projects, idOrName)
+	if !ok {
+		return store.ReportProject{}, fmt.Errorf("%w: 找不到报送项目 %q", store.ErrNotFound, idOrName)
+	}
+	return p, nil
+}
+
+func projectSummary(projects []store.ReportProject) string {
+	names := make([]string, 0, len(projects))
+	for _, p := range projects {
+		names = append(names, p.Name)
+	}
+	return strings.Join(names, "、")
+}

@@ -63,3 +63,51 @@ func (s *ReportService) ExportClipboard(kind, week string) (ExportContent, error
 	}
 	return ExportContent{Title: doc.Title, HTML: core.MarkdownToHTML(doc.Body), Text: core.MarkdownToText(doc.Body)}, nil
 }
+
+// ExportProjectGroup 弹出保存对话框，导出某个项目的定稿组报。
+func (s *ReportService) ExportProjectGroup(week, group, projectID string) (string, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return "", err
+	}
+	doc, err := core.ExportFinalProject(ws, "group-project", week, group, projectID)
+	if err != nil {
+		return "", err
+	}
+	text, err := doc.Render(core.FormatMarkdown)
+	if err != nil {
+		return "", err
+	}
+	if s.workspace == nil || s.workspace.app == nil {
+		return "", fmt.Errorf("保存对话框不可用")
+	}
+	path, err := s.workspace.app.Dialog.SaveFile().
+		SetFilename(doc.FileName).
+		CanCreateDirectories(true).
+		SetMessage("导出「" + doc.Title + "」").
+		SetButtonText("导出").
+		PromptForSingleSelection()
+	if err != nil {
+		return "", fmt.Errorf("打开保存对话框失败: %w", err)
+	}
+	if path == "" {
+		return "", nil
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		return "", fmt.Errorf("写入导出文件失败: %w", err)
+	}
+	return path, nil
+}
+
+// ExportProjectGroupClipboard 返回某个项目定稿组报的飞书 HTML 与纯文本。
+func (s *ReportService) ExportProjectGroupClipboard(week, group, projectID string) (ExportContent, error) {
+	ws, _, err := s.instances()
+	if err != nil {
+		return ExportContent{}, err
+	}
+	doc, err := core.ExportFinalProject(ws, "group-project", week, group, projectID)
+	if err != nil {
+		return ExportContent{}, err
+	}
+	return ExportContent{Title: doc.Title, HTML: core.MarkdownToHTML(doc.Body), Text: core.MarkdownToText(doc.Body)}, nil
+}

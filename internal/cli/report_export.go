@@ -17,6 +17,7 @@ func reportExport(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	weekFlag := fs.String("week", "", "周编号，默认本周")
 	monthFlag := fs.String("month", "", "月份（month-group / month-product），默认本月")
 	group := fs.String("group", "", "组名（group），默认唯一有组长的组")
+	project := fs.String("project", "", "报送项目 id 或名称（group 按项目导出）")
 	format := fs.String("format", core.FormatMarkdown, "格式: md|feishu-html|text")
 	outFile := fs.String("out", "", "写入文件，默认输出到 stdout")
 	pos, err := parseCommand(fs, args)
@@ -43,7 +44,12 @@ func reportExport(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	if err != nil {
 		return err
 	}
-	doc, err := core.ExportFinal(ws, pos[0], week, *group)
+	var doc *core.ExportDoc
+	if pos[0] == "group" && *project != "" {
+		doc, err = core.ExportFinalProject(ws, "group-project", week, *group, *project)
+	} else {
+		doc, err = core.ExportFinal(ws, pos[0], week, *group)
+	}
 	if err != nil {
 		return err
 	}

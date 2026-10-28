@@ -29,6 +29,10 @@ type GroupData struct {
 	Submitted bool `json:"submitted"`
 	// Warning 是本次生成的提示（模型输出不符合结构时）。
 	Warning string `json:"warning"`
+	// Project 是报送项目 id；单份组报为空。
+	Project string `json:"project"`
+	// ProjectName 是报送项目名称。
+	ProjectName string `json:"projectName"`
 }
 
 // GroupPlanData 是组报外发预览。

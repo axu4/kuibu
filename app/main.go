@@ -20,6 +20,7 @@ func main() {
 	todos := newTodoService(workspace)
 	updates := newUpdateService()
 	reports := newReportService(workspace)
+	triage := newTriageService(workspace)
 	llms := newLLMService()
 	clis := newCLIService()
 	shell.todo = todos
@@ -43,6 +44,7 @@ func main() {
 			application.NewService(todos),
 			application.NewService(updates),
 			application.NewService(reports),
+			application.NewService(triage),
 			application.NewService(llms),
 			application.NewService(clis),
 		},

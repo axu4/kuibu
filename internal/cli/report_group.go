@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,8 @@ import (
 type groupJSON struct {
 	draftJSON
 	Group         string   `json:"group"`
+	Project       string   `json:"project,omitempty"`
+	ProjectName   string   `json:"projectName,omitempty"`
 	Sources       []string `json:"sources"`
 	Missing       []string `json:"missing"`
 	SourceChanged bool     `json:"sourceChanged"`
@@ -26,20 +29,22 @@ type groupJSON struct {
 // reportGroup 分发 report group 子命令。
 func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report group 需要子命令: generate/show/edit/finalize/unfinalize/submit")
+		return usagef("report group 需要子命令: generate/assemble/list/show/edit/finalize/unfinalize/submit")
 	}
 	sub, rest := args[0], args[1:]
 	fs := newFlagSet("report group " + sub)
 	addCommonFlags(fs, common)
 	weekFlag := fs.String("week", "", "周编号，默认本周")
 	group := fs.String("group", "", "组名，默认唯一有组长的组")
+	projectFlag := fs.String("project", "", "报送项目 id 或名称；给出时操作该项目的独立组报")
 	var (
-		template     *string
-		allowMissing *bool
-		model        *string
-		yes, dryRun  *bool
-		force        *bool
-		file         *string
+		template        *string
+		allowMissing    *bool
+		allowUnreviewed *bool
+		model           *string
+		yes, dryRun     *bool
+		force           *bool
+		file            *string
 	)
 	switch sub {
 	case "generate":
@@ -51,6 +56,10 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 		force = fs.Bool("force", false, "覆盖已人工修改或已定稿的组报（旧版移入历史）")
 	case "edit":
 		file = fs.String("file", "", "从文件读取新正文（默认读 stdin）")
+	case "assemble":
+		allowUnreviewed = fs.Bool("allow-unreviewed", false, "有未判条目时仍然生成")
+		force = fs.Bool("force", false, "覆盖已人工修改或已定稿的组报（旧版移入历史）")
+	case "list":
 	case "show", "finalize", "unfinalize", "submit":
 	default:
 		return usagef("未知 report group 子命令 %q", sub)
@@ -78,14 +87,34 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 	if sub == "generate" {
 		return groupGenerate(ctx, ws, week, *group, *template, *model, *allowMissing, *yes, *dryRun, *force, common, stdout, stderr, env, now)
 	}
+	if sub == "assemble" {
+		return groupAssemble(ws, week, *group, *projectFlag, *force, *allowUnreviewed, common, stdout, stderr, now)
+	}
+	if sub == "list" {
+		return groupList(ws, week, *group, common, stdout)
+	}
 
 	lead, _, err := core.ResolveLead(ws, week, *group)
 	if err != nil {
 		return err
 	}
+	kind := store.GroupDirName
+	if *projectFlag != "" {
+		p, err := projectByIDOrName(ws, *projectFlag)
+		if err != nil {
+			return err
+		}
+		kind = store.GroupReportKind(p.ID)
+	}
 	switch sub {
 	case "show":
-		d, err := ws.ReadGroupReport(week, lead.ID)
+		var d *store.Draft
+		var err error
+		if kind == store.GroupDirName {
+			d, err = ws.ReadGroupReport(week, lead.ID)
+		} else {
+			d, err = ws.ReadDraftKind(kind, week, lead.ID)
+		}
 		if err != nil {
 			return err
 		}
@@ -105,24 +134,27 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 		if err != nil {
 			return fmt.Errorf("读取正文失败: %w", err)
 		}
-		d, err := ws.EditDraftKind(store.GroupDirName, week, lead.ID, string(data), now)
+		d, err := ws.EditDraftKind(kind, week, lead.ID, string(data), now)
 		if err != nil {
 			return err
 		}
 		return groupDone(ws, d, "已保存修改", common, stdout, stderr)
 	case "finalize":
-		d, err := ws.FinalizeDraftKind(store.GroupDirName, week, lead.ID, now)
+		d, err := ws.FinalizeDraftKind(kind, week, lead.ID, now)
 		if err != nil {
 			return err
 		}
 		return groupDone(ws, d, "已定稿", common, stdout, stderr)
 	case "unfinalize":
-		d, err := ws.UnfinalizeDraftKind(store.GroupDirName, week, lead.ID)
+		d, err := ws.UnfinalizeDraftKind(kind, week, lead.ID)
 		if err != nil {
 			return err
 		}
 		return groupDone(ws, d, "已取消定稿", common, stdout, stderr)
 	default: // submit
+		if kind != store.GroupDirName {
+			return usagef("按项目带入 SE 暂未实现；请先导出该项目组报")
+		}
 		r, err := core.SubmitGroupReport(ws, week, lead.ID, now)
 		if err != nil {
 			return err
@@ -180,7 +212,7 @@ func groupGenerate(ctx context.Context, ws *store.Workspace, week, group, templa
 
 // groupDone 更新索引并输出结果。
 func groupDone(ws *store.Workspace, d *store.Draft, verb string, common *commonFlags, stdout, stderr io.Writer) error {
-	upsertReportIndex(ws, d.Week, store.GroupDirName, d.Person, stderr)
+	upsertReportIndex(ws, d.Week, draftKindOf(d), d.Person, stderr)
 	if common.json {
 		return writeJSON(stdout, toGroupJSON(ws, d, false))
 	}
@@ -192,20 +224,27 @@ func groupDone(ws *store.Workspace, d *store.Draft, verb string, common *commonF
 func toGroupJSON(ws *store.Workspace, d *store.Draft, withBody bool) groupJSON {
 	dj := draftJSONFrom(ws, d, nil, withBody)
 	dj.Path = filepath.Join(ws.ReportsDir(), d.Week, draftKindOf(d), d.Person+".md")
-	return groupJSON{
+	out := groupJSON{
 		draftJSON:     dj,
 		Group:         d.Group,
 		Sources:       nonNilStrings(d.Sources),
 		Missing:       nonNilStrings(d.Missing),
-		SourceChanged: core.GroupSourceChanged(ws, d),
+		SourceChanged: groupSourceChanged(ws, d),
 	}
+	if projectID := store.ProjectIDFromGroupKind(d.Kind); projectID != "" {
+		out.Project = projectID
+		if projects, err := ws.ReportProjects(); err == nil {
+			out.ProjectName = store.ReportProjectName(projects, projectID)
+		}
+	}
+	return out
 }
 
 // printGroupHeader 输出组报头部信息。
 func printGroupHeader(ws *store.Workspace, d *store.Draft, stdout io.Writer) {
 	label := map[string]string{store.DraftStatusDraft: "草稿", store.DraftStatusFinal: "已定稿"}[d.Status]
-	if core.GroupSourceChanged(ws, d) {
-		label += "·组员定稿已更新"
+	if groupSourceChanged(ws, d) {
+		label += "·候选已更新"
 	}
 	fmt.Fprintf(stdout, "%s  %s 组  %s  模型: %s\n", d.Week, orDash(d.Group), label, orDash(d.Model))
 	if len(d.Missing) > 0 {
@@ -293,4 +332,92 @@ func runTemplate(args []string, common *commonFlags, stdin io.Reader, stdout, st
 	default:
 		return usagef("未知 template 子命令 %q", sub)
 	}
+}
+
+// groupAssemble 由筛选结果按项目生成组报草稿；不给 --project 时逐项目生成。
+func groupAssemble(ws *store.Workspace, week, group, projectArg string, force, allowUnreviewed bool,
+	common *commonFlags, stdout, stderr io.Writer, now time.Time) error {
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return err
+	}
+	if len(projects) == 0 {
+		return usagef("还没有配置报送项目（report project add <名称>）")
+	}
+	targets := projects
+	if projectArg != "" {
+		p, ok := store.FindReportProject(projects, projectArg)
+		if !ok {
+			return fmt.Errorf("%w: 找不到报送项目 %q", store.ErrNotFound, projectArg)
+		}
+		targets = []store.ReportProject{p}
+	}
+	out := make([]groupJSON, 0, len(targets))
+	for _, p := range targets {
+		d, err := core.AssembleProjectGroup(ws, week, group, p.ID, force, allowUnreviewed, now)
+		if err != nil {
+			return err
+		}
+		upsertReportIndex(ws, d.Week, draftKindOf(d), d.Person, stderr)
+		out = append(out, toGroupJSON(ws, d, false))
+		if !common.json {
+			fmt.Fprintf(stdout, "已生成「%s」组报草稿：%s %s\n", p.Name, d.Week, d.Status)
+		}
+	}
+	if common.json {
+		if len(out) == 1 {
+			return writeJSON(stdout, out[0])
+		}
+		return writeJSON(stdout, out)
+	}
+	return nil
+}
+
+// groupList 列出各项目组报草稿及状态。
+func groupList(ws *store.Workspace, week, group string, common *commonFlags, stdout io.Writer) error {
+	lead, _, err := core.ResolveLead(ws, week, group)
+	if err != nil {
+		return err
+	}
+	projects, err := ws.ReportProjects()
+	if err != nil {
+		return err
+	}
+	type row struct {
+		Project string     `json:"project"`
+		Name    string     `json:"name"`
+		Draft   *groupJSON `json:"draft,omitempty"`
+	}
+	rows := make([]row, 0, len(projects))
+	for _, p := range projects {
+		d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), week, lead.ID)
+		r := row{Project: p.ID, Name: p.Name}
+		if err != nil {
+			if !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+		} else {
+			gj := toGroupJSON(ws, d, false)
+			r.Draft = &gj
+		}
+		rows = append(rows, r)
+	}
+	if common.json {
+		return writeJSON(stdout, rows)
+	}
+	for _, r := range rows {
+		status := "未生成"
+		if r.Draft != nil {
+			status = map[string]string{store.DraftStatusDraft: "草稿", store.DraftStatusFinal: "已定稿"}[r.Draft.Status]
+		}
+		fmt.Fprintf(stdout, "%-12s %-8s %s\n", r.Name, status, week)
+	}
+	return nil
+}
+
+func groupSourceChanged(ws *store.Workspace, d *store.Draft) bool {
+	if store.ProjectIDFromGroupKind(d.Kind) != "" {
+		return core.ProjectGroupSourceChanged(ws, d)
+	}
+	return core.GroupSourceChanged(ws, d)
 }
