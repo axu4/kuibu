@@ -19,12 +19,14 @@ export function ReportHome({ initialWeek, initialPersonId, initialLevel, onOpenS
   return (
     <div className="report-home">
       <div className="report-home-nav">
-        <button type="button" className={tab === "library" ? "is-on" : ""} onClick={() => setTab("library")}>
-          周报库
-        </button>
-        <button type="button" className={tab === "mine" ? "is-on" : ""} onClick={() => setTab("mine")}>
-          我的组
-        </button>
+        <div className="segmented">
+          <button type="button" className={`segmented-btn${tab === "library" ? " is-active" : ""}`} onClick={() => setTab("library")}>
+            周报库
+          </button>
+          <button type="button" className={`segmented-btn${tab === "mine" ? " is-active" : ""}`} onClick={() => setTab("mine")}>
+            我的组
+          </button>
+        </div>
       </div>
       <div className="report-home-body">
         {tab === "library" && <ReportLibrary initialWeek={initialWeek} onOpenGroups={() => onOpenSettings?.("people")} />}

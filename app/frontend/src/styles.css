@@ -5571,15 +5571,7 @@ body.is-resizing-x * {
   border-bottom: 1px solid var(--line);
   background: var(--paper);
 }
-.report-home-nav button {
-  height: 27px;
-  padding: 0 11px;
-  border-radius: 6px;
-  color: var(--ink-2);
-  font-size: 12px;
-}
-.report-home-nav button:hover { background: var(--hover); color: var(--ink); }
-.report-home-nav button.is-on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.report-home-nav .segmented { margin: 0; }
 .report-home-body { flex: 1; min-height: 0; display: flex; overflow: hidden; width: 100%; min-width: 0; }
 .report-home-body .report-view { flex: 1; min-width: 0; }
 
@@ -5656,9 +5648,6 @@ body.is-resizing-x * {
 .gm-members i { width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; font-style: normal; background: var(--sidebar); color: var(--ink-2); font-size: 9px; }
 .gm-members i.more { border: 1px dashed var(--line-strong); background: transparent; }
 .gm-actions { display: flex; justify-content: flex-end; gap: 10px; }
-.gm-actions .link { font-size: 11px; color: var(--ink-2); }
-.gm-actions .link:hover { color: var(--accent); text-decoration: none; }
-.gm-actions .link.is-danger:hover { color: var(--seal); }
 .gm-note { margin-top: 16px; display: flex; align-items: flex-start; gap: 9px; padding: 12px 14px; border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: 9px; color: var(--ink-2); font-size: 11.5px; line-height: 1.7; }
 .gm-note b { flex-shrink: 0; color: var(--accent); font-weight: 500; }
 .gm-editor { width: min(560px, 90vw); }
@@ -5736,4 +5725,12 @@ body.is-resizing-x * {
   .settings { width: calc(100vw - 28px); height: calc(100vh - 36px); }
   .settings-nav { flex-basis: 140px; }
   .gm-page.is-embedded .gm-grid { grid-template-columns: 1fr; }
+}
+
+/* 卡片内的小按钮，和主界面 .btn 同源，只缩小尺寸 */
+.btn.is-compact {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
 }
