@@ -682,3 +682,23 @@ func inferLeaderGroup(ws *store.Workspace, week string) (string, error) {
 	}
 	return "", fmt.Errorf("%w: 组长没有填组，且名单里有多个组；请用 --group 指定要汇总的组", store.ErrInvalid)
 }
+
+// RebuildTriage 按当前组员原文/录入分类重新生成筛选记录，并清空已有的筛选决策。
+//
+// 不清除各项目的组报草稿：草稿会因候选哈希变化显示「候选已更新」，由组长决定是否重新生成。
+func RebuildTriage(ws *store.Workspace, week, group string) (*store.Triage, error) {
+	t, err := BuildTriage(ws, week, group)
+	if err != nil {
+		return nil, err
+	}
+	for i := range t.Items {
+		t.Items[i].Decision = ""
+		t.Items[i].Project = ""
+		t.Items[i].DecidedAt = ""
+	}
+	t.UpdatedAt = time.Now().Format(time.RFC3339)
+	if err := ws.WriteTriage(t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}

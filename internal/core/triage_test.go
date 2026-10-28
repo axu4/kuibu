@@ -367,3 +367,48 @@ func TestBuildTriageUsesEntrySections(t *testing.T) {
 		t.Fatalf("原文更新后应退回解析: %+v", triage.Items)
 	}
 }
+
+func TestRebuildTriageClearsDecisions(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "组长", Role: store.RoleLead, Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	zhang, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ws.AddReportProject("云平台项目"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.WriteReport(store.NewReport{
+		Person: zhang.ID, Name: zhang.Name, Week: "2026-W44", Level: store.ReportLevelMember,
+		Group: "框架组", Source: store.ReportSourcePaste, SubmittedAt: now,
+		Body: "本周：\n1、完成 A\n下周：\n1、计划 B\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	triage, err := BuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects, _ := ws.ReportProjects()
+	if err := SetTriageDecision(triage, triage.Items[0].ID, store.TriageAccepted, projects[0].ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.WriteTriage(triage); err != nil {
+		t.Fatal(err)
+	}
+	rebuilt, err := RebuildTriage(ws, "2026-W44", "框架组")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rebuilt.Items) != 2 {
+		t.Fatalf("条目 = %d", len(rebuilt.Items))
+	}
+	for _, it := range rebuilt.Items {
+		if it.Decision != "" || it.Project != "" {
+			t.Fatalf("重建后决策应清空: %+v", it)
+		}
+	}
+}
