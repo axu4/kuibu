@@ -24,7 +24,7 @@ func reportExport(args []string, common *commonFlags, stdout, stderr io.Writer, 
 	if err != nil {
 		return err
 	}
-	if err := requireArgs(pos, 1, "用法: kuibu report export group|product|month-group|month-product [--week W|--month M] [--group g] [--format md|feishu-html|text] [--out file]"); err != nil {
+	if err := requireArgs(pos, 1, "用法: kuibu report export group|product|month-group|month-product [--week W|--month M] [--group g] [--project p] [--format md|feishu-html|text] [--out file]"); err != nil {
 		return err
 	}
 	now, err := nowFrom(env)
@@ -45,9 +45,14 @@ func reportExport(args []string, common *commonFlags, stdout, stderr io.Writer, 
 		return err
 	}
 	var doc *core.ExportDoc
-	if pos[0] == "group" && *project != "" {
+	switch {
+	case pos[0] == "group" && *project != "":
 		doc, err = core.ExportFinalProject(ws, "group-project", week, *group, *project)
-	} else {
+	case pos[0] == "month-group" && *project != "":
+		doc, err = core.ExportFinalProject(ws, "month-group-project", week, *group, *project)
+	case *project != "":
+		return usagef("--project 只用于 group / month-group（按项目导出），%s 不接受", pos[0])
+	default:
 		doc, err = core.ExportFinal(ws, pos[0], week, *group)
 	}
 	if err != nil {

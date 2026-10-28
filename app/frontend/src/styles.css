@@ -5898,3 +5898,659 @@ body.is-resizing-x * {
 .triage-rebuild-modal h2 { margin: 0 0 8px; font-family: var(--font-serif); font-size: 20px; }
 .triage-rebuild-modal p { margin: 0 0 12px; color: var(--ink-2); line-height: 1.75; font-size: 12.5px; }
 .triage-rebuild-modal .modal-buttons { margin-top: 16px; }
+/* ---------- 项目月报：月视角首页 ---------- */
+
+.month-project-list {
+  display: flex;
+  flex-direction: column;
+  max-width: 880px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.month-project-head,
+.month-project-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.5fr) 80px minmax(140px, 1.2fr) 120px 68px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.month-project-head {
+  background: var(--sidebar);
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.month-project-row {
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.month-project-row:hover {
+  background: var(--hover);
+}
+
+.month-project-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.month-project-missing {
+  color: var(--amber);
+  font-size: 11.5px;
+}
+
+.month-project-open {
+  color: var(--accent);
+  text-align: right;
+}
+
+.month-project-hint {
+  margin: 0;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+/* ---------- 项目月报：三步流程 ---------- */
+
+.report-detail.month-flow {
+  width: min(1120px, 94vw);
+}
+
+.month-source,
+.month-preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 26px 44px;
+  background: var(--paper);
+}
+
+.month-source-head h1,
+.month-preview-head h1 {
+  margin-top: 4px;
+}
+
+/* 第 ① 步：本期范围 */
+
+.month-scope-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.month-scope-label {
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.month-scope-label b {
+  color: var(--ink);
+}
+
+.month-scope-note {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.month-scope-reset {
+  margin-left: auto;
+}
+
+.month-src-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 14px 0 10px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.month-src-stats b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.month-src-stats .is-warn,
+.month-src-stats .is-warn b {
+  color: var(--amber);
+}
+
+/* 第 ① 步：周 × 项目表格 */
+
+.month-src-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.month-src-table {
+  min-width: 640px;
+}
+
+.month-src-head,
+.month-src-row {
+  display: grid;
+  align-items: stretch;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.month-src-head {
+  border-top: none;
+  background: var(--sidebar);
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.month-src-head > span {
+  padding: 8px 10px;
+}
+
+.month-src-row.is-out {
+  background: var(--paper);
+}
+
+.month-src-week,
+.month-src-day,
+.month-src-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-left: 1px solid var(--line);
+}
+
+.month-src-week,
+.month-src-day {
+  border-left: none;
+}
+
+.month-src-day {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.month-src-day small {
+  color: var(--ink-4);
+  font-size: 10px;
+}
+
+.month-scope-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  text-align: left;
+}
+
+.month-scope-btn:hover {
+  background: var(--hover);
+}
+
+.month-scope-btn.is-on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.month-src-tick {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 10.5px;
+  line-height: 1;
+}
+
+.month-scope-btn.is-on .month-src-tick,
+.month-src-cell.is-on .month-src-tick {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.month-src-week-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.month-src-week-text b {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.month-side-tag {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: 9.5px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.month-src-cell {
+  width: 100%;
+  border: none;
+  border-left: 1px solid var(--line);
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+button.month-src-cell {
+  cursor: default;
+}
+
+button.month-src-cell:hover {
+  background: var(--hover);
+}
+
+.month-src-cell.is-on {
+  background: var(--accent-soft);
+}
+
+.month-src-cell.is-out,
+.month-src-cell.is-locked {
+  color: var(--ink-3);
+}
+
+.month-src-cell.is-out {
+  background: var(--paper);
+}
+
+.month-src-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.month-src-info b {
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.month-notice,
+.month-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px 0 0;
+  padding: 10px 13px;
+  border-left: 2px solid var(--amber);
+  border-radius: 9px;
+  background: var(--amber-soft);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.8;
+}
+
+.month-notice b,
+.month-gate b {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.month-notice.is-ok {
+  border-left-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.month-notice.is-ok b {
+  color: var(--accent);
+}
+
+.month-gate {
+  cursor: default;
+}
+
+.month-gate input {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.month-foot {
+  margin: 16px 0 0;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+/* 第 ② 步：候选 */
+
+.month-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.month-preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.month-badge {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.month-pool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.month-pool {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.month-pool-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 0;
+}
+
+.month-pool-head h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.month-pool-head span {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.month-pool-meta {
+  padding: 2px 12px 8px;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.month-pool-body {
+  flex: 1;
+  min-height: 60px;
+  padding: 0 8px 8px;
+}
+
+.month-pool-empty {
+  padding: 16px 8px;
+  color: var(--ink-4);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.month-pool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.month-pool-item + .month-pool-item {
+  margin-top: 6px;
+}
+
+.month-pool-item.is-excluded {
+  opacity: 0.75;
+}
+
+.month-pool-text {
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.month-pool-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.month-week-tag {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+
+.month-dup {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9.5px;
+}
+
+.month-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.month-item-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.month-item-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.month-item-btn.is-accent {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.month-item-btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.month-fold {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.month-fold > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.month-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.month-fold-hint {
+  color: var(--ink-4);
+  font-size: 10.5px;
+}
+
+.month-fold-body {
+  padding: 0 12px 10px;
+}
+
+.month-archive-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.month-week-tags {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.month-archive-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.month-exclude {
+  margin-top: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.month-exclude-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.month-exclude-head b {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.month-exclude-list {
+  padding: 0 12px 10px;
+}
+
+.month-exclude-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+
+.month-exclude-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 第 ③ 步：编辑器 */
+
+.month-flow-editor {
+  flex: 1;
+  min-height: 320px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px 48px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.85;
+  resize: none;
+}
+
+.month-flow-editor:focus {
+  border-color: var(--accent-line);
+  outline: none;
+}
+
+@media (max-width: 1120px) {
+  .triage-flow-sub {
+    display: none;
+  }
+
+  .month-pool-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

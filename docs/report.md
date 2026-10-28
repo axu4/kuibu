@@ -253,11 +253,23 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
   reports/2026-10/
   ├── lead-month/<组长 id>.md             # 组长月报原文（粘贴归档，覆盖进 .history）
   ├── lead-month-normalized/<组长 id>.md  # 组长月报归一稿（结构同组报）
-  ├── group/<组长 id>.md                  # 组月报
+  ├── pull/<组长 id>.md                   # 项目月报拉取记录（本期周范围 / 纳入来源 / 归口）
+  ├── group/
+  │   ├── <项目 id>/<组长 id>.md          # 项目月报（配置了 reportProjects 时）
+  │   └── <组长 id>.md                    # 旧单份组月报（没配置项目时）
   └── product/product.md                  # 产品月报
   ```
 
 - **组月报**（框架组长）：合并当月各周**定稿组报**，结构同组报；缺周 / 未定稿默认返回 `7` 并列出，`--allow-missing` 才生成并标注。来源是各周，周组报定稿内容变化后标「来源已更新」。
+- **项目月报**（配置了 `reportProjects` 时）：不再调 AI，按项目确定性拼接。第 ① 步选**本期周范围**
+  （默认按周报日归属，可加 / 减上月最后一周、下月第一周），只拉本期各周**已定稿的按项目组报**；
+  第 ② 步按项目分「本月总结 / 下月计划 / 更早计划 / 不纳入」，跨周完全相同的条目合并；
+  第 ③ 步每个项目各存一份草稿，独立保存 / 定稿 / 导出。范围与纳入来源记在
+  `reports/<月>/pull/<组长>.md`，草稿路径 `reports/<月>/group/<项目 id>/<组长>.md`，
+  正文不带姓名和来源周次，缺周在开头引用块标注。来源变化后草稿标「来源已更新」，不自动覆盖。
+  CLI：`report month sources|scope|pull|candidates|move|generate|list|show|edit|finalize|unfinalize`
+  （配置项目后加 `--project` / `--all`）；导出 `report export month-group --project <项目>`。
+  设计见 [design/report-month.md](design/report-month.md)。
 - **产品月报**（SE）：合并各组长月报（归一定稿）+ 当月各周定稿产品报，按产品线分章；缺的同样列出。
 - 生命周期、`9` / `7`、外发预览确认同周报；索引复用 `reports` 表（week 列存 `2026-10`），`report list` 默认不混入。
 
@@ -268,7 +280,7 @@ SE tab 把各组长**定稿**的周报按产品线汇总。与框架组长 tab �
 - **只认定稿**：未定稿导出 / 复制一律返回 `7 NOT_FINAL`；App 里「导出 Markdown」「复制为飞书格式」在未定稿时置灰。导出内容是定稿正文，不含 front matter。
 - **格式**：`md`（原文）、`feishu-html`（HTML）、`text`（纯文本：标题只留文字，列表用「•」与两格缩进，链接写成「文字（地址）」）。
 - **Markdown → HTML** 由自写的小转换器完成（不引入第三方库），覆盖标题、嵌套 / 有序列表、引用、段落、加粗、斜体、行内代码、链接，并转义 HTML。只服务于本项目生成的报告，不追求完整 CommonMark。
-- **文件名**：`<组名>-组报-<周>.md`、`产品报-<周>.md`、`<组名>-组月报-<月>.md`、`产品月报-<月>.md`。
+- **文件名**：`<组名>-组报-<周>.md`、`产品报-<周>.md`、`<组名>-组月报-<月>.md`、`<组名>-组月报-<月>-<项目名>.md`、`产品月报-<月>.md`。
 - **复制为飞书格式**：前端用 `navigator.clipboard.write` 同时写 `text/html` 与 `text/plain`，飞书粘贴取 HTML；WKWebView 不支持时退回纯文本并提示。只进剪贴板，不发送到任何地方。
 
 ## ISO 周与周报日

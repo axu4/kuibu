@@ -90,6 +90,22 @@ export function ExportClipboard(kind: string, week: string): $CancellablePromise
 }
 
 /**
+ * ExportMonthProject 弹出保存对话框，导出某个项目的定稿月报。
+ * 未定稿返回 NOT_FINAL；用户取消时返回空路径且不报错。
+ */
+export function ExportMonthProject(month: string, group: string, project: string): $CancellablePromise<string> {
+    return $Call.ByID(3249153974, month, group, project);
+}
+
+/**
+ * ExportMonthProjectClipboard 返回某个项目定稿月报的飞书 HTML 与纯文本。
+ * 只返回内容，不发送到任何地方；未定稿返回 NOT_FINAL。
+ */
+export function ExportMonthProjectClipboard(month: string, group: string, project: string): $CancellablePromise<$models.ExportContent> {
+    return $Call.ByID(1826763680, month, group, project);
+}
+
+/**
  * ExportProjectGroup 弹出保存对话框，导出某个项目的定稿组报。
  */
 export function ExportProjectGroup(week: string, group: string, projectID: string): $CancellablePromise<string> {
@@ -133,6 +149,13 @@ export function FinalizeMonth(month: string, level: string): $CancellablePromise
 }
 
 /**
+ * FinalizeMonthProject 定稿某个项目的月报。
+ */
+export function FinalizeMonthProject(month: string, group: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(1271935510, month, group, project);
+}
+
+/**
  * FinalizeProduct 产品报定稿。
  */
 export function FinalizeProduct(week: string): $CancellablePromise<$models.GroupData> {
@@ -158,6 +181,15 @@ export function GenerateGroup(week: string, group: string, allowMissing: boolean
  */
 export function GenerateMonth(month: string, level: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(2426869174, month, level, allowMissing, force);
+}
+
+/**
+ * GenerateMonthProject 按当前拉取记录为某个项目生成 / 重新生成月报草稿。
+ * 本期有未定稿 / 未提交的来源且 allowMissing 为 false 时返回 NOT_FINAL；
+ * 已有草稿覆盖人工修改时按 force 返回 HUMAN_EDITS_EXIST / NEEDS_CONFIRM。
+ */
+export function GenerateMonthProject(month: string, group: string, project: string, allowMissing: boolean, force: boolean): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(3542043015, month, group, project, allowMissing, force);
 }
 
 /**
@@ -210,10 +242,39 @@ export function Month(ref: string): $CancellablePromise<$models.ReportMonth> {
 }
 
 /**
+ * MonthProjectCandidates 返回一个项目本期的月报候选（总结 / 计划 / 更早计划 / 不纳入）。
+ */
+export function MonthProjectCandidates(month: string, group: string, project: string): $CancellablePromise<core$0.MonthCandidatesData> {
+    return $Call.ByID(2442181570, month, group, project);
+}
+
+/**
+ * MonthProjectList 列出本期各项目的月报状态与候选统计，按配置顺序。
+ */
+export function MonthProjectList(month: string, group: string): $CancellablePromise<$models.ProjectMonthList[] | null> {
+    return $Call.ByID(3167471056, month, group);
+}
+
+/**
+ * MonthProjectReport 读取某个项目的月报；还没生成时 Exists 为 false、Status 为 none。
+ */
+export function MonthProjectReport(month: string, group: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(201176690, month, group, project);
+}
+
+/**
  * MonthReport 返回组月报（level=group）或产品月报（level=product）；还没生成时 Exists 为 false。
  */
 export function MonthReport(month: string, level: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(2798529061, month, level);
+}
+
+/**
+ * MonthSources 返回月报第 ① 步的来源视图：本期周范围、各周 × 项目的定稿状态
+ * 与纳入情况、缺周与候选统计。
+ */
+export function MonthSources(month: string, group: string): $CancellablePromise<core$0.MonthSourceView> {
+    return $Call.ByID(2645554615, month, group);
 }
 
 /**
@@ -365,6 +426,13 @@ export function SaveMonth(month: string, level: string, body: string): $Cancella
 }
 
 /**
+ * SaveMonthProject 保存某个项目月报的人工修改。
+ */
+export function SaveMonthProject(month: string, group: string, project: string, body: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(1676277297, month, group, project, body);
+}
+
+/**
  * SaveProduct 保存产品报人工修改。
  */
 export function SaveProduct(week: string, body: string): $CancellablePromise<$models.GroupData> {
@@ -390,6 +458,30 @@ export function SaveReportSections(week: string, personID: string, sections: $mo
  */
 export function SaveTemplate(name: string, body: string): $CancellablePromise<$models.TemplateData> {
     return $Call.ByID(3556817308, name, body);
+}
+
+/**
+ * SetMonthItemPool 调整一条候选的归口（summary / plan / archive / excluded），
+ * 返回更新后的候选。
+ */
+export function SetMonthItemPool(month: string, group: string, project: string, section: string, itemID: string, pool: string): $CancellablePromise<core$0.MonthCandidatesData> {
+    return $Call.ByID(3312928700, month, group, project, section, itemID, pool);
+}
+
+/**
+ * SetMonthScope 修改本期周范围（上月最后一周 / 本月周 / 下月第一周），
+ * 返回更新后的来源视图。新增周会自动纳入其中已定稿的周组报。
+ */
+export function SetMonthScope(month: string, group: string, weeks: string[] | null): $CancellablePromise<core$0.MonthSourceView> {
+    return $Call.ByID(2337965243, month, group, weeks);
+}
+
+/**
+ * SetMonthSource 纳入 / 去选一份定稿周组报，返回更新后的来源视图。
+ * included 为 true 时该周组报必须已定稿，否则返回 NOT_FINAL。
+ */
+export function SetMonthSource(month: string, group: string, week: string, project: string, included: boolean): $CancellablePromise<core$0.MonthSourceView> {
+    return $Call.ByID(3974445800, month, group, week, project, included);
 }
 
 /**
@@ -481,6 +573,13 @@ export function UnfinalizeGroup(week: string, group: string): $CancellablePromis
  */
 export function UnfinalizeMonth(month: string, level: string): $CancellablePromise<$models.GroupData> {
     return $Call.ByID(4044476556, month, level);
+}
+
+/**
+ * UnfinalizeMonthProject 取消定稿某个项目的月报。
+ */
+export function UnfinalizeMonthProject(month: string, group: string, project: string): $CancellablePromise<$models.GroupData> {
+    return $Call.ByID(4229597857, month, group, project);
 }
 
 /**

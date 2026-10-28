@@ -1,0 +1,2183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>跬步 · 月报（交互原型）</title>
+<style>
+  /* ---------- 基础：沿用 App 的素纸 + 松青墨色 ---------- */
+  :root {
+    --paper: #fcfcfb;
+    --sidebar: #f2f3f1;
+    --panel: #ffffff;
+    --raised: #ffffff;
+    --hover: rgba(30, 40, 36, 0.055);
+    --pressed: rgba(30, 40, 36, 0.09);
+    --line: #e6e7e4;
+    --line-strong: #d6d8d4;
+    --ink: #1e2120;
+    --ink-2: #5b605e;
+    --ink-3: #979c99;
+    --ink-4: #c3c7c4;
+    --accent: #2c7362;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(44, 115, 98, 0.1);
+    --accent-line: rgba(44, 115, 98, 0.35);
+    --seal: #c4432c;
+    --seal-soft: rgba(196, 67, 44, 0.09);
+    --amber: #a86d12;
+    --amber-soft: rgba(168, 109, 18, 0.1);
+    --shadow-pop: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 8px 28px rgba(20, 30, 26, 0.16);
+    --shadow-modal: 0 0 0 0.5px rgba(0, 0, 0, 0.12), 0 24px 64px rgba(20, 30, 26, 0.26);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    --font-serif: "Songti SC", "STSong", "Source Han Serif SC", "Noto Serif CJK SC",
+      "Noto Serif SC", Georgia, serif;
+    --font-mono: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1a1c1b;
+      --sidebar: #212423;
+      --panel: #1e2120;
+      --raised: #3a3f3d;
+      --hover: rgba(230, 240, 235, 0.06);
+      --pressed: rgba(230, 240, 235, 0.1);
+      --line: #2d3130;
+      --line-strong: #3a3f3d;
+      --ink: #e4e7e5;
+      --ink-2: #a5aba8;
+      --ink-3: #737976;
+      --ink-4: #4e5452;
+      --accent: #5db39c;
+      --accent-ink: #0f1a17;
+      --accent-soft: rgba(93, 179, 156, 0.14);
+      --accent-line: rgba(93, 179, 156, 0.4);
+      --seal: #e8664d;
+      --seal-soft: rgba(232, 102, 77, 0.13);
+      --amber: #d9a24a;
+      --amber-soft: rgba(217, 162, 74, 0.13);
+      --shadow-pop: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 8px 28px rgba(0, 0, 0, 0.5);
+      --shadow-modal: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 24px 64px rgba(0, 0, 0, 0.6);
+      color-scheme: dark;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input, textarea { user-select: text; -webkit-user-select: text; }
+  button { font: inherit; color: inherit; background: none; border: none; padding: 0; cursor: default; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent-line); outline-offset: 1px;
+  }
+  kbd {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px; line-height: 1;
+    padding: 3px 4px; min-width: 16px; text-align: center; border-radius: 4px;
+    border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-2);
+    box-shadow: 0 1px 0 var(--line);
+  }
+
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  .screen { display: none; flex: 1; min-height: 0; }
+  body[data-screen="library"] .screen-library { display: block; overflow: auto; }
+  body[data-screen="source"] .screen-source { display: block; overflow: auto; }
+  body[data-screen="preview"] .screen-preview { display: flex; }
+  body[data-screen="reports"] .screen-reports { display: flex; }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    flex: 0 0 48px; display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 0 14px 0 12px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px); position: relative; z-index: 20;
+  }
+  .tb-left, .tb-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tb-brand { font-family: var(--font-serif); font-size: 14px; font-weight: 600; letter-spacing: 0.06em; }
+  .tb-divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+  .tb-back { height: 26px; padding: 0 8px; border-radius: 6px; color: var(--ink-2); font-size: 12px; }
+  .tb-back:hover { background: var(--hover); color: var(--ink); }
+  .tb-title { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+  .tb-week {
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-2);
+    border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; background: var(--panel);
+  }
+  .tb-group { font-size: 11.5px; color: var(--ink-3); }
+  .tb-hint { font-size: 11px; color: var(--ink-3); margin-right: 4px; }
+  .tb-btn { height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; color: var(--ink-2); }
+  .tb-btn:hover { background: var(--hover); color: var(--ink); }
+  .avatar {
+    width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center;
+    justify-content: center; background: var(--accent); color: #fff; font-size: 11px;
+  }
+
+  /* ---------- 步骤条 ---------- */
+  body[data-screen="library"] .stepper { display: none; }
+  .stepper {
+    flex: 0 0 58px; display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 0 20px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 94%, transparent); z-index: 16;
+  }
+  .flow-steps { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .flow-step {
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+    border-radius: 8px; text-align: left; color: var(--ink-3);
+  }
+  .flow-step:hover { background: var(--hover); }
+  .flow-step.is-on { color: var(--ink); background: var(--panel); box-shadow: 0 0 0 1px var(--line); }
+  .flow-step.is-done { color: var(--ink-2); }
+  .flow-step.is-locked { opacity: 0.55; }
+  .flow-num {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+    border: 1px solid var(--line-strong); background: var(--panel);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 11px;
+  }
+  .flow-step.is-on .flow-num { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .flow-step.is-done .flow-num { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+  .flow-text { display: flex; flex-direction: column; min-width: 0; }
+  .flow-title { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+  .flow-sub { margin-top: 1px; font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+  .flow-line { flex: 0 0 22px; width: 22px; height: 1px; background: var(--line-strong); }
+  .flow-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .flow-actions .btn, .flow-actions .btn-primary { height: 30px; padding: 0 12px; font-size: 12px; }
+  .flow-hint { font-size: 10.5px; color: var(--ink-3); }
+  @media (max-width: 1120px) { .flow-sub { display: none; } .flow-step { padding: 6px; } }
+
+  /* ---------- 通用 ---------- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 13px; border-radius: 7px;
+    border: 1px solid var(--line-strong); background: var(--panel); color: var(--ink-2);
+    font-size: 12.5px; white-space: nowrap;
+  }
+  .btn:hover { background: var(--hover); color: var(--ink); }
+  .btn-primary { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 500; }
+  .btn-primary:hover { background: var(--accent); color: var(--accent-ink); filter: brightness(1.07); }
+  .btn:disabled, .btn-primary:disabled { opacity: 0.4; pointer-events: none; }
+  .link-btn { color: var(--ink-2); font-size: 11.5px; padding: 2px 4px; border-radius: 4px; }
+  .link-btn:hover { color: var(--accent); background: var(--hover); }
+  .eyebrow { font-size: 10.5px; letter-spacing: 0.16em; color: var(--ink-3); text-transform: uppercase; font-weight: 500; }
+  .footnote { font-size: 11px; color: var(--ink-3); margin-top: 18px; line-height: 1.85; }
+  .notice {
+    margin: 14px 0; padding: 10px 13px; border-radius: 9px;
+    background: var(--amber-soft); color: var(--amber); font-size: 11.5px; line-height: 1.75;
+    border-left: 2px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  }
+  .notice b { font-weight: 600; }
+  .notice.is-ok {
+    background: var(--accent-soft); color: var(--accent);
+    border-left-color: var(--accent-line);
+  }
+  .notice.is-compact { margin: 12px 0 0; padding: 8px 12px; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+    border-radius: 6px; font-size: 11px; white-space: nowrap;
+  }
+  .status-pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .status-pill.is-none { color: var(--ink-3); background: var(--hover); }
+  .status-pill.is-draft, .status-pill.is-dirty, .status-pill.is-stale { color: var(--amber); background: var(--amber-soft); }
+  .status-pill.is-final { color: var(--accent); background: var(--accent-soft); }
+
+  /* ---------- 首页 / 月报库 ---------- */
+  .wrap { width: min(1100px, 94vw); margin: 0 auto; padding: 30px 0 56px; }
+  .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 22px; }
+  h1 { font-family: var(--font-serif); font-size: 30px; line-height: 1.25; font-weight: 600; letter-spacing: 0.01em; margin: 7px 0 8px; }
+  .lede { max-width: 700px; color: var(--ink-2); line-height: 1.85; font-size: 12.5px; margin: 0; }
+  .head-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; padding-top: 4px; }
+  .month-switch {
+    display: flex; align-items: center; gap: 2px; height: 32px; padding: 0 4px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  }
+  .month-switch .month-label { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2); padding: 0 8px; }
+  .icon-btn { width: 26px; height: 26px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); font-size: 14px; }
+  .icon-btn:hover { background: var(--hover); color: var(--ink); }
+  .icon-btn:disabled { opacity: 0.35; pointer-events: none; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 24px 0 16px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px; }
+  .stat b { display: block; font-family: var(--font-serif); font-size: 25px; line-height: 1.15; font-weight: 600; }
+  .stat span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink-3); }
+  .stat em { font-style: normal; color: var(--accent); }
+  .proj-list { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: var(--panel); }
+  .proj-head, .proj-row {
+    display: grid; grid-template-columns: minmax(190px, 1.25fr) minmax(190px, 1.1fr) 96px 122px 224px;
+    align-items: center; gap: 12px; padding: 0 16px;
+  }
+  .proj-head {
+    height: 34px; border-bottom: 1px solid var(--line); color: var(--ink-3);
+    background: color-mix(in srgb, var(--sidebar) 62%, transparent); font-size: 10.5px; letter-spacing: 0.04em;
+  }
+  .proj-row { min-height: 78px; border-bottom: 1px solid var(--line); }
+  .proj-row:last-child { border-bottom: 0; }
+  .proj-row:hover { background: var(--hover); }
+  .proj-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .pmark {
+    width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+    font-family: var(--font-serif); font-size: 14px; color: var(--accent);
+    background: var(--accent-soft); border: 1px solid var(--accent-line); flex-shrink: 0;
+  }
+  .pmark.is-2 { color: var(--amber); background: var(--amber-soft); border-color: color-mix(in srgb, var(--amber) 35%, var(--line)); }
+  .proj-name b { display: block; font-size: 12.5px; font-weight: 500; }
+  .proj-name span { display: block; font-size: 10.5px; color: var(--ink-3); margin-top: 1px; }
+  .proj-src { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; }
+  .proj-src small { display: block; color: var(--ink-3); font-size: 10.5px; margin-top: 1px; }
+  .proj-count b { font-family: var(--font-serif); font-size: 17px; font-weight: 600; }
+  .proj-count span { display: block; font-size: 10px; color: var(--ink-3); margin-top: 1px; }
+  .row-actions { display: flex; justify-content: flex-end; gap: 6px; }
+  .mini-btn {
+    height: 27px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink-2); font-size: 11.5px; white-space: nowrap;
+  }
+  .mini-btn:hover { background: var(--hover); color: var(--ink); }
+  .mini-btn.is-primary { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+  .mini-btn.is-primary:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+
+  /* ---------- 第 1 步：拉取周报 ---------- */
+  .source-wrap { width: min(1100px, 94vw); margin: 0 auto; padding: 28px 0 48px; }
+  .src-stats {
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 12px 16px; margin: 20px 0 14px; font-size: 11.5px; color: var(--ink-3);
+  }
+  .src-stats b { font-family: var(--font-serif); font-size: 19px; font-weight: 600; color: var(--ink); margin-right: 3px; }
+  .src-stats .spacer { flex: 1; }
+  .src-table { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: var(--panel); }
+  .src-head, .src-row {
+    display: grid; grid-template-columns: 132px 120px minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center; gap: 12px; padding: 0 16px;
+  }
+  .src-head {
+    height: 34px; border-bottom: 1px solid var(--line); color: var(--ink-3);
+    background: color-mix(in srgb, var(--sidebar) 62%, transparent); font-size: 10.5px; letter-spacing: 0.04em;
+  }
+  .src-row { min-height: 74px; border-bottom: 1px solid var(--line); }
+  .src-row:last-child { border-bottom: 0; }
+  .src-week { min-width: 0; }
+  .scope-btn {
+    display: flex; align-items: flex-start; gap: 7px; width: 100%;
+    text-align: left; padding: 5px 6px; border-radius: 7px; border: 1px solid transparent;
+  }
+  .scope-btn:hover { background: var(--hover); }
+  .scope-btn .tick { margin-top: 1px; }
+  .scope-btn.is-on .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .scope-btn.is-out .tick { color: var(--ink-4); }
+  .scope-text { display: flex; flex-direction: column; min-width: 0; }
+  .scope-text b { display: block; font-family: var(--font-mono); font-size: 12px; font-weight: 500; }
+  .scope-text > span { display: block; margin-top: 2px; font-size: 10.5px; color: var(--ink-3); }
+  .side-tag {
+    display: inline-block; margin-top: 3px; font-style: normal; font-size: 9.5px;
+    color: var(--amber); background: var(--amber-soft); border-radius: 4px; padding: 1px 5px;
+  }
+  .scope-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 0 0 12px; font-size: 11.5px; color: var(--ink-3);
+  }
+  .scope-label b { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); font-weight: 500; }
+  .scope-note { flex: 1; min-width: 220px; color: var(--ink-3); line-height: 1.7; }
+  .link-btn:disabled { opacity: 0.4; pointer-events: none; }
+  .src-row.is-out { background: color-mix(in srgb, var(--sidebar) 42%, transparent); }
+  .src-row.is-out .src-day { color: var(--ink-3); }
+  .src-cell.is-out { border-style: dashed; background: var(--sidebar); }
+  .src-cell.is-out .src-info b { color: var(--ink-2); }
+  .src-cell.is-out .tick { color: var(--ink-3); }
+  .src-day { font-size: 11.5px; color: var(--ink-2); }
+  .src-day small { display: block; margin-top: 2px; font-size: 10.5px; color: var(--ink-3); }
+  .src-cell {
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--paper); padding: 6px 8px;
+  }
+  .src-cell.is-on { border-color: var(--accent-line); background: var(--accent-soft); }
+  .src-cell.is-locked { border-style: dashed; background: var(--sidebar); }
+  .src-toggle { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; text-align: left; padding: 2px 0; }
+  .tick {
+    flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line-strong);
+    background: var(--panel); display: grid; place-items: center; font-size: 10px; color: transparent;
+  }
+  .src-cell.is-on .tick { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .src-cell.is-locked .tick { color: var(--ink-3); }
+  .src-info { display: flex; flex-direction: column; min-width: 0; }
+  .src-info b { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .src-info span { margin-top: 1px; font-size: 10.5px; color: var(--ink-3); }
+  .src-cell.is-locked .src-info b { color: var(--ink-2); }
+  .src-peek { flex: 0 0 auto; padding: 2px 4px; border-radius: 4px; font-size: 10.5px; color: var(--ink-3); }
+  .src-peek:hover { background: var(--hover); color: var(--ink); }
+  .gate {
+    display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; padding: 10px 12px;
+    border-radius: 9px; background: var(--amber-soft); color: var(--amber);
+    font-size: 11.5px; line-height: 1.75;
+  }
+  .gate input { margin: 2px 0 0; }
+  .gate b { font-weight: 600; }
+
+  /* ---------- 第 2 / 3 步：项目栏 ---------- */
+  .proj-rail {
+    flex: 0 0 276px; min-height: 0; display: flex; flex-direction: column;
+    background: var(--sidebar); border-right: 1px solid var(--line);
+  }
+  .rl-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--line); font-size: 10.5px; color: var(--ink-3);
+  }
+  .rl-head b { font-family: var(--font-serif); font-size: 13px; font-weight: 600; color: var(--ink); }
+  .report-list-body { flex: 1; overflow: auto; padding: 8px; }
+  .report-list-item {
+    display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left;
+    padding: 10px; border-radius: 8px; margin-bottom: 4px;
+  }
+  .report-list-item:hover { background: var(--hover); }
+  .report-list-item.is-active { background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(20, 30, 26, 0.05); }
+  .pr-name { display: flex; justify-content: space-between; gap: 8px; font-family: var(--font-serif); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .pr-count { font-family: var(--font); font-size: 10.5px; font-weight: 400; color: var(--ink-3); white-space: nowrap; }
+  .pr-status { font-size: 10.5px; color: var(--ink-3); }
+  .pr-status.is-saved, .pr-status.is-final { color: var(--accent); }
+  .pr-status.is-dirty, .pr-status.is-stale { color: var(--amber); }
+  .rl-foot { padding: 10px 16px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-3); line-height: 1.7; }
+
+  /* ---------- 第 2 步：项目预览 ---------- */
+  .pv-main { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 22px 30px 36px; }
+  .pv-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; }
+  .pv-head h1 { font-size: 25px; margin: 5px 0 6px; }
+  .pv-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3); }
+  .pv-actions { display: flex; align-items: center; gap: 8px; padding-top: 4px; }
+  .pool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-top: 4px; }
+  .pool {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 14px 10px; min-width: 0; transition: outline-color 0.12s ease, background 0.12s ease;
+    outline: 2px solid transparent;
+  }
+  .pool-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .pool h3 { font-family: var(--font-serif); font-size: 15px; font-weight: 600; margin: 0; letter-spacing: 0.02em; }
+  .pool .count { font-size: 11px; color: var(--ink-3); }
+  .pool .meta { margin: 3px 0 9px; font-size: 10.5px; color: var(--ink-3); line-height: 1.7; }
+  .pool-body { min-height: 44px; }
+  .pool-item {
+    position: relative; padding: 7px 7px 7px 8px; border-radius: 8px;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .pool-item + .pool-item { margin-top: 1px; }
+  .pool-item:hover { background: var(--hover); }
+  .pool-item.is-open { background: var(--paper); border-color: var(--line); }
+  .pool-item[draggable="true"] { cursor: grab; }
+  .pool-item.is-dragging { opacity: 0.35; }
+  .pi-top { display: flex; gap: 7px; align-items: flex-start; }
+  .grip { flex: 0 0 auto; color: var(--ink-4); font-size: 10px; line-height: 1.9; cursor: grab; }
+  .pi-text { min-width: 0; font-size: 12px; line-height: 1.7; color: var(--ink); word-break: break-word; }
+  .pi-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 2px 0 0 17px; }
+  .wk {
+    font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-3);
+    background: var(--sidebar); border-radius: 4px; padding: 1px 4px;
+  }
+  .dup { font-size: 9.5px; color: var(--amber); background: var(--amber-soft); border-radius: 4px; padding: 1px 5px; }
+  .item-actions { display: none; gap: 4px; flex-wrap: wrap; margin: 7px 0 0 17px; }
+  .pool-item.is-open .item-actions { display: flex; }
+  .item-btn {
+    height: 22px; padding: 0 7px; border-radius: 5px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink-3); font-size: 10.5px; white-space: nowrap;
+  }
+  .item-btn:hover { color: var(--ink); background: var(--hover); }
+  .item-btn.is-accent { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  .item-btn.is-accent:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .empty-pool { font-size: 11px; color: var(--ink-3); padding: 10px 6px 12px; line-height: 1.8; }
+  .pool.is-drop-target, .exclude-zone.is-drop-target {
+    outline: 2px dashed var(--accent-line); background: var(--accent-soft);
+  }
+  .pool.is-drop-target .pool-head h3 { color: var(--accent); }
+
+  .fold {
+    margin-top: 14px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); padding: 9px 14px;
+  }
+  .fold summary {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    cursor: pointer; font-size: 11.5px; color: var(--ink-2); list-style: none;
+  }
+  .fold summary::-webkit-details-marker { display: none; }
+  .fold summary .fold-hint { font-size: 10.5px; color: var(--ink-3); }
+  .fold[open] summary { padding-bottom: 7px; border-bottom: 1px dashed var(--line); }
+  .fold-body { padding-top: 2px; }
+  .arch-row {
+    display: flex; align-items: flex-start; gap: 8px; padding: 7px 0;
+    border-bottom: 1px dashed var(--line); font-size: 11.5px; line-height: 1.65;
+  }
+  .arch-row:last-child { border-bottom: 0; }
+  .arch-row .wk { flex: 0 0 auto; margin-top: 2px; }
+  .arch-row .grow { flex: 1; min-width: 0; color: var(--ink-2); }
+  .exclude-zone {
+    margin-top: 14px; border: 1px dashed var(--line-strong); border-radius: 10px;
+    background: color-mix(in srgb, var(--sidebar) 55%, transparent); padding: 9px 13px;
+    transition: outline-color 0.12s ease, background 0.12s ease; outline: 2px solid transparent;
+  }
+  .ez-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--ink-3); }
+  .ez-head b { font-family: var(--font-serif); font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .ez-list { margin-top: 4px; }
+  .ex-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink-3);
+  }
+  .ex-row .grow { flex: 1; min-width: 0; text-decoration: line-through; text-decoration-thickness: 1px; }
+  .pv-foot { margin-top: 16px; font-size: 10.5px; color: var(--ink-3); line-height: 1.8; }
+
+  /* ---------- 第 3 步：整理月报 ---------- */
+  .reports { flex: 1; display: flex; min-height: 0; width: 100%; }
+  .report-editor { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 18px 26px 14px; }
+  .re-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .re-head h2 { font-family: var(--font-serif); font-size: 23px; font-weight: 600; letter-spacing: 0.02em; margin: 5px 0 5px; }
+  .re-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--ink-3); }
+  .re-status { font-size: 11px; }
+  .re-status.is-saved, .re-status.is-final { color: var(--accent); }
+  .re-status.is-dirty, .re-status.is-stale { color: var(--amber); }
+  .re-status.is-none { color: var(--ink-3); }
+  .re-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .re-actions .btn, .re-actions .btn-primary { height: 30px; padding: 0 12px; font-size: 12px; }
+  .draft-editor {
+    flex: 1; min-height: 0; width: 100%; resize: none;
+    padding: 20px 24px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); font-family: var(--font);
+    font-size: 13px; line-height: 2;
+  }
+  .draft-editor:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .draft-editor[readonly] { background: var(--sidebar); color: var(--ink-2); }
+  .re-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 12px; border-radius: 8px; font-size: 11.5px;
+    background: var(--amber-soft); color: var(--amber);
+  }
+  .re-banner.is-ok { background: var(--accent-soft); color: var(--accent); }
+  .re-banner .item-btn { flex: 0 0 auto; }
+  .re-empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    min-height: 220px; border: 1px dashed var(--line-strong); border-radius: 12px;
+    color: var(--ink-3); font-size: 12px; text-align: center; line-height: 1.8;
+  }
+  .re-empty b { font-family: var(--font-serif); font-size: 18px; color: var(--ink); font-weight: 600; }
+  .re-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 10.5px; color: var(--ink-3); line-height: 1.7; }
+
+  /* ---------- 弹窗 / 提示 ---------- */
+  .modal {
+    position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center;
+    background: rgba(20, 30, 26, 0.24); padding: 24px;
+  }
+  body.modal-open .modal { display: flex; }
+  .modal-card {
+    width: min(760px, 100%); max-height: 88vh; overflow: auto;
+    background: var(--panel); border-radius: 14px; box-shadow: var(--shadow-modal);
+    padding: 22px 24px 18px;
+  }
+  .modal-card h2 { font-family: var(--font-serif); font-size: 20px; font-weight: 600; margin: 5px 0 4px; }
+  .modal-card .sub { font-size: 11.5px; color: var(--ink-3); margin: 0 0 14px; line-height: 1.8; }
+  .md-preview {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--paper);
+    padding: 18px 22px; max-height: 56vh; overflow: auto; font-size: 13px; line-height: 1.95;
+  }
+  .md-preview h2 { font-family: var(--font-serif); font-size: 17px; font-weight: 600; margin: 14px 0 6px; }
+  .md-preview h2:first-child { margin-top: 0; }
+  .md-preview ul { margin: 0; padding-left: 18px; }
+  .md-preview li { margin: 4px 0; }
+  .md-preview p { margin: 8px 0; color: var(--ink-2); }
+  .md-preview .doc-note {
+    margin: 0 0 10px; padding: 7px 10px; border-radius: 7px;
+    background: var(--amber-soft); color: var(--amber); font-size: 11.5px; line-height: 1.7;
+  }
+  .modal-foot { margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 10px);
+    max-width: 72vw; padding: 8px 14px; border-radius: 8px;
+    background: var(--ink); color: var(--paper); font-size: 12px;
+    opacity: 0; pointer-events: none; transition: 0.18s ease; z-index: 80;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  }
+  .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+  @media (max-width: 1020px) {
+    .pool-grid { grid-template-columns: 1fr; }
+    .proj-rail { flex-basis: 232px; }
+    .proj-head, .proj-row { grid-template-columns: minmax(150px, 1.2fr) minmax(130px, 1fr) 72px 96px 180px; }
+    .pv-main { padding: 18px 18px 28px; }
+    .report-editor { padding: 14px 16px 12px; }
+  }
+</style>
+</head>
+<body data-screen="library">
+<div id="app">
+  <header class="topbar" id="topbar"></header>
+  <div class="stepper" id="stepper"></div>
+
+  <main class="screen screen-library" id="screen-library"></main>
+  <main class="screen screen-source" id="screen-source"></main>
+  <main class="screen screen-preview" id="screen-preview"></main>
+  <main class="screen screen-reports" id="screen-reports"></main>
+</div>
+
+<div class="modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============================== 示例数据 ============================== */
+  const MONTH = "2026-10";
+  const GROUP = "框架组";
+  const LEAD = "陈组长";
+  const STORAGE_KEY = "kuibu.report.month.proto.v1";
+
+  const PROJECTS = [
+    { id: "p1", name: "云平台项目", mark: "云" },
+    { id: "p2", name: "数据中台项目", mark: "数" },
+  ];
+
+  const MONTH_WEEKS = [
+    { week: "2026-W40", day: "10-01", weekday: "周四", range: "09-28–10-04" },
+    { week: "2026-W41", day: "10-08", weekday: "周四", range: "10-05–10-11" },
+    { week: "2026-W42", day: "10-15", weekday: "周四", range: "10-12–10-18" },
+    { week: "2026-W43", day: "10-22", weekday: "周四", range: "10-19–10-25" },
+    { week: "2026-W44", day: "10-29", weekday: "周四", range: "10-26–11-01" },
+  ];
+
+  /* 月初 / 月末的相邻周：默认不在本月，但可手动纳入本期，也允许把本月周排除。 */
+  const BOUNDARY_WEEKS = [
+    { week: "2026-W39", day: "09-24", weekday: "周四", range: "09-21–09-27", label: "上月最后一周" },
+    { week: "2026-W45", day: "11-05", weekday: "周四", range: "11-02–11-08", label: "下月第一周" },
+  ];
+
+  const ALL_WEEKS = [BOUNDARY_WEEKS[0], ...MONTH_WEEKS, BOUNDARY_WEEKS[1]];
+
+  const REPORTS = {
+    "2026-W39": {
+      p1: {
+        status: "final", at: "09-24 18:10",
+        summary: [
+          "完成支付渠道接入方案讨论，输出初稿。",
+          "梳理上季度对账问题，形成 6 条改进项。",
+        ],
+        plan: [
+          "推进支付渠道接入方案评审。",
+          "把对账问题改进项排入下月计划。",
+        ],
+      },
+      p2: {
+        status: "final", at: "09-24 17:20",
+        summary: [
+          "完成数据中台容量盘点，输出报告。",
+          "修复报表订阅推送偶发失败。",
+        ],
+        plan: [
+          "启动报表订阅重试改造。",
+          "梳理下季度容量规划输入。",
+        ],
+      },
+    },
+    "2026-W40": {
+      p1: {
+        status: "final", at: "10-01 18:20",
+        summary: [
+          "完成退款接口联调，覆盖 12 条用例，剩余 2 条异常分支待补。",
+          "排查线上超时问题，定位为连接池配置过小，调整后观察 3 天无复现。",
+          "对账服务设计评审，共 8 条意见，已修改 5 条。",
+        ],
+        plan: [
+          "补齐退款异常分支，周四前提测。",
+          "按评审意见完成对账服务剩余 3 条改造。",
+        ],
+      },
+      p2: {
+        status: "final", at: "10-01 17:05",
+        summary: [
+          "报表导出支持 Excel，10 万行导出耗时 8 秒。",
+          "修复报表日期筛选跨月错误，已上线。",
+          "支持客户现场部署，解决证书链配置问题。",
+        ],
+        plan: [
+          "梳理报表权限模型，输出方案文档。",
+          "优化导出任务队列，避免大文件阻塞。",
+        ],
+      },
+    },
+    "2026-W41": {
+      p1: {
+        status: "final", at: "10-08 18:40",
+        summary: [
+          "完成退款接口联调，覆盖 12 条用例，剩余 2 条异常分支待补。",
+          "对账服务剩余 3 条评审意见改造完成，等待回归。",
+          "参与支付渠道联调，处理 1 个字段映射问题。",
+        ],
+        plan: [
+          "完成对账服务回归，准备灰度。",
+          "梳理支付渠道对账差异，输出处理方案。",
+        ],
+      },
+      p2: {
+        status: "final", at: "10-08 17:30",
+        summary: [
+          "报表权限模型方案评审通过，开始开发。",
+          "导出任务队列改造完成，大文件导出不再阻塞。",
+          "完成数据源连接池参数调优，慢查询下降 40%。",
+          "支持客户现场问题排查，累计 4 个工单。",
+        ],
+        plan: [
+          "报表权限模型开发完成，进入联调。",
+          "梳理数据源连接池监控指标。",
+        ],
+      },
+    },
+    "2026-W42": {
+      p1: {
+        status: "final", at: "10-15 19:10",
+        summary: [
+          "对账服务回归通过，灰度 20%，无异常。",
+          "完成支付渠道健康检查告警接入，覆盖 3 家渠道。",
+          "参与支付渠道联调，处理 1 个字段映射问题。",
+        ],
+        plan: [
+          "对账服务灰度扩到 50%，准备回滚预案。",
+          "输出支付渠道对账差异处理方案。",
+        ],
+      },
+      p2: { status: "missing" },
+    },
+    "2026-W43": {
+      p1: {
+        status: "final", at: "10-22 18:55",
+        summary: [
+          "对账服务灰度扩到 50%，观察 3 天无异常。",
+          "输出支付渠道对账差异处理方案，评审通过。",
+          "参与支付渠道联调，处理 1 个字段映射问题。",
+          "例行巡检线上服务，处理 2 个告警。",
+        ],
+        plan: [
+          "对账服务全量发布，观察一周。",
+          "支付渠道对账差异处理方案进入排期。",
+          "梳理下月支付渠道接入计划。",
+        ],
+      },
+      p2: {
+        status: "final", at: "10-22 17:20",
+        summary: [
+          "报表权限模型开发完成，联调通过。",
+          "数据源连接池监控指标接入看板。",
+          "修复导出文件名乱码问题，已上线。",
+          "支持客户现场问题排查，累计 4 个工单。",
+        ],
+        plan: [
+          "报表权限模型灰度 10%，收集反馈。",
+          "补充导出任务队列的重试与告警。",
+        ],
+      },
+    },
+    "2026-W44": {
+      p1: {
+        status: "draft", at: "10-28 20:10",
+        summary: [
+          "修复退款金额精度问题，已上线。",
+          "对账服务全量发布完成。",
+        ],
+        plan: [
+          "观察全量发布后一周的线上指标。",
+        ],
+      },
+      p2: {
+        status: "final", at: "10-29 17:40",
+        summary: [
+          "报表权限模型灰度 10%，无异常。",
+          "补充导出任务队列重试与告警，已上线。",
+          "例行巡检线上服务，处理 2 个告警。",
+        ],
+        plan: [
+          "报表权限模型全量发布。",
+          "整理数据中台季度容量规划。",
+          "启动报表导出性能优化专项。",
+        ],
+      },
+    },
+    "2026-W45": {
+      p1: {
+        status: "final", at: "11-05 18:30",
+        summary: [
+          "对账服务全量发布后观察一周，指标平稳。",
+          "完成支付渠道接入方案评审，进入排期。",
+        ],
+        plan: [
+          "启动支付渠道接入开发。",
+          "整理本月对账问题闭环情况。",
+        ],
+      },
+      p2: {
+        status: "final", at: "11-05 17:50",
+        summary: [
+          "报表权限模型全量发布完成。",
+          "报表导出性能优化启动，完成基线采集。",
+        ],
+        plan: [
+          "推进报表导出性能优化。",
+          "输出数据中台季度容量规划。",
+        ],
+      },
+    },
+  };
+
+  /* ============================== 状态 ============================== */
+  const state = {
+    screen: "library", // library | source | preview | reports
+    scope: defaultScope(), // week -> 是否纳入本期；默认按周报日归属
+    sel: {},            // "week|projectId" -> true/false
+    pools: {},          // gid -> summary | plan | archive | excluded
+    drafts: {},         // projectId -> draft
+    activeProject: "p1",
+    gate: false,
+    modal: null,
+  };
+
+  /* ============================== 工具 ============================== */
+  const $ = (sel) => document.querySelector(sel);
+  const esc = (s) =>
+    String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const norm = (s) =>
+    String(s).replace(/\s+/g, "").replace(/[，。、；：？！“”‘’（）()【】《》…—\-,.;:!?]/g, "");
+  function shortHash(str) {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  const weekIdx = (week) => ALL_WEEKS.findIndex((w) => w.week === week);
+  const projectById = (id) => PROJECTS.find((p) => p.id === id) || null;
+  const srcKey = (week, pid) => week + "|" + pid;
+  const reportOf = (week, pid) => {
+    const r = (REPORTS[week] || {})[pid];
+    return r || { status: "missing", summary: [], plan: [] };
+  };
+  const timeText = (ts) => {
+    const d = new Date(ts);
+    const p = (n) => String(n).padStart(2, "0");
+    return p(d.getHours()) + ":" + p(d.getMinutes());
+  };
+  function weeksLabel(weeks) {
+    if (!weeks || !weeks.length) return "—";
+    const nums = weeks.map((w) => Number(w.slice(6))).sort((a, b) => a - b);
+    const chunks = [];
+    let start = nums[0], prev = nums[0];
+    for (let i = 1; i < nums.length; i++) {
+      const n = nums[i];
+      if (n === prev + 1) { prev = n; continue; }
+      chunks.push([start, prev]); start = prev = n;
+    }
+    chunks.push([start, prev]);
+    return chunks.map(([a, b]) => (a === b ? "W" + a : "W" + a + "–W" + b)).join("、");
+  }
+
+  function defaultSel() {
+    const sel = {};
+    ALL_WEEKS.forEach((w) => {
+      PROJECTS.forEach((p) => {
+        if (reportOf(w.week, p.id).status === "final") sel[srcKey(w.week, p.id)] = true;
+      });
+    });
+    return sel;
+  }
+
+  /* ============================== 本期周范围 ============================== */
+  function defaultScope() {
+    const scope = {};
+    ALL_WEEKS.forEach((w) => {
+      scope[w.week] = MONTH_WEEKS.some((m) => m.week === w.week);
+    });
+    return scope;
+  }
+
+  function isWeekInScope(week) {
+    return state.scope[week] === true;
+  }
+
+  function scopedWeeks() {
+    return ALL_WEEKS.filter((w) => state.scope[w.week]);
+  }
+
+  function scopeLabel() {
+    return weeksLabel(scopedWeeks().map((w) => w.week));
+  }
+
+  function scopeSlots() {
+    return scopedWeeks().length * PROJECTS.length;
+  }
+
+  function scopeFinalSlots() {
+    let n = 0;
+    scopedWeeks().forEach((w) => PROJECTS.forEach((p) => { if (reportOf(w.week, p.id).status === "final") n++; }));
+    return n;
+  }
+
+  function lastScopeWeek() {
+    const list = scopedWeeks();
+    return list.length ? list[list.length - 1].week : MONTH_WEEKS[MONTH_WEEKS.length - 1].week;
+  }
+
+  function scopeIsDefault() {
+    const def = defaultScope();
+    return ALL_WEEKS.every((w) => Boolean(state.scope[w.week]) === def[w.week]);
+  }
+
+  /* ============================== 派生数据 ============================== */
+  function includedReports(pid) {
+    return scopedWeeks().filter((w) => {
+      const r = reportOf(w.week, pid);
+      return r.status === "final" && state.sel[srcKey(w.week, pid)];
+    }).map((w) => ({ week: w.week, report: reportOf(w.week, pid) }));
+  }
+
+  function makeGroups(items) {
+    const map = new Map();
+    items.forEach((it, idx) => {
+      const key = norm(it.text) || String(idx);
+      let g = map.get(key);
+      if (!g) {
+        g = { key: key, text: it.text, weeks: [], firstWeek: it.week, lastWeek: it.week, ord: idx };
+        map.set(key, g);
+      } else {
+        g.text = it.text;
+        g.lastWeek = it.week;
+      }
+      if (g.weeks.indexOf(it.week) < 0) g.weeks.push(it.week);
+    });
+    map.forEach((g) => g.weeks.sort((a, b) => weekIdx(a) - weekIdx(b)));
+    return Array.from(map.values());
+  }
+
+  function allGroups(pid) {
+    const inc = includedReports(pid);
+    const summary = makeGroups(inc.flatMap((r) => r.report.summary.map((text) => ({ text: text, week: r.week }))));
+    const latest = inc.length ? inc[inc.length - 1] : null;
+    const plan = latest ? makeGroups(latest.report.plan.map((text) => ({ text: text, week: latest.week }))) : [];
+    const planKeys = plan.map((g) => g.key);
+    const archived = makeGroups(
+      inc.slice(0, -1).flatMap((r) => r.report.plan.map((text) => ({ text: text, week: r.week })))
+    ).filter((g) => planKeys.indexOf(g.key) < 0);
+    return { inc: inc, latest: latest, summary: summary, plan: plan, archived: archived };
+  }
+
+  function sortRows(rows) {
+    return rows.slice().sort((x, y) => {
+      const diff = weekIdx(x.g.firstWeek) - weekIdx(y.g.firstWeek);
+      return diff || x.g.ord - y.g.ord;
+    });
+  }
+
+  function projectView(pid) {
+    const a = allGroups(pid);
+    const rows = [];
+    const add = (sk, list, def) => {
+      list.forEach((g) => {
+        const gid = pid + ":" + sk + ":" + shortHash(g.key);
+        rows.push({ sk: sk, g: g, gid: gid, pool: state.pools[gid] || def });
+      });
+    };
+    add("summary", a.summary, "summary");
+    add("plan", a.plan, "plan");
+    add("archived", a.archived, "archive");
+    const pick = (pool) => sortRows(rows.filter((r) => r.pool === pool));
+    return { a: a, rows: rows, summary: pick("summary"), plan: pick("plan"), archive: pick("archive"), excluded: pick("excluded") };
+  }
+
+  function countPools(v) {
+    return {
+      summary: v.summary.length,
+      plan: v.plan.length,
+      archive: v.archive.length,
+      excluded: v.excluded.length,
+      total: v.summary.length + v.plan.length,
+    };
+  }
+
+  function totalCandidates() {
+    return PROJECTS.reduce((n, p) => n + countPools(projectView(p.id)).total, 0);
+  }
+
+  function finalSlots() {
+    return scopeFinalSlots();
+  }
+
+  function unavailableCount() {
+    let n = 0;
+    scopedWeeks().forEach((w) => PROJECTS.forEach((p) => { if (reportOf(w.week, p.id).status !== "final") n++; }));
+    return n;
+  }
+
+  function selectedCount() {
+    let n = 0;
+    scopedWeeks().forEach((w) => {
+      PROJECTS.forEach((p) => {
+        if (reportOf(w.week, p.id).status === "final" && state.sel[srcKey(w.week, p.id)]) n++;
+      });
+    });
+    return n;
+  }
+
+  function missingFor(pid) {
+    return scopedWeeks().filter((w) => reportOf(w.week, pid).status !== "final").map((w) => ({
+      week: w.week,
+      status: reportOf(w.week, pid).status,
+    }));
+  }
+
+  function statusWord(status) {
+    return status === "draft" ? "未定稿" : status === "missing" ? "未提交" : "已定稿";
+  }
+
+  function sourceSnapshot(pid) {
+    const v = projectView(pid);
+    const scope = scopedWeeks().map((w) => w.week).join(",");
+    const weeks = v.a.inc.map((r) => r.week).join(",");
+    const rows = v.rows
+      .filter((r) => r.pool === "summary" || r.pool === "plan")
+      .map((r) => r.sk + ":" + r.g.key + ":" + r.g.text + ":" + r.pool)
+      .sort()
+      .join("|");
+    return scope + "||" + weeks + "||" + rows;
+  }
+
+  function sourceChanged(pid) {
+    const d = state.drafts[pid];
+    return Boolean(d) && d.sourceHash !== sourceSnapshot(pid);
+  }
+
+  function isStale(pid) {
+    const d = state.drafts[pid];
+    return Boolean(d) && !d.finalized && sourceChanged(pid);
+  }
+
+  function draftStatus(pid) {
+    const d = state.drafts[pid];
+    if (!d) return { text: "未开始", cls: "is-none" };
+    if (d.finalized) return { text: "已定稿", cls: "is-final" };
+    if (d.dirty) return { text: "未保存", cls: "is-dirty" };
+    if (isStale(pid)) return { text: "候选已更新", cls: "is-stale" };
+    return { text: "草稿 · " + (d.savedAt ? timeText(d.savedAt) : "已保存"), cls: "is-saved" };
+  }
+
+  function shortStatus(pid) {
+    const d = state.drafts[pid];
+    if (!d) return { text: "未开始", cls: "is-none" };
+    if (d.finalized) return { text: "已定稿", cls: "is-final" };
+    if (d.dirty) return { text: "未保存", cls: "is-dirty" };
+    if (isStale(pid)) return { text: "候选已更新", cls: "is-stale" };
+    return { text: "草稿", cls: "is-draft" };
+  }
+
+  function buildDraft(pid) {
+    const v = projectView(pid);
+    const notes = [];
+    if (!scopeIsDefault()) notes.push("本期范围：" + scopeLabel() + "（自定义）");
+    const miss = missingFor(pid);
+    if (miss.length) {
+      notes.push("未纳入：" + miss.map((m) => m.week.slice(5) + "（" + statusWord(m.status) + "）").join("、"));
+    }
+    const lastWeek = lastScopeWeek();
+    if (v.a.latest && v.a.latest.week !== lastWeek) notes.push("下月计划取自 " + v.a.latest.week.slice(5));
+
+    const summary = v.summary.map((r) => r.g.text);
+    const plan = v.plan.map((r) => r.g.text);
+    let out = "";
+    if (notes.length) out += "> " + notes.join(" · ") + "\n\n";
+    out += "## 本月总结\n\n";
+    out += summary.length ? summary.map((t) => "- " + t).join("\n") : "- 本月没有可纳入的总结条目。";
+    out += "\n\n## 下月计划\n\n";
+    out += plan.length ? plan.map((t) => "- " + t).join("\n") : "- 待补充下月计划。";
+    return out + "\n";
+  }
+
+  function ensureDrafts() {
+    let n = 0;
+    PROJECTS.forEach((p) => {
+      if (state.drafts[p.id]) return;
+      const content = buildDraft(p.id);
+      state.drafts[p.id] = {
+        content: content,
+        savedContent: content,
+        generatedContent: content,
+        sourceHash: sourceSnapshot(p.id),
+        finalized: false,
+        savedAt: Date.now(),
+        dirty: false,
+      };
+      n++;
+    });
+    if (!projectById(state.activeProject)) state.activeProject = PROJECTS[0].id;
+    saveLocal();
+    return n;
+  }
+
+  function saveAllDrafts() {
+    let n = 0;
+    PROJECTS.forEach((p) => {
+      const d = state.drafts[p.id];
+      if (d && !d.finalized && d.dirty) {
+        d.savedContent = d.content;
+        d.savedAt = Date.now();
+        d.dirty = false;
+        n++;
+      }
+    });
+    saveLocal();
+    return n;
+  }
+
+  /* ============================== 持久化 ============================== */
+  function saveLocal() {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          scope: state.scope,
+          sel: state.sel,
+          pools: state.pools,
+          drafts: state.drafts,
+          gate: state.gate,
+          activeProject: state.activeProject,
+        })
+      );
+    } catch (err) {
+      /* 本地文件打开时可能不可用 */
+    }
+  }
+
+  function loadLocal() {
+    state.scope = defaultScope();
+    state.sel = defaultSel();
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.scope && typeof saved.scope === "object") {
+        ALL_WEEKS.forEach((w) => {
+          if (typeof saved.scope[w.week] === "boolean") state.scope[w.week] = saved.scope[w.week];
+        });
+      }
+      if (saved.sel && typeof saved.sel === "object") {
+        Object.keys(saved.sel).forEach((k) => {
+          const parts = k.split("|");
+          if (parts.length !== 2) return;
+          if (reportOf(parts[0], parts[1]).status === "final") state.sel[k] = Boolean(saved.sel[k]);
+        });
+      }
+      if (saved.pools && typeof saved.pools === "object") {
+        Object.keys(saved.pools).forEach((k) => {
+          const v = saved.pools[k];
+          if (["summary", "plan", "archive", "excluded"].indexOf(v) >= 0) state.pools[k] = v;
+        });
+      }
+      if (saved.drafts && typeof saved.drafts === "object") {
+        Object.keys(saved.drafts).forEach((pid) => {
+          if (!projectById(pid)) return;
+          const d = saved.drafts[pid];
+          if (!d || typeof d.content !== "string") return;
+          state.drafts[pid] = {
+            content: d.content,
+            savedContent: typeof d.savedContent === "string" ? d.savedContent : d.content,
+            generatedContent: typeof d.generatedContent === "string" ? d.generatedContent : d.content,
+            sourceHash: typeof d.sourceHash === "string" ? d.sourceHash : "",
+            finalized: Boolean(d.finalized),
+            savedAt: d.savedAt || null,
+            dirty: false,
+          };
+          state.drafts[pid].dirty = state.drafts[pid].content !== state.drafts[pid].savedContent;
+        });
+      }
+      if (typeof saved.gate === "boolean") state.gate = saved.gate;
+      if (projectById(saved.activeProject)) state.activeProject = saved.activeProject;
+    } catch (err) {
+      /* 忽略坏数据 */
+    }
+  }
+
+  /* ============================== 渲染：顶栏与步骤条 ============================== */
+  function renderTopbar() {
+    const inFlow = state.screen !== "library";
+    let html = '<div class="tb-left">';
+    if (inFlow) {
+      html += '<button class="tb-back" data-act="to-library">‹ 月报</button><span class="tb-divider"></span><span class="tb-title">月报整理</span>';
+    } else {
+      html += '<span class="tb-brand">跬步</span><span class="tb-divider"></span><span class="tb-title">月报</span>';
+    }
+    html += '<span class="tb-week">' + MONTH + '</span><span class="tb-group">' + GROUP + " · " + LEAD + "</span></div>";
+    html += '<div class="tb-right">';
+    html += '<span class="tb-hint">月报收集日 10-28</span>';
+    html += '<button class="tb-btn" data-act="reset">重置演示</button>';
+    html += '<span class="avatar">陈</span></div>';
+    $("#topbar").innerHTML = html;
+  }
+
+  function flowStep(n, title, sub, on, done, locked) {
+    const num = done && !on ? "✓" : String(n);
+    return (
+      '<button class="flow-step' + (on ? " is-on" : "") + (done ? " is-done" : "") + (locked ? " is-locked" : "") +
+      '" data-act="go-step" data-step="' + n + '">' +
+      '<span class="flow-num">' + num + "</span>" +
+      '<span class="flow-text"><span class="flow-title">' + title + '</span><span class="flow-sub">' + esc(sub) + "</span></span>" +
+      "</button>"
+    );
+  }
+
+  function step1Ready() {
+    return selectedCount() > 0 && (unavailableCount() === 0 || state.gate);
+  }
+
+  function renderStepper() {
+    const el = $("#stepper");
+    if (!el) return;
+    if (state.screen === "library") { el.innerHTML = ""; return; }
+    const drafts = PROJECTS.filter((p) => state.drafts[p.id]).map((p) => state.drafts[p.id]);
+    const draftCount = drafts.length;
+    const finalCount = drafts.filter((d) => d.finalized).length;
+    const dirtyCount = drafts.filter((d) => d.dirty).length;
+    const staleCount = PROJECTS.filter((p) => isStale(p.id)).length;
+    const step2Done = draftCount === PROJECTS.length;
+    const step3Done = step2Done && finalCount === PROJECTS.length;
+    const sub1 = selectedCount() + " 份周组报 · " + totalCandidates() + " 条候选";
+    const sub2 = draftCount
+      ? draftCount + " 份草稿" + (staleCount ? " · " + staleCount + " 份需更新" : "")
+      : totalCandidates() + " 条候选";
+    const sub3 = finalCount
+      ? finalCount + " 份已定稿"
+      : draftCount
+        ? draftCount + " 份草稿" + (dirtyCount ? " · " + dirtyCount + " 份未保存" : "")
+        : "生成草稿后开始";
+
+    let actions = "";
+    if (state.screen === "source") {
+      actions += step1Ready()
+        ? '<span class="flow-hint">' + (unavailableCount() ? "缺周已确认" : "来源已齐") + "</span>"
+        : '<span class="flow-hint">' + (selectedCount() === 0 ? "先选择要纳入的周组报" : "请勾选确认缺周继续") + "</span>";
+      actions += '<button class="btn-primary" data-act="next-preview"' + (step1Ready() ? "" : " disabled") + ">下一步：项目预览</button>";
+    } else if (state.screen === "preview") {
+      actions += '<button class="btn" data-act="prev-step">上一步</button>';
+      actions += '<button class="btn-primary" data-act="next-reports"' + (totalCandidates() > 0 ? "" : " disabled") + ">开始整理月报</button>";
+    } else if (state.screen === "reports") {
+      actions += '<button class="btn" data-act="prev-step">上一步</button>';
+      actions += '<button class="btn" data-act="save-all">保存全部' + (dirtyCount ? "（" + dirtyCount + "）" : "") + "</button>";
+      actions += '<button class="btn" data-act="finish-flow">完成</button>';
+    }
+
+    el.innerHTML =
+      '<div class="flow-steps">' +
+      flowStep(1, "拉取周报", sub1, state.screen === "source", step1Ready()) +
+      '<span class="flow-line"></span>' +
+      flowStep(2, "项目预览", sub2, state.screen === "preview", draftCount > 0) +
+      '<span class="flow-line"></span>' +
+      flowStep(3, "整理月报", sub3, state.screen === "reports", step3Done, draftCount === 0) +
+      "</div>" +
+      '<div class="flow-actions">' + actions + "</div>";
+  }
+
+  /* ============================== 渲染：首页 ============================== */
+  function renderLibrary() {
+    const rows = PROJECTS.map((p) => {
+      const v = projectView(p.id);
+      const inc = v.a.inc;
+      return {
+        p: p,
+        counts: countPools(v),
+        inc: inc,
+        d: state.drafts[p.id],
+        st: shortStatus(p.id),
+      };
+    });
+    const candTotal = rows.reduce((n, r) => n + r.counts.total, 0);
+    const finalized = rows.filter((r) => r.d && r.d.finalized).length;
+    const missing = [];
+    PROJECTS.forEach((p) => missingFor(p.id).forEach((m) => missing.push({ p: p, m: m })));
+    const allFinal = finalized === PROJECTS.length;
+    const staleCount = rows.filter((r) => isStale(r.p.id)).length;
+    const changedFinal = rows.filter((r) => r.d && r.d.finalized && sourceChanged(r.p.id)).length;
+    const anyDrafts = rows.some((r) => r.d);
+
+    let notice = "";
+    if (missing.length) {
+      notice +=
+        '<div class="notice"><b>缺 ' + missing.length + " 份周组报</b> · " +
+        missing.map((x) => x.p.name + " " + x.m.week.slice(5) + "（" + statusWord(x.m.status) + "）").join("、") +
+        "。缺周不阻塞，月报开头会标注未纳入；补定稿后回来重新拉取即可。</div>";
+    }
+    if (staleCount) {
+      notice += '<div class="notice"><b>' + staleCount + " 份草稿的来源已变化</b> · 周组报勾选或归口改了，草稿仍基于旧候选；可进去重新生成。</div>";
+    }
+    if (changedFinal) {
+      notice += '<div class="notice"><b>' + changedFinal + " 份已定稿月报的来源已变化</b> · 取消定稿后可重新生成；定稿内容不会被自动覆盖。</div>";
+    }
+    if (allFinal) {
+      notice += '<div class="notice is-ok"><b>本月 ' + PROJECTS.length + " 个项目月报已全部定稿</b> · 可导出，或按现有流程报送 SE。</div>";
+    }
+
+    const rowsHTML = rows.map((r) => {
+      const src = r.inc.length
+        ? weeksLabel(r.inc.map((x) => x.week)) + "（" + r.inc.length + " 份）"
+        : "还没有纳入周组报";
+      let acts = "";
+      if (r.d && r.d.finalized) {
+        acts += '<button class="mini-btn" data-act="view-monthly" data-proj="' + r.p.id + '">查看</button>';
+        acts += '<button class="mini-btn" data-act="export-project" data-proj="' + r.p.id + '">导出</button>';
+      } else if (r.d) {
+        acts += '<button class="mini-btn is-primary" data-act="start-project" data-proj="' + r.p.id + '">继续整理</button>';
+        acts += '<button class="mini-btn" data-act="view-monthly" data-proj="' + r.p.id + '">查看</button>';
+      } else {
+        acts += '<button class="mini-btn is-primary" data-act="start-project" data-proj="' + r.p.id + '">开始整理</button>';
+      }
+      return (
+        '<div class="proj-row">' +
+        '<div class="proj-name"><span class="pmark ' + (r.p.id === "p2" ? "is-2" : "") + '">' + r.p.mark + "</span>" +
+        "<div><b>" + esc(r.p.name) + "</b><span>" + GROUP + " · 每项目一份月报</span></div></div>" +
+        '<div class="proj-src">' + esc(src) + "<small>总结 " + r.counts.summary + " · 计划 " + r.counts.plan + "</small></div>" +
+        '<div class="proj-count"><b>' + r.counts.total + "</b><span>条候选</span></div>" +
+        '<div><span class="status-pill ' + r.st.cls + '">' + r.st.text + "</span></div>" +
+        '<div class="row-actions">' + acts + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    const primary = anyDrafts ? "继续整理月报" : "开始月报整理";
+    const primaryAct = anyDrafts ? "go-reports" : "start-flow";
+
+    $("#screen-library").innerHTML =
+      '<div class="wrap">' +
+      '<div class="page-head"><div>' +
+      '<div class="eyebrow">MONTHLY · ' + MONTH + " · 按项目 · 本期 " + esc(scopeLabel()) + "</div>" +
+      "<h1>月报</h1>" +
+      '<p class="lede">月报由本期各周<strong>已定稿</strong>的按项目组报拼成：先拉周报、按项目预览总结与计划，再分别整理每个项目的月报。每份月报独立保存、定稿、导出。</p>' +
+      "</div>" +
+      '<div class="head-actions">' +
+      '<span class="month-switch"><button class="icon-btn" disabled title="原型只演示 2026-10">‹</button>' +
+      '<span class="month-label">2026-10</span>' +
+      '<button class="icon-btn" disabled title="原型只演示 2026-10">›</button></span>' +
+      '<button class="btn btn-primary" data-act="' + primaryAct + '">' + primary + "</button>" +
+      "</div></div>" +
+      '<div class="stats">' +
+      '<div class="stat"><b>' + finalSlots() + "<em>/" + scopeSlots() + "</em></b><span>份周组报已定稿（本期 " + scopedWeeks().length + " 周 × " + PROJECTS.length + " 个项目）</span></div>" +
+      '<div class="stat"><b>' + candTotal + "</b><span>条候选（跨周重复已合并）</span></div>" +
+      '<div class="stat"><b>' + PROJECTS.length + "</b><span>个项目 · 各自一份月报</span></div>" +
+      '<div class="stat"><b>' + finalized + "<em>/" + PROJECTS.length + "</em></b><span>份月报已定稿</span></div>" +
+      "</div>" +
+      notice +
+      '<div class="proj-list">' +
+      '<div class="proj-head"><span>项目</span><span>来源周组报</span><span>候选</span><span>状态</span><span></span></div>' +
+      rowsHTML +
+      "</div>" +
+      '<p class="footnote">默认按周报日（周四）归属：10 月含 W40–W44；第 ① 步可把上月最后一周 / 下月第一周纳入本期，或把月末周排除。月报只拉已定稿的周组报，不重新读组员原文；要改内容，先回周报定稿。月报收集日 10-28。交互原型只演示 2026-10，示例数据，进度保存在本机浏览器。</p>' +
+      "</div>";
+  }
+
+  /* ============================== 渲染：第 1 步 ============================== */
+  function srcCell(week, p) {
+    const r = reportOf(week, p.id);
+    if (r.status === "final") {
+      const on = Boolean(state.sel[srcKey(week, p.id)]);
+      return (
+        '<div class="src-cell ' + (on ? "is-on" : "is-off") + '">' +
+        '<button class="src-toggle" data-act="toggle-src" data-week="' + week + '" data-proj="' + p.id + '" aria-pressed="' + on + '">' +
+        '<span class="tick">' + (on ? "✓" : "") + "</span>" +
+        '<span class="src-info"><b>' + esc(p.name) + "</b><span>" + (r.summary.length + r.plan.length) + " 条 · 已定稿 " + esc(r.at) + "</span></span>" +
+        "</button>" +
+        '<button class="src-peek" data-act="peek-week" data-week="' + week + '" data-proj="' + p.id + '">原文</button>' +
+        "</div>"
+      );
+    }
+    if (r.status === "draft") {
+      return (
+        '<div class="src-cell is-locked">' +
+        '<span class="tick">!</span>' +
+        '<span class="src-info"><b>' + esc(p.name) + "</b><span>未定稿 · 不能纳入</span></span>" +
+        '<button class="src-peek" data-act="peek-week" data-week="' + week + '" data-proj="' + p.id + '">查看</button>' +
+        "</div>"
+      );
+    }
+    return (
+      '<div class="src-cell is-locked">' +
+      '<span class="tick">–</span>' +
+      '<span class="src-info"><b>' + esc(p.name) + "</b><span>未提交</span></span>" +
+      "</div>"
+    );
+  }
+
+  function srcCellOut(week, p) {
+    const r = reportOf(week, p.id);
+    const detail = r.status === "final"
+      ? "已定稿 " + (r.summary.length + r.plan.length) + " 条 · 不在本期"
+      : statusWord(r.status) + " · 不在本期";
+    const peek = r.status === "missing"
+      ? ""
+      : '<button class="src-peek" data-act="peek-week" data-week="' + week + '" data-proj="' + p.id + '">查看</button>';
+    return (
+      '<div class="src-cell is-out">' +
+      '<span class="tick">–</span>' +
+      '<span class="src-info"><b>' + esc(p.name) + "</b><span>" + esc(detail) + "</span></span>" +
+      peek +
+      "</div>"
+    );
+  }
+
+  function srcWeekCell(w) {
+    const on = isWeekInScope(w.week);
+    const tag = w.label ? '<em class="side-tag">' + esc(w.label) + "</em>" : "";
+    return (
+      '<div class="src-week">' +
+      '<button class="scope-btn ' + (on ? "is-on" : "is-out") + '" data-act="toggle-scope" data-week="' + w.week + '" aria-pressed="' + on + '" title="' + (on ? "已纳入本期，点击取消" : "点击纳入本期") + '">' +
+      '<span class="tick">' + (on ? "✓" : "") + "</span>" +
+      '<span class="scope-text"><b>' + w.week.slice(5) + "</b><span>" + w.range + "</span>" + tag + "</span>" +
+      "</button>" +
+      "</div>"
+    );
+  }
+
+  function renderSource() {
+    const el = $("#screen-source");
+    const top = el ? el.scrollTop : 0;
+    const weeks = scopedWeeks();
+    const missingCount = unavailableCount();
+    const candTotal = totalCandidates();
+    const candSummary = PROJECTS.reduce((n, p) => n + countPools(projectView(p.id)).summary, 0);
+    const candPlan = PROJECTS.reduce((n, p) => n + countPools(projectView(p.id)).plan, 0);
+    const gate =
+      missingCount > 0
+        ? '<label class="gate"><input type="checkbox" id="gate"' + (state.gate ? " checked" : "") + ">" +
+          "<span><b>已知 " + missingCount + " 份周组报未定稿 / 未提交</b>，仍按当前纳入的 " + selectedCount() +
+          " 份整理；月报开头会标注未纳入。</span></label>"
+        : '<div class="notice is-ok is-compact"><b>本期 ' + scopeSlots() + " 份周组报全部已定稿</b> · 可直接下一步。</div>";
+
+    const scopeBar =
+      '<div class="scope-bar">' +
+      '<span class="scope-label">本期范围 <b>' + esc(scopeLabel()) + "</b> · " + weeks.length + " 周</span>" +
+      '<span class="scope-note">' + (scopeIsDefault() ? "默认按周报日归属" : "自定义范围") +
+      "；可勾选上月最后一周 / 下月第一周，或取消月末周</span>" +
+      '<button class="link-btn" data-act="reset-scope"' + (scopeIsDefault() ? " disabled" : "") + ">恢复默认</button>" +
+      "</div>";
+
+    const rows = ALL_WEEKS.map((w) => {
+      const on = isWeekInScope(w.week);
+      return (
+        '<div class="src-row' + (on ? "" : " is-out") + '">' +
+        srcWeekCell(w) +
+        '<div class="src-day">' + w.day + "<small>" + w.weekday + " · 周报日</small></div>" +
+        (on ? srcCell(w.week, PROJECTS[0]) : srcCellOut(w.week, PROJECTS[0])) +
+        (on ? srcCell(w.week, PROJECTS[1]) : srcCellOut(w.week, PROJECTS[1])) +
+        "</div>"
+      );
+    }).join("");
+
+    el.innerHTML =
+      '<div class="source-wrap">' +
+      '<div class="page-head"><div>' +
+      '<div class="eyebrow">STEP 1 · 拉取周报</div>' +
+      "<h1>从周组报里拉出本期</h1>" +
+      '<p class="lede">月报不重新读组员原文，只拉本期各周<strong>已定稿</strong>的按项目组报；跨周重复自动合并，再按「本月总结 / 下月计划」分拣。月初 / 月末可以自己调整本期周范围。</p>' +
+      "</div></div>" +
+      scopeBar +
+      '<div class="src-stats">' +
+      "<span><b>" + selectedCount() + "</b>/" + scopeSlots() + " 份周组报已纳入</span>" +
+      "<span><b>" + candTotal + "</b>条候选 · 总结 " + candSummary + " · 计划 " + candPlan + "</span>" +
+      "<span><b>" + missingCount + "</b>份缺周</span>" +
+      '<span class="spacer"></span>' +
+      '<button class="link-btn" data-act="select-all">全选已定稿</button>' +
+      '<button class="link-btn" data-act="clear-all">清空</button>' +
+      "</div>" +
+      '<div class="src-table">' +
+      '<div class="src-head"><span>本期 / 周</span><span>周报日</span><span>' + esc(PROJECTS[0].name) + "</span><span>" + esc(PROJECTS[1].name) + "</span></div>" +
+      rows +
+      "</div>" +
+      gate +
+      '<p class="footnote">本期由勾选的周组成；默认按周报日归属（10 月 W40–W44）。月初 / 月末可把 W39 / W45 纳入本期，或取消月末周 W44：只影响月报拉取范围，周组报仍只认定稿。W44 的周报日 10-29 晚于收集日 10-28。</p>' +
+      "</div>";
+    el.scrollTop = top;
+  }
+
+  /* ============================== 渲染：项目栏 ============================== */
+  function railHTML(mode) {
+    const items = PROJECTS.map((p) => {
+      const v = projectView(p.id);
+      const c = countPools(v);
+      const d = state.drafts[p.id];
+      let sub, cls;
+      if (mode === "reports") {
+        const st = d ? draftStatus(p.id) : { text: "未生成", cls: "is-none" };
+        sub = st.text; cls = st.cls;
+      } else {
+        sub = v.a.inc.length + " 份周报 · " + (d ? (d.finalized ? "已定稿" : "有草稿") : "未生成");
+        cls = d ? (d.finalized ? "is-final" : "is-saved") : "is-none";
+      }
+      return (
+        '<button class="report-list-item' + (state.activeProject === p.id ? " is-active" : "") + '" data-act="select-project" data-proj="' + p.id + '">' +
+        '<span class="pr-name"><span>' + esc(p.name) + '</span><span class="pr-count">' + c.total + " 条</span></span>" +
+        '<span class="pr-status ' + cls + '">' + esc(sub) + "</span>" +
+        "</button>"
+      );
+    }).join("");
+    return (
+      '<aside class="proj-rail">' +
+      '<div class="rl-head"><b>' + PROJECTS.length + " 个项目</b><span>" + (mode === "reports" ? "月报状态" : "本月候选") + "</span></div>" +
+      '<div class="report-list-body">' + items + "</div>" +
+      '<div class="rl-foot">每份月报独立保存、定稿、导出</div>' +
+      "</aside>"
+    );
+  }
+
+  /* ============================== 渲染：第 2 步 ============================== */
+  function poolItemHTML(pid, r) {
+    const g = r.g;
+    const weeks = g.weeks.map((w) => '<span class="wk">' + w.slice(5) + "</span>").join("");
+    const dup = g.weeks.length > 1
+      ? '<span class="dup" title="跨 ' + g.weeks.length + " 周重复，默认合并为一条，取最新写法\">合并 " + g.weeks.length + " 周</span>"
+      : "";
+    let acts = "";
+    if (r.pool === "summary") {
+      acts = '<button class="item-btn is-accent" data-act="set-pool" data-gkey="' + r.gid + '" data-val="plan">转为下月计划</button>' +
+             '<button class="item-btn" data-act="set-pool" data-gkey="' + r.gid + '" data-val="excluded">不纳入</button>';
+    } else if (r.pool === "plan") {
+      acts = '<button class="item-btn is-accent" data-act="set-pool" data-gkey="' + r.gid + '" data-val="summary">移回本月总结</button>' +
+             '<button class="item-btn" data-act="set-pool" data-gkey="' + r.gid + '" data-val="excluded">不纳入</button>';
+    }
+    acts += '<button class="item-btn" data-act="peek-week" data-week="' + g.lastWeek + '" data-proj="' + pid + '">看来源周报</button>';
+    return (
+      '<div class="pool-item" draggable="true" data-gkey="' + r.gid + '" data-pool="' + r.pool + '">' +
+      '<div class="pi-top"><span class="grip" title="拖到另一个池子">⠿</span>' +
+      '<div class="pi-text">' + esc(g.text) + "</div></div>" +
+      '<div class="pi-meta">' + weeks + dup + "</div>" +
+      '<div class="item-actions">' + acts + "</div>" +
+      "</div>"
+    );
+  }
+
+  function poolHTML(title, rows, meta, pid, poolId) {
+    const empty =
+      poolId === "plan"
+        ? "还没有下月计划候选，可从更早的计划或本月总结里结转。"
+        : "本月没有可纳入的总结条目。";
+    return (
+      '<section class="pool" data-drop="' + poolId + '">' +
+      '<div class="pool-head"><h3>' + title + '</h3><span class="count">' + rows.length + " 条</span></div>" +
+      '<div class="meta">' + esc(meta) + "</div>" +
+      '<div class="pool-body">' + (rows.length ? rows.map((r) => poolItemHTML(pid, r)).join("") : '<div class="empty-pool">' + empty + "</div>") + "</div>" +
+      "</section>"
+    );
+  }
+
+  function renderPreview(preserveScroll) {
+    const el = $("#screen-preview");
+    const top = preserveScroll && $("#pv-main") ? $("#pv-main").scrollTop : 0;
+    const pid = projectById(state.activeProject) ? state.activeProject : PROJECTS[0].id;
+    state.activeProject = pid;
+    const p = projectById(pid);
+    const v = projectView(pid);
+    const counts = countPools(v);
+    const incWeeks = v.a.inc.map((r) => r.week);
+    const incLabel = incWeeks.length ? weeksLabel(incWeeks) : "—";
+    const lastWeek = lastScopeWeek();
+    const lastReport = reportOf(lastWeek, pid);
+    const lastGap = lastReport.status === "final" ? "未纳入" : statusWord(lastReport.status);
+    const planGap = v.a.latest && v.a.latest.week !== lastWeek ? "（" + lastWeek.slice(5) + " " + lastGap + "）" : "";
+    const planMeta = v.a.latest
+      ? "取自 " + v.a.latest.week.slice(5) + " 的下周计划" + planGap
+      : "还没有可用的周组报";
+    const dupGroups = v.a.summary.filter((g) => g.weeks.length > 1).length;
+    const miss = missingFor(pid);
+
+    let notice = "";
+    if (miss.length) {
+      notice =
+        '<div class="notice is-compact"><b>未纳入 ' +
+        miss.map((m) => m.week.slice(5) + "（" + statusWord(m.status) + "）").join("、") + "</b>" +
+        (v.a.latest ? " · 下月计划取自 " + v.a.latest.week.slice(5) : "") +
+        "。缺周会在月报开头标注。</div>";
+    } else if (!incWeeks.length) {
+      notice = '<div class="notice is-compact"><b>该项目还没有纳入周组报</b> · 回第 ① 步勾选，或先生成空草稿手动补。</div>';
+    }
+
+    let foldedArchive = "";
+    if (v.archive.length) {
+      const rows = v.archive.map((r) => {
+        const weeks = r.g.weeks.map((w) => '<span class="wk">' + w.slice(5) + "</span>").join("");
+        return (
+          '<div class="arch-row">' + weeks + '<span class="grow">' + esc(r.g.text) + "</span>" +
+          '<button class="item-btn is-accent" data-act="set-pool" data-gkey="' + r.gid + '" data-val="plan">纳入计划</button>' +
+          '<button class="item-btn" data-act="set-pool" data-gkey="' + r.gid + '" data-val="excluded">不纳入</button>' +
+          "</div>"
+        );
+      }).join("");
+      foldedArchive =
+        '<details class="fold"><summary><span>更早的计划 · ' + v.archive.length + ' 条</span><span class="fold-hint">默认不纳入，可挑几条结转</span></summary>' +
+        '<div class="fold-body">' + rows + "</div></details>";
+    }
+
+    const excludedRows = v.excluded.map((r) => {
+      return (
+        '<div class="ex-row"><span class="grow">' + esc(r.g.text) + "</span>" +
+        '<button class="item-btn" data-act="set-pool" data-gkey="' + r.gid + '" data-val="default">恢复</button></div>'
+      );
+    }).join("");
+
+    el.innerHTML =
+      railHTML("preview") +
+      '<section class="pv-main" id="pv-main">' +
+      '<header class="pv-head"><div>' +
+      '<div class="eyebrow">STEP 2 · 项目预览</div>' +
+      "<h1>" + esc(p.name) + "</h1>" +
+      '<div class="pv-meta"><span class="tb-week">' + MONTH + "</span><span>来源 " + v.a.inc.length + " 份周组报 · " + esc(incLabel) +
+      "</span><span>·</span><span>候选 " + counts.total + " 条</span></div>" +
+      "</div>" +
+      '<div class="pv-actions"><button class="btn" data-act="preview-monthly" data-proj="' + pid + '">报告预览</button></div>' +
+      "</header>" +
+      notice +
+      '<div class="pool-grid">' +
+      poolHTML("本月总结", v.summary, "来自 " + esc(incLabel) + " 的本周总结" + (dupGroups ? " · 合并 " + dupGroups + " 组跨周重复" : ""), pid, "summary") +
+      poolHTML("下月计划", v.plan, planMeta, pid, "plan") +
+      "</div>" +
+      foldedArchive +
+      '<section class="exclude-zone" data-drop="excluded">' +
+      '<div class="ez-head"><b>不纳入</b><span>' + v.excluded.length + " 条 · 拖到这里，或点条目里的「不纳入」</span></div>" +
+      (excludedRows ? '<div class="ez-list">' + excludedRows + "</div>" : "") +
+      "</section>" +
+      '<p class="pv-foot">点击条目可看来源周报或改归口；拖动可跨池调整。跨周重复默认合并成一条，取最新写法，正文不带周次和姓名。' +
+      (dupGroups ? " 本月合并了 " + dupGroups + " 组。" : "") + "</p>" +
+      "</section>";
+    const main = $("#pv-main");
+    if (main) main.scrollTop = top;
+  }
+
+  /* ============================== 渲染：第 3 步 ============================== */
+  function renderReports() {
+    const pid = projectById(state.activeProject) ? state.activeProject : PROJECTS[0].id;
+    state.activeProject = pid;
+    const p = projectById(pid);
+    const v = projectView(pid);
+    const d = state.drafts[pid];
+    const st = draftStatus(pid);
+    const miss = missingFor(pid);
+    const stale = isStale(pid);
+    const changed = sourceChanged(pid);
+
+    let head = "";
+    let body = "";
+    if (!d) {
+      head =
+        '<div class="re-head"><div>' +
+        '<div class="eyebrow">STEP 3 · 整理月报</div>' +
+        "<h2>" + esc(p.name) + " · 月报</h2>" +
+        '<div class="re-meta"><span class="tb-week">' + MONTH + "</span><span>来源 " + v.a.inc.length + " 份周组报</span></div>" +
+        "</div></div>";
+      body =
+        '<div class="re-empty"><b>这份月报还没有草稿</b>' +
+        "<span>先在项目预览里生成，或直接生成草稿手写。</span>" +
+        '<button class="btn-primary" data-act="generate-active">生成草稿</button></div>';
+    } else {
+      const readonly = d.finalized;
+      head =
+        '<div class="re-head"><div>' +
+        '<div class="eyebrow">STEP 3 · 整理月报</div>' +
+        "<h2>" + esc(p.name) + " · 月报</h2>" +
+        '<div class="re-meta"><span class="tb-week">' + MONTH + "</span>" +
+        "<span>来源 " + v.a.inc.length + " 份周组报（" + esc(weeksLabel(v.a.inc.map((r) => r.week))) + "）</span>" +
+        "<span>· 总结 " + v.summary.length + " · 计划 " + v.plan.length + "</span>" +
+        "<span>·</span>" +
+        '<span id="draft-status" class="re-status ' + st.cls + '">' + esc(st.text) + "</span></div>" +
+        "</div>" +
+        '<div class="re-actions">' +
+        '<button class="btn" data-act="save-draft"' + (readonly ? " disabled" : "") + ">保存 <kbd>⌘S</kbd></button>" +
+        '<button class="' + (readonly ? "btn" : "btn btn-primary") + '" data-act="toggle-final">' + (readonly ? "取消定稿" : "定稿") + "</button>" +
+        '<button class="btn" data-act="export-draft"' + (readonly ? "" : " disabled") + ' title="' + (readonly ? "导出定稿" : "定稿后才能导出") + '">导出</button>' +
+        '<button class="btn" data-act="copy-draft"' + (readonly ? "" : " disabled") + ' title="' + (readonly ? "复制飞书格式" : "定稿后才能复制") + '">复制飞书</button>' +
+        "</div></div>";
+
+      let banners = "";
+      if (miss.length) {
+        banners +=
+          '<div class="notice is-compact"><b>未纳入 ' +
+          miss.map((m) => m.week.slice(5) + "（" + statusWord(m.status) + "）").join("、") + "</b>" +
+          (v.a.latest ? " · 下月计划取自 " + v.a.latest.week.slice(5) : "") +
+          "。需要补的话，回周报定稿后重新拉取。</div>";
+      }
+      if (stale) {
+        banners +=
+          '<div class="re-banner"><span>来源已更新：勾选的周组报或归口变了，这份草稿仍基于旧候选。</span>' +
+          '<button class="item-btn is-accent" data-act="regenerate">按当前候选重新生成</button></div>';
+      } else if (readonly && changed) {
+        banners +=
+          '<div class="re-banner"><span>来源已更新：这份月报已定稿，当前来源与定稿时不同。取消定稿后可重新生成，定稿内容不会被自动覆盖。</span></div>';
+      } else if (readonly) {
+        banners += '<div class="re-banner is-ok"><span>已定稿，只读；导出和报送只认定稿版本。</span></div>';
+      }
+
+      body =
+        head + banners +
+        '<textarea id="draft-editor" class="draft-editor" spellcheck="false"' + (readonly ? " readonly" : "") + ">" + esc(d.content) + "</textarea>" +
+        '<div class="re-foot"><span>来源：' + esc(weeksLabel(v.a.inc.map((r) => r.week))) + " · 草稿是 Markdown，人工改完再定稿</span>" +
+        '<span id="draft-foot-hint">' + (readonly ? "已定稿，取消定稿后才能改。" : d.dirty ? "有未保存修改，⌘S 保存。" : "编辑后 ⌘S 保存。") + "</span></div>";
+      $("#screen-reports").innerHTML = '<div class="reports">' + railHTML("reports") + '<section class="report-editor">' + body + "</section></div>";
+      return;
+    }
+
+    $("#screen-reports").innerHTML =
+      '<div class="reports">' + railHTML("reports") + '<section class="report-editor">' + head + body + "</section></div>";
+  }
+
+  /* ============================== 渲染：弹窗 ============================== */
+  function weeklyMarkdown(week, pid) {
+    const r = reportOf(week, pid);
+    if (r.status === "missing") return "这周没有提交组报。";
+    let out = "";
+    if (r.status !== "final") out += "> 未定稿，只作预览，不会纳入月报。\n\n";
+    out += "## 本周总结\n\n";
+    out += r.summary.length ? r.summary.map((t) => "- " + t).join("\n") : "- 无";
+    out += "\n\n## 下周计划\n\n";
+    out += r.plan.length ? r.plan.map((t) => "- " + t).join("\n") : "- 无";
+    return out + "\n";
+  }
+
+  function mdLite(text) {
+    const lines = String(text).split("\n");
+    let html = "";
+    let inList = false;
+    const closeList = () => { if (inList) { html += "</ul>"; inList = false; } };
+    lines.forEach((line) => {
+      if (/^##\s+/.test(line)) {
+        closeList();
+        html += "<h2>" + esc(line.replace(/^##\s+/, "")) + "</h2>";
+      } else if (/^>\s?/.test(line)) {
+        closeList();
+        html += '<p class="doc-note">' + esc(line.replace(/^>\s?/, "")) + "</p>";
+      } else if (/^-\s+/.test(line)) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        html += "<li>" + esc(line.replace(/^-\s+/, "")) + "</li>";
+      } else if (line.trim() === "") {
+        closeList();
+      } else {
+        closeList();
+        html += "<p>" + esc(line) + "</p>";
+      }
+    });
+    closeList();
+    return html;
+  }
+
+  function renderModal() {
+    const el = $("#modal");
+    const m = state.modal;
+    if (!m) {
+      document.body.classList.remove("modal-open");
+      el.innerHTML = "";
+      return;
+    }
+    document.body.classList.add("modal-open");
+    if (m.type === "weekly") {
+      const p = projectById(m.project) || PROJECTS[0];
+      const r = reportOf(m.week, p.id);
+      const sub = r.status === "final"
+        ? "已定稿 · " + r.at + " · " + (r.summary.length + r.plan.length) + " 条"
+        : r.status === "draft"
+          ? "未定稿 · 不会纳入月报"
+          : "该周未提交";
+      el.innerHTML =
+        '<div class="modal-card">' +
+        '<div class="eyebrow">' + esc(m.week) + " · " + esc(GROUP) + "</div>" +
+        "<h2>" + esc(p.name) + " · 周组报</h2>" +
+        '<p class="sub">' + esc(sub) + "</p>" +
+        '<div class="md-preview">' + mdLite(weeklyMarkdown(m.week, p.id)) + "</div>" +
+        '<div class="modal-foot"><button class="btn" data-act="close-modal">关闭</button></div>' +
+        "</div>";
+      return;
+    }
+    /* 月报查看 / 预览 */
+    const p = projectById(m.project) || PROJECTS[0];
+    const d = state.drafts[p.id];
+    const live = Boolean(m.live);
+    const content = live ? buildDraft(p.id) : d ? d.content : buildDraft(p.id);
+    const finalized = !live && d && d.finalized;
+    const v = projectView(p.id);
+    const sub = live
+      ? "当前候选 · " + MONTH + " · 来源 " + v.a.inc.length + " 份周组报"
+      : finalized
+        ? "已定稿 · 只读 · " + MONTH
+        : "草稿 · " + MONTH + " · 来源 " + v.a.inc.length + " 份周组报";
+    let foot = "";
+    if (live) {
+      foot = '<button class="btn" data-act="close-modal">关闭</button>';
+    } else if (!finalized) {
+      foot = '<button class="btn" data-act="close-modal">关闭</button>' +
+             '<button class="btn btn-primary" data-act="edit-from-modal" data-proj="' + p.id + '">去整理这份</button>';
+    } else {
+      foot = '<button class="btn" data-act="close-modal">关闭</button>' +
+             '<button class="btn" data-act="export-project" data-proj="' + p.id + '">导出</button>';
+    }
+    el.innerHTML =
+      '<div class="modal-card">' +
+      '<div class="eyebrow">' + (live ? "月报候选预览" : finalized ? "月报定稿" : "月报草稿预览") + "</div>" +
+      "<h2>" + esc(p.name) + " · 月报</h2>" +
+      '<p class="sub">' + esc(sub) + "</p>" +
+      '<div class="md-preview">' + mdLite(content) + "</div>" +
+      '<div class="modal-foot">' + foot + "</div>" +
+      "</div>";
+  }
+
+  /* ============================== 渲染总入口 ============================== */
+  function render() {
+    document.body.dataset.screen = state.screen;
+    renderTopbar();
+    renderStepper();
+    if (state.screen === "library") renderLibrary();
+    else if (state.screen === "source") renderSource();
+    else if (state.screen === "preview") renderPreview(true);
+    else if (state.screen === "reports") renderReports();
+    renderModal();
+  }
+
+  function goTo(screen) {
+    if (state.screen === "reports" && screen !== "reports") saveAllDrafts();
+    state.screen = screen;
+    render();
+  }
+
+  /* ============================== 草稿操作 ============================== */
+  function saveActiveDraft() {
+    const d = state.drafts[state.activeProject];
+    if (!d) return;
+    if (d.finalized) { toast("已定稿，取消定稿后才能改"); return; }
+    d.savedContent = d.content;
+    d.savedAt = Date.now();
+    d.dirty = false;
+    saveLocal();
+    renderReports();
+    renderStepper();
+    toast("已保存");
+  }
+
+  function toggleFinal() {
+    const pid = state.activeProject;
+    const d = state.drafts[pid];
+    if (!d) { toast("先生成草稿"); return; }
+    if (!d.finalized && d.dirty) {
+      d.savedContent = d.content;
+      d.savedAt = Date.now();
+      d.dirty = false;
+    }
+    d.finalized = !d.finalized;
+    saveLocal();
+    renderReports();
+    renderStepper();
+    toast(d.finalized ? "已定稿" : "已取消定稿");
+  }
+
+  function regenerateActive() {
+    const pid = state.activeProject;
+    const d = state.drafts[pid];
+    if (!d) return;
+    if (d.finalized) { toast("先取消定稿"); return; }
+    if (!window.confirm("按当前候选重新生成这份月报？已人工修改的内容会被覆盖。")) return;
+    d.content = buildDraft(pid);
+    d.savedContent = d.content;
+    d.generatedContent = d.content;
+    d.sourceHash = sourceSnapshot(pid);
+    d.dirty = false;
+    d.savedAt = Date.now();
+    saveLocal();
+    renderReports();
+    renderStepper();
+    toast("已按当前候选重新生成");
+  }
+
+  function draftFilename(pid) {
+    const p = projectById(pid);
+    return GROUP + "-组月报-" + MONTH + "-" + (p ? p.name : pid) + ".md";
+  }
+
+  function download(filename, text) {
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+  }
+
+  function exportDraft(pid) {
+    const d = state.drafts[pid];
+    if (!d || !d.finalized) { toast("定稿后才能导出"); return; }
+    download(draftFilename(pid), d.content);
+    toast("已导出 " + projectById(pid).name + " 月报");
+  }
+
+  async function copyDraft(pid) {
+    const d = state.drafts[pid];
+    if (!d || !d.finalized) { toast("定稿后才能复制"); return; }
+    const text = d.content;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("已复制为纯文本（飞书可粘贴）");
+    } catch (err) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); toast("已复制为纯文本"); }
+      catch (e2) { toast("复制失败，请手动选择文本"); }
+      ta.remove();
+    }
+  }
+
+  /* ============================== 交互 ============================== */
+  function toast(msg) {
+    const el = $("#toast");
+    el.textContent = msg;
+    el.classList.add("is-on");
+    window.clearTimeout(toast._timer);
+    toast._timer = window.setTimeout(() => el.classList.remove("is-on"), 2200);
+  }
+
+  function setPool(gid, val) {
+    if (val === "default") {
+      const parts = gid.split(":");
+      const sk = parts[1];
+      val = sk === "archived" ? "plan" : sk;
+    }
+    state.pools[gid] = val;
+    saveLocal();
+    renderPreview(true);
+    renderStepper();
+  }
+
+  function handleClick(e) {
+    /* 点条目本体：展开动作区 */
+    const item = e.target.closest(".pool-item");
+    if (item && !e.target.closest("button")) {
+      const open = item.classList.contains("is-open");
+      document.querySelectorAll(".pool-item.is-open").forEach((x) => x.classList.remove("is-open"));
+      if (!open) item.classList.add("is-open");
+      return;
+    }
+    const t = e.target.closest("[data-act]");
+    if (!t) return;
+    const act = t.dataset.act;
+
+    switch (act) {
+      case "to-library":
+        goTo("library");
+        break;
+      case "reset":
+        if (window.confirm("重置演示数据？会清掉本机浏览器里的选择、草稿和定稿状态。")) {
+          try { localStorage.removeItem(STORAGE_KEY); } catch (err) { /* ignore */ }
+          window.location.replace(window.location.pathname);
+        }
+        break;
+      case "start-flow":
+        goTo("source");
+        break;
+      case "start-project": {
+        const pid = t.dataset.proj;
+        state.activeProject = pid;
+        saveLocal();
+        goTo(state.drafts[pid] ? "reports" : "source");
+        break;
+      }
+      case "go-reports": {
+        if (!state.drafts[state.activeProject]) {
+          const withDraft = PROJECTS.find((p) => state.drafts[p.id]);
+          if (withDraft) state.activeProject = withDraft.id;
+        }
+        goTo(state.drafts[state.activeProject] ? "reports" : "source");
+        break;
+      }
+      case "go-step": {
+        const n = Number(t.dataset.step);
+        if (n === 3 && PROJECTS.every((p) => !state.drafts[p.id])) {
+          toast("先在第 ② 步生成月报草稿");
+          break;
+        }
+        if (n === 3 && !state.drafts[state.activeProject]) {
+          const withDraft = PROJECTS.find((p) => state.drafts[p.id]);
+          if (withDraft) state.activeProject = withDraft.id;
+        }
+        goTo(n === 1 ? "source" : n === 2 ? "preview" : "reports");
+        break;
+      }
+      case "next-preview":
+        if (!step1Ready()) {
+          toast(selectedCount() === 0 ? "先选择要纳入的周组报" : "请勾选确认缺周继续");
+          break;
+        }
+        goTo("preview");
+        break;
+      case "prev-step":
+        goTo(state.screen === "reports" ? "preview" : "source");
+        break;
+      case "next-reports": {
+        if (totalCandidates() === 0) { toast("没有候选条目"); break; }
+        const n = ensureDrafts();
+        goTo("reports");
+        toast(n ? "已生成 " + n + " 份月报草稿" : "继续整理已有草稿");
+        break;
+      }
+      case "finish-flow": {
+        const n = saveAllDrafts();
+        state.screen = "library";
+        render();
+        toast(n ? "已保存 " + n + " 份草稿" : "已回到月报首页");
+        break;
+      }
+      case "save-all": {
+        const n = saveAllDrafts();
+        renderReports();
+        renderStepper();
+        toast(n ? "已保存 " + n + " 份草稿" : "没有未保存的修改");
+        break;
+      }
+      case "save-draft":
+        saveActiveDraft();
+        break;
+      case "toggle-final":
+        toggleFinal();
+        break;
+      case "regenerate":
+        regenerateActive();
+        break;
+      case "export-draft":
+        exportDraft(state.activeProject);
+        break;
+      case "copy-draft":
+        copyDraft(state.activeProject);
+        break;
+      case "export-project":
+        exportDraft(t.dataset.proj);
+        break;
+      case "generate-active": {
+        const n = ensureDrafts();
+        renderReports();
+        renderStepper();
+        toast(n ? "已生成草稿" : "草稿已存在");
+        break;
+      }
+      case "select-project":
+        state.activeProject = t.dataset.proj;
+        saveLocal();
+        if (state.screen === "preview") renderPreview(false);
+        else if (state.screen === "reports") renderReports();
+        break;
+      case "preview-monthly":
+        state.modal = { type: "monthly", project: t.dataset.proj, live: true };
+        renderModal();
+        break;
+      case "view-monthly":
+        state.modal = { type: "monthly", project: t.dataset.proj };
+        renderModal();
+        break;
+      case "peek-week":
+        state.modal = { type: "weekly", week: t.dataset.week, project: t.dataset.proj };
+        renderModal();
+        break;
+      case "close-modal":
+        state.modal = null;
+        renderModal();
+        break;
+      case "edit-from-modal": {
+        const pid = t.dataset.proj;
+        state.modal = null;
+        state.activeProject = pid;
+        ensureDrafts();
+        goTo("reports");
+        break;
+      }
+      case "toggle-src": {
+        const key = srcKey(t.dataset.week, t.dataset.proj);
+        state.sel[key] = !state.sel[key];
+        saveLocal();
+        renderSource();
+        renderStepper();
+        break;
+      }
+      case "select-all":
+        ALL_WEEKS.forEach((w) => PROJECTS.forEach((p) => {
+          if (reportOf(w.week, p.id).status === "final") state.sel[srcKey(w.week, p.id)] = true;
+        }));
+        saveLocal();
+        renderSource();
+        renderStepper();
+        break;
+      case "clear-all":
+        ALL_WEEKS.forEach((w) => PROJECTS.forEach((p) => {
+          state.sel[srcKey(w.week, p.id)] = false;
+        }));
+        saveLocal();
+        renderSource();
+        renderStepper();
+        break;
+      case "set-pool":
+        setPool(t.dataset.gkey, t.dataset.val);
+        break;
+      case "toggle-scope": {
+        const week = t.dataset.week;
+        state.scope[week] = !state.scope[week];
+        state.gate = false;
+        saveLocal();
+        renderSource();
+        renderStepper();
+        break;
+      }
+      case "reset-scope":
+        state.scope = defaultScope();
+        state.gate = false;
+        saveLocal();
+        renderSource();
+        renderStepper();
+        toast("已恢复默认周范围");
+        break;
+      default:
+        break;
+    }
+  }
+
+  /* 拖拽：目标池注册在 [data-drop] 上 */
+  function clearDropTargets() {
+    document.querySelectorAll(".is-drop-target").forEach((x) => x.classList.remove("is-drop-target"));
+  }
+
+  function handleDragStart(e) {
+    const item = e.target.closest('.pool-item[draggable="true"]');
+    if (!item) return;
+    e.dataTransfer.setData("text/plain", item.dataset.gkey);
+    e.dataTransfer.effectAllowed = "move";
+    item.classList.add("is-dragging");
+  }
+
+  function handleDragOver(e) {
+    const zone = e.target.closest("[data-drop]");
+    if (!zone) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    document.querySelectorAll(".is-drop-target").forEach((x) => { if (x !== zone) x.classList.remove("is-drop-target"); });
+    zone.classList.add("is-drop-target");
+  }
+
+  function handleDrop(e) {
+    const zone = e.target.closest("[data-drop]");
+    if (!zone) return;
+    e.preventDefault();
+    const gid = e.dataTransfer.getData("text/plain");
+    clearDropTargets();
+    if (!gid) return;
+    if (gid.split(":")[0] !== state.activeProject) { toast("拖动只在本项目内调整"); return; }
+    state.pools[gid] = zone.dataset.drop;
+    saveLocal();
+    renderPreview(true);
+    renderStepper();
+    toast("已调整归口");
+  }
+
+  function handleDragEnd() {
+    document.querySelectorAll(".is-dragging").forEach((x) => x.classList.remove("is-dragging"));
+    clearDropTargets();
+  }
+
+  /* 编辑区 */
+  function handleInput(e) {
+    if (e.target.id !== "draft-editor") return;
+    const d = state.drafts[state.activeProject];
+    if (!d || d.finalized) return;
+    d.content = e.target.value;
+    d.dirty = d.content !== d.savedContent;
+    saveLocal();
+    const st = draftStatus(state.activeProject);
+    const statusEl = $("#draft-status");
+    if (statusEl) {
+      statusEl.className = "re-status " + st.cls;
+      statusEl.textContent = st.text;
+    }
+    const foot = $("#draft-foot-hint");
+    if (foot) foot.textContent = d.dirty ? "有未保存修改，⌘S 保存。" : "编辑后 ⌘S 保存。";
+    renderStepper();
+  }
+
+  function handleChange(e) {
+    if (e.target.id !== "gate") return;
+    state.gate = e.target.checked;
+    saveLocal();
+    renderStepper();
+  }
+
+  function handleKeydown(e) {
+    if (e.key === "Escape" && state.modal) {
+      state.modal = null;
+      renderModal();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && state.screen === "reports") {
+      e.preventDefault();
+      saveActiveDraft();
+    }
+  }
+
+  /* ============================== 初始化 ============================== */
+  function applyParams() {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("reset") === "1") {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (err) { /* ignore */ }
+      state.scope = defaultScope();
+      state.sel = defaultSel();
+      state.pools = {};
+      state.drafts = {};
+      state.gate = false;
+      state.activeProject = "p1";
+    }
+    const screen = q.get("screen");
+    if (["library", "source", "preview", "reports"].indexOf(screen) >= 0) state.screen = screen;
+    const proj = q.get("project");
+    if (projectById(proj)) state.activeProject = proj;
+    if (q.get("gate") === "1") state.gate = true;
+    if (q.get("scope") === "wide") {
+      ALL_WEEKS.forEach((w) => { state.scope[w.week] = true; });
+    }
+    if (q.get("scope") === "default") state.scope = defaultScope();
+    const seed = q.get("seed");
+    if (seed === "drafts" || seed === "final") {
+      ensureDrafts();
+      if (seed === "final") {
+        const d = state.drafts["p1"];
+        if (d) { d.finalized = true; d.savedAt = d.savedAt || Date.now(); saveLocal(); }
+      }
+    }
+    const modal = q.get("modal");
+    if (modal === "monthly") state.modal = { type: "monthly", project: state.activeProject, live: state.screen === "preview" };
+    if (modal === "weekly") {
+      state.modal = { type: "weekly", week: q.get("week") || ALL_WEEKS[1].week, project: q.get("project") || "p1" };
+    }
+  }
+
+  loadLocal();
+  applyParams();
+  render();
+
+  document.addEventListener("click", handleClick);
+  document.addEventListener("dragstart", handleDragStart);
+  document.addEventListener("dragover", handleDragOver);
+  document.addEventListener("drop", handleDrop);
+  document.addEventListener("dragend", handleDragEnd);
+  document.addEventListener("input", handleInput);
+  document.addEventListener("change", handleChange);
+  document.addEventListener("keydown", handleKeydown);
+  $("#modal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget && state.modal) {
+      state.modal = null;
+      renderModal();
+    }
+  });
+})();
+</script>
+</body>
+</html>
