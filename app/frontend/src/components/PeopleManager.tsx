@@ -113,8 +113,17 @@ export function PeopleManager({ onClose }: PeopleManagerProps) {
   );
 
   return (
-    <div className="modal-mask" onClick={onClose}>
-      <div className="modal people-modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="modal-mask"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="modal people-modal"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <datalist id="report-group-list">
           {groups.map((g) => (
             <option key={g} value={g} />

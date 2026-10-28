@@ -330,7 +330,13 @@ export function Settings({
   };
 
   return (
-    <div className="modal-mask is-center" onMouseDown={onClose}>
+    <div
+      className="modal-mask is-center"
+      onMouseDown={(e) => {
+        // 设置里还嵌着「管理名单」弹窗；只有点设置自己的遮罩才关闭设置。
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="settings" onMouseDown={(e) => e.stopPropagation()}>
         <nav className="settings-nav" aria-label="设置分类">
           <div className="settings-nav-title">设置</div>
