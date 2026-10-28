@@ -94,7 +94,7 @@ func TestTriageServiceFlow(t *testing.T) {
 	if !g.Exists || g.Project != p1.ID || g.ProjectName != p1.Name || g.Status != "draft" {
 		t.Fatalf("组装结果 = %+v", g)
 	}
-	for _, want := range []string{"## 本周总结", "## 下周计划", "## 风险与求助", "退款接口联调"} {
+	for _, want := range []string{"## 本周总结", "## 下周计划", "## 其他事项", "退款接口联调"} {
 		if !strings.Contains(g.Body, want) {
 			t.Errorf("正文缺少 %q:\n%s", want, g.Body)
 		}
