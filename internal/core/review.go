@@ -14,11 +14,12 @@ import (
 	"github.com/axu4/kuibu/internal/store"
 )
 
-// 归一稿的三个固定小节。
+// 归一稿的固定小节；「AI 使用」可选，原文没写时不出现。
 const (
 	SectionDone = "本周完成"
 	SectionPlan = "下周计划"
 	SectionRisk = "风险与求助"
+	SectionAI   = "AI 使用"
 )
 
 // CarriedSuffix 是顺延条目末尾的标记。
@@ -75,7 +76,42 @@ func sectionOf(heading string) string {
 			return s
 		}
 	}
+	if IsAISectionTitle(title) {
+		return SectionAI
+	}
 	return ""
+}
+
+// aiSectionKeywords 是「AI 使用」节标题里常见的说法。
+var aiSectionKeywords = []string{"使用", "实践", "经验", "coding", "codeing", "做了什么", "应用", "提效"}
+
+// IsAISectionTitle 判断一行是否是「AI 使用」节的标题，比如「AI使用：」「AI 经验」
+// 「AI coding实践」「AI做了什么」。要求以 AI 开头、标题够短且带常见说法，
+// 避免把「AI 服务器监控调研」这类正文误判成节。
+func IsAISectionTitle(line string) bool {
+	t := strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "：:。.，, "))
+	if len([]rune(t)) > 16 || !strings.HasPrefix(strings.ToUpper(t), "AI") {
+		return false
+	}
+	lower := strings.ToLower(t)
+	for _, k := range aiSectionKeywords {
+		if strings.Contains(lower, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// SplitAISectionLine 拆「AI经验 ：H5KVM 协议分析」这种标题与内容写在同一行的写法；
+// 不是「AI 使用」节标题时 ok 为 false，rest 是冒号后的内容（可空）。
+func SplitAISectionLine(line string) (rest string, ok bool) {
+	t := strings.TrimSpace(line)
+	for _, sep := range []string{"：", ":"} {
+		if i := strings.Index(t, sep); i > 0 && IsAISectionTitle(t[:i]) {
+			return strings.TrimSpace(t[i+len(sep):]), true
+		}
+	}
+	return "", IsAISectionTitle(t)
 }
 
 // listItemText 取「- / * / 1.」列表项的文本。

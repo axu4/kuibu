@@ -53,7 +53,7 @@ func TestTriageServiceFlow(t *testing.T) {
 	if data.Counts.Total != 4 || data.Counts.Undecided != 4 || len(data.Projects) != 2 {
 		t.Fatalf("triage = %+v", data)
 	}
-	if len(data.Sections) != 3 || data.Sections[0].Title != "本周总结" || data.Sections[0].Total != 2 {
+	if len(data.Sections) != 4 || data.Sections[0].Title != "本周总结" || data.Sections[3].Title != "AI 使用" || data.Sections[0].Total != 2 {
 		t.Fatalf("sections = %+v", data.Sections)
 	}
 	byText := map[string]TriageItemData{}

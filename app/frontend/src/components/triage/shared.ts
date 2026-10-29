@@ -7,8 +7,9 @@ import type {
   TriageSectionData,
 } from "../../../bindings/github.com/axu4/kuibu/app";
 
-/** 第 1 步三个 tab 的短名。 */
+/** 第 1 步各 tab 的短名。 */
 export function shortSection(title: string): string {
+  if (title.startsWith("AI")) return "AI";
   if (title.includes("总结") || title.includes("完成")) return "总结";
   if (title.includes("计划")) return "计划";
   if (title.includes("其他") || title.includes("风险") || title.includes("求助")) return "其他";

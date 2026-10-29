@@ -160,7 +160,7 @@ humanEdited: false
 
 规则：
 
-- **结构**：三节标题固定；每条以【领域】开头，领域自由，提示词给出该组员的产品线作为候选；同一事项去重合并。提示词模板在 `internal/core/prompts/normalize.md`。
+- **结构**：三节标题固定，原文写了 AI 使用时再加「## AI 使用」；前三节每条以【领域】开头，领域自由，提示词给出该组员的产品线作为候选；同一事项去重合并。提示词模板在 `internal/core/prompts/normalize.md`。
 - **解析失败不丢内容**：模型输出缺少「本周完成 / 下周计划」标题时，整段作为草稿正文保存并提示人工整理；外层代码围栏会被去掉。
 - **外发确认**：组员原文发给外部大模型前必须预览确认（见 [llm.md](llm.md)）。CLI 不带 `--yes` 退出码 8 且不发请求。
 - **不覆盖人工修改**：归一稿已人工修改（`humanEdited: true`）或已定稿时，再次 AI 生成返回 `9 HUMAN_EDITS_EXIST`；加 `--force` 才覆盖，覆盖前旧版移入 `.history/member-normalized/`。未改过的 AI 草稿可直接重新生成。
@@ -530,9 +530,14 @@ App 侧栏第三个视图「周报」，服务是 `app/reportservice.go`（`Repo
 - 筛选记录：`reports/<周>/triage/<组长>.md`，只有 front matter；每条记 `decision`
   （accepted / rejected / skipped）与 `project`。
 - 按项目组报：`reports/<周>/group/<项目 id>/<组长>.md`，格式与普通组报相同，按项目独立
-  保存 / 定稿 / 导出；正文按「本周总结 / 下周计划 / 风险与求助」分节，不带姓名。
+  保存 / 定稿 / 导出；正文按「本周总结 / 下周计划 / 其他事项 / AI 使用」分节，不带姓名，
+  没有条目的节不输出。
 - 索引里按项目组报的 `level = group/<项目 id>`，`report list` 不指定 level 时默认仍只列
   member / lead。
 - 筛选**优先读组员周报原文**，按标题/一行一条拆条目；原文拆不出时才退回已有归一稿。不要求先逐人定稿，也不需要配置 AI；组报定稿仍是导出/带入 SE 的闸门。
+- **AI 使用**：组员原文里以 AI 开头的短小节标题（「AI使用」「AI 经验」「AI coding实践」「AI做了什么」等，
+  带不带冒号都行）单独成「AI 使用」节，在筛选里排在最后，和其他节一样逐条归口到项目，组报和 SE
+  项目报里也单独成节。「AI经验 ：xxx」这种标题和内容写在同一行时，冒号后的内容算一条。
+  以前这类小节被直接跳过，标题没带冒号时还会被误当成下周计划。
 - 项目配置在 `.kuibu/config.json` 的 `reportProjects`，最多 4 个；设计说明见
   [design/report-triage.md](design/report-triage.md)。

@@ -301,6 +301,69 @@ func TestParseRawReportWeekPlanSections(t *testing.T) {
 	if TriageSectionTitle(SectionRisk) != "其他事项" {
 		t.Fatalf("风险节显示名 = %q", TriageSectionTitle(SectionRisk))
 	}
+	// 「AI经验 ：xxx」同一行：冒号后的内容算一条 AI 使用。
+	if len(items[SectionAI]) != 1 || items[SectionAI][0].Text != "H5KVM 协议分析" {
+		t.Fatalf("AI 使用 = %+v", items[SectionAI])
+	}
+}
+
+func TestParseRawReportAISection(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		ai   []string
+	}{
+		{
+			// 标题没带冒号：以前会被当成下周计划的一条。
+			name: "无冒号",
+			body: "【周报】邢凯2026-10-29\n本周完成：\n1.完成迭代二需求开发 100%\n下周计划：\n1.迭代二功能测试及修复。\n2.代码评估自动化流程开发。\nAI Codeing 实践\n1.补充E2E测试集\n2.研擎管理skills编写\n",
+			ai:   []string{"补充E2E测试集", "研擎管理skills编写"},
+		},
+		{
+			name: "AI coding实践：",
+			body: "本周完成\n1.电源架原型设计（80%）\n下周计划：\n1.华为带外采集工具调研\nAI coding实践：\n1. JAR 占用分析及瘦身\n2.机型适配周报汇总成skills\n",
+			ai:   []string{"JAR 占用分析及瘦身", "机型适配周报汇总成skills"},
+		},
+		{
+			name: "AI做了什么：",
+			body: "本周完成：\n1.Web Terminal 原型（100%）\n下周计划：\n1. Web Terminal 开发\nAI做了什么：\nAI进行了机型适配资料文档整理\n",
+			ai:   []string{"AI进行了机型适配资料文档整理"},
+		},
+		{
+			name: "AI使用。",
+			body: "本周完成：\n1.多会话\n下周计划：\n1.桌面版\n\nAI使用。\n基于AI实现自动化流程\n",
+			ai:   []string{"基于AI实现自动化流程"},
+		},
+	}
+	for _, c := range cases {
+		items := parseTriageBody(c.body)
+		if len(items[SectionAI]) != len(c.ai) {
+			t.Fatalf("%s: AI 使用 = %+v", c.name, items[SectionAI])
+		}
+		for i, want := range c.ai {
+			if items[SectionAI][i].Text != want {
+				t.Fatalf("%s: AI 使用[%d] = %q, 期望 %q", c.name, i, items[SectionAI][i].Text, want)
+			}
+		}
+		for _, it := range items[SectionPlan] {
+			if strings.HasPrefix(it.Text, "AI") {
+				t.Fatalf("%s: AI 小节混进了下周计划: %+v", c.name, items[SectionPlan])
+			}
+		}
+	}
+}
+
+func TestIsAISectionTitleIgnoresBody(t *testing.T) {
+	for _, line := range []string{"AI 服务器监控能力标准调研及方案", "AI服务器监控能力标准调研：方案与 PoC 推进中", "智能体使用"} {
+		if IsAISectionTitle(line) {
+			t.Fatalf("%q 不应识别成 AI 使用节", line)
+		}
+	}
+	for _, line := range []string{"AI使用：", "AI 使用", "AI经验", "AI coding实践：", "AI Codeing 实践", "AI做了什么：", "AI使用。", "## AI 使用"} {
+		if !IsAISectionTitle(strings.TrimLeft(line, "# ")) {
+			t.Fatalf("%q 应识别成 AI 使用节", line)
+		}
+	}
 }
 
 func TestBuildTriageUsesEntrySections(t *testing.T) {

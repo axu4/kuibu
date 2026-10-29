@@ -229,7 +229,7 @@ export function ReportDraft({
 
       {!draft.exists ? (
         <div className="report-empty">
-          <p>还没有归一稿。AI 会把原文整理成「本周完成 / 下周计划 / 风险与求助」，发送前先给你预览。</p>
+          <p>还没有归一稿。AI 会把原文整理成「本周完成 / 下周计划 / 风险与求助」（原文写了 AI 使用时再加「AI 使用」），发送前先给你预览。</p>
         </div>
       ) : final ? (
         <>
