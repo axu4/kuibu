@@ -98,10 +98,12 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
     }, [projects, active, initialProject]);
 
     // 第一次切换到某个项目时读它的草稿；已加载过的保留内存里的未保存正文。
+    // 只按「已有数据」跳过：读取中被打断（快速切走再切回、开发模式下 effect 重跑）
+    // 时要重新读，否则会一直停在「正在读取草稿…」。
     useEffect(() => {
       if (!active) return;
       const existing = draftsRef.current[active];
-      if (existing && (existing.loading || existing.data)) return;
+      if (existing?.data) return;
       let alive = true;
       patchDraft(active, (state) => ({ ...state, loading: true, error: null }));
       void ReportService.ProjectGroup(week, group, active)
@@ -253,7 +255,8 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
       ? items.filter((i) => i.decision === "accepted" && i.project === active)
       : [];
     const sourceCount = new Set(activeItems.map((i) => i.person)).size;
-    const isFinal = activeData?.status === "final";
+    // 草稿还没读回来时按左侧列表的状态判断是否定稿，避免把定稿当草稿去重新生成。
+    const isFinal = activeData ? activeData.status === "final" : rowMap.get(active ?? "")?.status === "final";
     const candidates = (projectId: string) =>
       items.filter((i) => i.decision === "accepted" && i.project === projectId).length;
 
@@ -298,7 +301,11 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
     const regenerate = async () => {
       if (!active) return;
       const state = draftsRef.current[active];
-      if (state?.data?.status === "final") {
+      if (!state?.data && state?.loading) {
+        onToast("草稿还在读取，稍等再试");
+        return;
+      }
+      if ((state?.data?.status ?? rowMap.get(active)?.status) === "final") {
         onToast("已定稿，先取消定稿再重新生成");
         return;
       }
