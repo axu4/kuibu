@@ -236,6 +236,26 @@ export interface LLMModelInput {
 }
 
 /**
+ * LinkCheck 是点击链接前的判定结果。
+ */
+export interface LinkCheck {
+    /**
+     * Action 是 open（直接打开）/ confirm（需二次确认）/ deny（拒绝）。
+     */
+    "action": string;
+
+    /**
+     * Scheme 是链接协议名（小写）。
+     */
+    "scheme": string;
+
+    /**
+     * Reason 是 deny 时的原因。
+     */
+    "reason": string;
+}
+
+/**
  * NormalizePlan 是批量归一的外发预览：前端用 SendPreview 弹窗展示，用户确认后
  * 再调 Normalize。
  */
@@ -1027,12 +1047,22 @@ export interface TodoItem {
     "attachments": TodoAttachment[] | null;
 
     /**
-     * Source 是来源笔记 ID，可空。
+     * Priority 是优先级 high/medium/low，空表示未设置。
+     */
+    "priority": string;
+
+    /**
+     * Source 是来源：来源笔记 ID，或外部工具写入的来源类型（如 mail），可空。
      */
     "source": string;
 
     /**
-     * SourceTitle 是来源笔记标题，仅在 Get 中填充。
+     * ExternalID 是外部系统标识（如邮件 Message-ID），可空。
+     */
+    "externalId": string;
+
+    /**
+     * SourceTitle 是来源笔记标题，仅在 Get 中且来源是笔记时填充。
      */
     "sourceTitle": string;
 
@@ -1095,6 +1125,16 @@ export interface TodoListFilter {
      * Query 是按标题/正文的检索词，空表示不过滤。
      */
     "query": string;
+
+    /**
+     * Priority 是优先级筛选：high/medium/low/none（未设置），空表示不过滤。
+     */
+    "priority": string;
+
+    /**
+     * Sort 是排序：空为默认（按截止时间），priority 为按优先级高→低→未设。
+     */
+    "sort": string;
 }
 
 /**

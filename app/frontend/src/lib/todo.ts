@@ -127,10 +127,34 @@ function pad(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-/** 把链接显示成「域名+路径」，未填标题时使用。 */
+/** 优先级取值，从高到低。 */
+export const PRIORITY_OPTIONS = ["high", "medium", "low"] as const;
+
+/** 优先级的中文短名；未设置返回空字符串。 */
+export function priorityLabel(priority: string): string {
+  switch (priority) {
+    case "high":
+      return "高";
+    case "medium":
+      return "中";
+    case "low":
+      return "低";
+    default:
+      return "";
+  }
+}
+
+/** 把链接显示成「域名+路径」，未填标题时使用；邮件链接显示成「邮件 Message-ID」。 */
 export function linkDisplay(url: string, title: string): string {
   if (title) {
     return title;
+  }
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(url)?.[1].toLowerCase() ?? "";
+  if (scheme === "message") {
+    return `邮件 ${safeDecode(url.slice("message:".length).replace(/^\/\//, ""))}`;
+  }
+  if (scheme && scheme !== "http" && scheme !== "https") {
+    return safeDecode(url);
   }
   try {
     const parsed = new URL(url);
@@ -138,6 +162,15 @@ export function linkDisplay(url: string, title: string): string {
     return `${parsed.host}${path}${parsed.search}`;
   } catch {
     return url;
+  }
+}
+
+/** URL 解码，失败时原样返回。 */
+function safeDecode(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
   }
 }
 

@@ -11,6 +11,7 @@ import { Icon } from "./Icon";
 import { LLMSettings } from "./LLMSettings";
 import { GroupManager } from "./GroupManager";
 import { PeopleManager } from "./PeopleManager";
+import { LinkSchemeSettings } from "./LinkSchemeSettings";
 import { parseReleaseNotes } from "../lib/releaseNotes";
 import {
   keyboardEventToAccelerator,
@@ -450,6 +451,8 @@ export function Settings({
           )}
         </div>
 
+
+        <LinkSchemeSettings />
 
         <section className="settings-section">
           <h3>命令行工具</h3>

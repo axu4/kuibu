@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,13 @@ func newTestTodos(t *testing.T) (*TodoService, *WorkspaceService, *openedFiles) 
 	openTempWorkspace(t, ws)
 	todos := newTodoService(ws)
 	todos.now = fixedNow
+	configDir := t.TempDir()
+	todos.env = func(k string) string {
+		if k == "KUIBU_CONFIG_DIR" {
+			return configDir
+		}
+		return ""
+	}
 	files := &openedFiles{}
 	todos.openFile = func(path string) error {
 		files.opened = append(files.opened, path)
@@ -347,14 +355,17 @@ func TestTodoLinks(t *testing.T) {
 		t.Errorf("同 URL 应去重，Links = %+v", item.Links)
 	}
 
-	if err := todos.OpenLink("https://example.com/doc"); err != nil {
+	if err := todos.OpenLink("https://example.com/doc", false); err != nil {
 		t.Fatalf("OpenLink 失败: %v", err)
 	}
 	if len(files.urls) != 1 || files.urls[0] != "https://example.com/doc" {
 		t.Errorf("打开的链接 = %v", files.urls)
 	}
-	if err := todos.OpenLink("file:///etc/passwd"); err == nil {
-		t.Error("file:// 链接应被拒绝")
+	if err := todos.OpenLink("file:///etc/passwd", false); !errors.Is(err, store.ErrNeedsConfirm) {
+		t.Errorf("file:// 链接未确认时应要求确认，得到 %v", err)
+	}
+	if len(files.urls) != 1 {
+		t.Errorf("未确认的链接不应被打开: %v", files.urls)
 	}
 
 	item, err = todos.RemoveLink(item.ID, "https://example.com/doc")
@@ -652,5 +663,95 @@ func TestTodoDeleteAndMove(t *testing.T) {
 	a, _ := todos.Create("A", "")
 	if err := todos.Move(a.ID, "", 0); err != nil {
 		t.Fatalf("Move 失败: %v", err)
+	}
+}
+
+func TestTodoOpenLinkWhitelist(t *testing.T) {
+	todos, _, files := newTestTodos(t)
+	const msg = "message://%3C20261029.abc123@mail.example.com%3E"
+
+	item, _ := todos.Create("回邮件", "")
+	if _, err := todos.AddLink(item.ID, msg, "原邮件"); err != nil {
+		t.Fatalf("message:// 链接应能保存: %v", err)
+	}
+	if check, _ := todos.CheckLink(msg); check.Action != store.LinkOpen {
+		t.Errorf("message:// 默认应直接打开，得到 %+v", check)
+	}
+	if err := todos.OpenLink(msg, false); err != nil {
+		t.Fatalf("打开 message:// 失败: %v", err)
+	}
+
+	if check, _ := todos.CheckLink("obsidian://open?vault=x"); check.Action != store.LinkConfirm {
+		t.Errorf("白名单外应确认，得到 %+v", check)
+	}
+	if err := todos.OpenLink("obsidian://open?vault=x", true); err != nil {
+		t.Errorf("确认后应能打开: %v", err)
+	}
+	if check, _ := todos.CheckLink("javascript:alert(1)"); check.Action != store.LinkDeny || check.Reason == "" {
+		t.Errorf("javascript: 应拒绝，得到 %+v", check)
+	}
+	if err := todos.OpenLink("javascript:alert(1)", true); !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("javascript: 即使确认也应拒绝，得到 %v", err)
+	}
+	if len(files.urls) != 2 || files.urls[0] != msg {
+		t.Errorf("打开的链接 = %v", files.urls)
+	}
+
+	got, err := todos.SetLinkSchemes([]string{"https", "obsidian"}, false)
+	if err != nil || strings.Join(got, ",") != "https,obsidian" {
+		t.Fatalf("SetLinkSchemes = %v, %v", got, err)
+	}
+	if check, _ := todos.CheckLink("obsidian://open"); check.Action != store.LinkOpen {
+		t.Errorf("加入白名单后应直接打开，得到 %+v", check)
+	}
+	if check, _ := todos.CheckLink(msg); check.Action != store.LinkConfirm {
+		t.Errorf("移出白名单后应确认，得到 %+v", check)
+	}
+	if got, _ := todos.SetLinkSchemes(nil, true); len(got) != 4 {
+		t.Errorf("恢复默认 = %v", got)
+	}
+}
+
+func TestTodoPriorityFilterAndSort(t *testing.T) {
+	todos, _, _ := newTestTodos(t)
+	a, _ := todos.Create("A", "")
+	b, _ := todos.Create("B", "")
+	c, _ := todos.Create("C", "")
+	if _, err := todos.UpdatePriority(b.ID, store.PriorityLow); err != nil {
+		t.Fatal(err)
+	}
+	item, err := todos.UpdatePriority(c.ID, store.PriorityHigh)
+	if err != nil || item.Priority != store.PriorityHigh {
+		t.Fatalf("UpdatePriority = %+v, %v", item, err)
+	}
+	if _, err := todos.UpdatePriority(a.ID, "urgent"); !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("非法优先级应报错，得到 %v", err)
+	}
+
+	ids := func(items []TodoItem) string {
+		var out []string
+		for _, it := range items {
+			out = append(out, it.Title)
+		}
+		return strings.Join(out, ",")
+	}
+	list, _ := todos.List(TodoListFilter{View: "all"})
+	if got := ids(list); got != "A,B,C" {
+		t.Errorf("默认排序 = %s，期望不受优先级影响", got)
+	}
+	list, _ = todos.List(TodoListFilter{View: "all", Sort: "priority"})
+	if got := ids(list); got != "C,B,A" {
+		t.Errorf("按优先级排序 = %s", got)
+	}
+	list, _ = todos.List(TodoListFilter{View: "all", Priority: "high"})
+	if got := ids(list); got != "C" {
+		t.Errorf("筛选 high = %s", got)
+	}
+	list, _ = todos.List(TodoListFilter{View: "all", Priority: "none"})
+	if got := ids(list); got != "A" {
+		t.Errorf("筛选未设 = %s", got)
+	}
+	if _, err := todos.List(TodoListFilter{View: "all", Priority: "bad"}); !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("非法优先级筛选应报错，得到 %v", err)
 	}
 }

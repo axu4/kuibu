@@ -3,7 +3,14 @@ import { TodoService } from "../../bindings/github.com/axu4/kuibu/app";
 import type { TodoItem } from "../../bindings/github.com/axu4/kuibu/app";
 import { Editor } from "./LazyEditor";
 import { Icon } from "./Icon";
-import { formatDueLong, linkDisplay, readableError, statusLabel } from "../lib/todo";
+import {
+  PRIORITY_OPTIONS,
+  formatDueLong,
+  linkDisplay,
+  priorityLabel,
+  readableError,
+  statusLabel,
+} from "../lib/todo";
 
 /** 正文自动保存防抖时间（与笔记编辑器一致）。 */
 const SAVE_DEBOUNCE_MS = 600;
@@ -54,6 +61,8 @@ export function TodoDetail({
   const [busy, setBusy] = useState(false);
   const [confirmDone, setConfirmDone] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 白名单外或 file: 链接点击前的确认。
+  const [confirmLink, setConfirmLink] = useState<{ url: string; scheme: string } | null>(null);
   const [dropping, setDropping] = useState(false);
   // 链接输入默认收起，点「添加链接」再展开。
   const [linkOpen, setLinkOpen] = useState(false);
@@ -317,10 +326,23 @@ export function TodoDetail({
   }, [item.id, linkTitle, linkURL, run]);
 
   const openLink = useCallback(
-    (url: string) => {
-      void TodoService.OpenLink(url).catch((err) => {
+    async (url: string, confirmed = false) => {
+      try {
+        if (!confirmed) {
+          const check = await TodoService.CheckLink(url);
+          if (check.action === "deny") {
+            onError(`不能打开这个链接：${check.reason}`);
+            return;
+          }
+          if (check.action === "confirm") {
+            setConfirmLink({ url, scheme: check.scheme });
+            return;
+          }
+        }
+        await TodoService.OpenLink(url, confirmed);
+      } catch (err) {
         onError(`打开链接失败：${readableError(err)}`);
-      });
+      }
     },
     [onError],
   );
@@ -360,7 +382,7 @@ export function TodoDetail({
   // Esc 关闭面板；正在输入时 Esc 只退出输入框。
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || confirmDelete || confirmDone !== null) {
+      if (e.key !== "Escape" || confirmDelete || confirmDone !== null || confirmLink) {
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -372,7 +394,7 @@ export function TodoDetail({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [confirmDelete, confirmDone, onClose]);
+  }, [confirmDelete, confirmDone, confirmLink, onClose]);
 
   return (
     <aside
@@ -545,20 +567,54 @@ export function TodoDetail({
             </div>
           </div>
 
+          <div className="prop">
+            <span className="prop-label">
+              <Icon name="bolt" size={14} />
+              优先级
+            </span>
+            <div className="segmented">
+              <button
+                type="button"
+                className={`segmented-btn${detail.priority ? "" : " is-active"}`}
+                disabled={busy}
+                onClick={() => void run(() => TodoService.UpdatePriority(item.id, ""), "修改优先级失败")}
+              >
+                不设
+              </button>
+              {PRIORITY_OPTIONS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  className={`segmented-btn is-priority-${p}${detail.priority === p ? " is-active" : ""}`}
+                  disabled={busy}
+                  onClick={() => void run(() => TodoService.UpdatePriority(item.id, p), "修改优先级失败")}
+                >
+                  {priorityLabel(p)}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {detail.source && (
             <div className="prop">
               <span className="prop-label">
                 <Icon name="note" size={14} />
                 来源
               </span>
-              <button
-                type="button"
-                className="source-link"
-                title="打开这条笔记"
-                onClick={() => onOpenNote(detail.source)}
-              >
-                {detail.sourceTitle || detail.source}
-              </button>
+              {detail.sourceTitle ? (
+                <button
+                  type="button"
+                  className="source-link"
+                  title="打开这条笔记"
+                  onClick={() => onOpenNote(detail.source)}
+                >
+                  {detail.sourceTitle}
+                </button>
+              ) : (
+                <span className="source-text" title={detail.externalId || undefined}>
+                  {detail.source === "mail" ? "邮件" : detail.source}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -627,7 +683,7 @@ export function TodoDetail({
                 type="button"
                 className="resource-open"
                 title={l.url}
-                onClick={() => openLink(l.url)}
+                onClick={() => void openLink(l.url)}
               >
                 {linkDisplay(l.url, l.title)}
               </button>
@@ -759,6 +815,36 @@ export function TodoDetail({
                 }}
               >
                 删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmLink && (
+        <div className="modal-mask" onClick={() => setConfirmLink(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>打开 {confirmLink.scheme}: 链接？</h2>
+            <p className="modal-url">{confirmLink.url}</p>
+            <p>
+              {confirmLink.scheme === "file"
+                ? "这会用系统默认程序打开本地文件，请确认来源可信。"
+                : `「${confirmLink.scheme}」不在链接白名单里，会交给系统打开。可以在设置里把它加入白名单。`}
+            </p>
+            <div className="modal-buttons">
+              <button type="button" className="btn" onClick={() => setConfirmLink(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  const url = confirmLink.url;
+                  setConfirmLink(null);
+                  void openLink(url, true);
+                }}
+              >
+                打开
               </button>
             </div>
           </div>

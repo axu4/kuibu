@@ -33,6 +33,9 @@ var (
 
 	// ErrNeedsConfirm 表示操作有连带影响，需要人工确认（CLI 退出码 8）。
 	ErrNeedsConfirm = errors.New("需要确认")
+
+	// ErrDuplicate 表示待办 external_id 已被另一条待办占用。
+	ErrDuplicate = errors.New("external_id 已存在")
 )
 
 // todoError 是待办操作专用的私有错误类型：Error() 返回待办文案，Unwrap()

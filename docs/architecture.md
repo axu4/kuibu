@@ -190,7 +190,7 @@ source: ""
 
 ### 链接与附件
 
-- 链接必须含 scheme（http/https/mailto 等），同 URL 只更新标题不重复添加。
+- 链接只要求以合法协议名开头（http/https/mailto/message 等，不要求 host），javascript:/data: 拒绝；同 URL 只更新标题不重复添加。点击时按协议白名单处理，见 `docs/todo.md`。
 - 附件经 `store.AddAsset` 去重复制进 `assets/`，列表存相对待办文件的 `../assets/<文件名>`；移除附件只改列表，不删资源文件。
 
 ### source

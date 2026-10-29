@@ -33,6 +33,7 @@ export type {
     GroupPlanData,
     LLMList,
     LLMModelInput,
+    LinkCheck,
     NormalizePlan,
     NormalizeResultData,
     NoteData,
