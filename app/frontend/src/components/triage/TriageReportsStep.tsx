@@ -20,6 +20,7 @@ import type {
 import { copyRich } from "../../lib/clipboard";
 import { readableError } from "../../lib/todo";
 import { Editor } from "../LazyEditor";
+import { DeliveryBar, deliveryShort } from "../DeliveryBar";
 import { Icon } from "../Icon";
 import { formatClock, normalizeBody } from "./shared";
 
@@ -97,10 +98,12 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
     }, [projects, active, initialProject]);
 
     // 第一次切换到某个项目时读它的草稿；已加载过的保留内存里的未保存正文。
+    // 只按「已有数据」跳过：读取中被打断（快速切走再切回、开发模式下 effect 重跑）
+    // 时要重新读，否则会一直停在「正在读取草稿…」。
     useEffect(() => {
       if (!active) return;
       const existing = draftsRef.current[active];
-      if (existing && (existing.loading || existing.data)) return;
+      if (existing?.data) return;
       let alive = true;
       patchDraft(active, (state) => ({ ...state, loading: true, error: null }));
       void ReportService.ProjectGroup(week, group, active)
@@ -252,7 +255,8 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
       ? items.filter((i) => i.decision === "accepted" && i.project === active)
       : [];
     const sourceCount = new Set(activeItems.map((i) => i.person)).size;
-    const isFinal = activeData?.status === "final";
+    // 草稿还没读回来时按左侧列表的状态判断是否定稿，避免把定稿当草稿去重新生成。
+    const isFinal = activeData ? activeData.status === "final" : rowMap.get(active ?? "")?.status === "final";
     const candidates = (projectId: string) =>
       items.filter((i) => i.decision === "accepted" && i.project === projectId).length;
 
@@ -297,7 +301,11 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
     const regenerate = async () => {
       if (!active) return;
       const state = draftsRef.current[active];
-      if (state?.data?.status === "final") {
+      if (!state?.data && state?.loading) {
+        onToast("草稿还在读取，稍等再试");
+        return;
+      }
+      if ((state?.data?.status ?? rowMap.get(active)?.status) === "final") {
         onToast("已定稿，先取消定稿再重新生成");
         return;
       }
@@ -365,6 +373,21 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
       }
     };
 
+    const [marking, setMarking] = useState(false);
+    const markDelivered = async (delivered: boolean) => {
+      if (!active) return;
+      setMarking(true);
+      try {
+        const data = await ReportService.MarkProjectDelivered(week, group, active, delivered);
+        patchDraft(active, (state) => ({ ...state, data }));
+        onToast(delivered ? `已标记交给 ${data.delivery?.se || "SE"}` : "已撤销已交标记");
+      } catch (err) {
+        onToast(`操作失败：${readableError(err)}`);
+      } finally {
+        setMarking(false);
+      }
+    };
+
     const stale = Boolean(activeData?.sourceChanged || (active && rowMap.get(active)?.sourceChanged));
 
     if (projects.length === 0) {
@@ -397,6 +420,9 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
                     <span className="triage-rl-count">{candidates(project.id)} 条</span>
                   </span>
                   <span className={`triage-rl-status ${state.cls}`}>{state.text}</span>
+                  <span className="triage-rl-to">
+                    {deliveryShort(drafts[project.id]?.data?.delivery ?? rowMap.get(project.id)?.delivery)}
+                  </span>
                 </button>
               );
             })}
@@ -448,6 +474,17 @@ export const TriageReportsStep = forwardRef<TriageReportsHandle, TriageReportsSt
                   </button>
                 </div>
               </div>
+
+              {activeData?.exists && (
+                <DeliveryBar
+                  delivery={activeData.delivery ?? rowMap.get(active)?.delivery}
+                  projectName={activeProject.name}
+                  isFinal={isFinal}
+                  busy={marking}
+                  onCopy={() => void copyFeishu()}
+                  onMark={(d) => void markDelivered(d)}
+                />
+              )}
 
               {stale && (
                 <div className="triage-re-banner">

@@ -206,10 +206,12 @@ func monthList(ws *store.Workspace, o reportMonthOpts) error {
 	if err != nil {
 		return err
 	}
-	lead, err := ws.ResolvePerson(pull.Lead)
+	lead, err := ws.ResolvePerson(core.LeadIDFromKey(pull.Lead))
 	if err != nil {
 		return err
 	}
+	// 文件按组的存储键存放（同一人带多个组时不是 personId）。
+	leadKey := pull.Lead
 	projects, err := ws.ReportProjects()
 	if err != nil {
 		return err
@@ -224,14 +226,14 @@ func monthList(ws *store.Workspace, o reportMonthOpts) error {
 			Project:     p.ID,
 			ProjectName: p.Name,
 			Status:      "none",
-			Path:        filepath.Join(ws.ReportsDir(), o.month, store.GroupReportKind(p.ID), lead.ID+".md"),
+			Path:        filepath.Join(ws.ReportsDir(), o.month, store.GroupReportKind(p.ID), leadKey+".md"),
 			Counts:      c.Counts,
 			Missing:     nonNilStrings(c.Missing),
 			SourceWeeks: nonNilStrings(c.SourceWeeks),
 			PlanFrom:    c.PlanFrom,
 			Weeks:       nonNilStrings(pull.Weeks),
 		}
-		d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), o.month, lead.ID)
+		d, err := ws.ReadDraftKind(store.GroupReportKind(p.ID), o.month, leadKey)
 		switch {
 		case err == nil:
 			row.Status = d.Status

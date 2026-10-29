@@ -202,7 +202,8 @@ var knownReportFrontMatterKeys = map[string]bool{
 
 // ValidReportLevel 判断周报层级是否合法。
 func ValidReportLevel(level string) bool {
-	return level == ReportLevelMember || level == ReportLevelLead || level == ReportLevelLeadMonth
+	return level == ReportLevelMember || level == ReportLevelLead || level == ReportLevelLeadMonth ||
+		ProjectIDFromInboxLevel(level) != ""
 }
 
 // ValidReportSource 判断周报来源是否合法。
@@ -549,7 +550,7 @@ type ReportStatus struct {
 // 若 firstSubmittedAt 晚于周报日 24:00 记为 late。有提交但不在应交名单里的
 // 单独放 Extra（已离职但交过的人也在此列出）。
 func (w *Workspace) ReportStatus(week, level, group, productLine string, now time.Time) (*ReportStatus, error) {
-	if !ValidReportLevel(level) {
+	if !ValidReportLevel(level) || ProjectIDFromInboxLevel(level) != "" {
 		return nil, fmt.Errorf("%w: 非法周报层级 %q", ErrInvalid, level)
 	}
 	// monday 是判断所属组 / 产品线的参照日；月报用当月 1 日。

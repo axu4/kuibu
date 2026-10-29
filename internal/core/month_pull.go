@@ -466,7 +466,7 @@ func MonthProjectCandidates(ws *store.Workspace, month, group, projectID string)
 }
 
 func monthProjectCandidates(ws *store.Workspace, pull *store.MonthPull, project store.ReportProject) (*MonthCandidatesData, error) {
-	lead, err := ws.ResolvePerson(pull.Lead)
+	lead, err := leadForKey(ws, pull.Lead)
 	if err != nil {
 		return nil, err
 	}
@@ -672,7 +672,7 @@ func AssembleMonthProject(ws *store.Workspace, month, group, projectID string, a
 		}
 	}
 	sort.Strings(sources)
-	lead, err := ws.ResolvePerson(pull.Lead)
+	lead, err := leadForKey(ws, pull.Lead)
 	if err != nil {
 		return nil, err
 	}

@@ -18,9 +18,44 @@ var reportProjectIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 // ReportProject 是一个报送项目（组报按项目分别成稿）。
 //
 // 项目只是报送口径，不改变组员名单里的产品线；id 稳定、名称可改。
+// 每个项目有一位 SE：Mine 表示我就是这个项目的 SE，各组（DE）交来的项目报
+// 在 SE 页汇总；否则 SE 记的是要交给谁，组里定稿的项目报复制给对方后标记已交。
 type ReportProject struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Mine 表示我是这个项目的 SE。
+	Mine bool `json:"mine,omitempty"`
+	// SE 是项目 SE 的称呼（Mine 为 false 时表示交给谁）。
+	SE string `json:"se,omitempty"`
+	// Groups 是我当 SE 时应交项目报的组 id；为空表示全部组。
+	Groups []string `json:"groups,omitempty"`
+}
+
+// SetReportProjectSE 设置项目的 SE：mine 为 true 表示我是 SE（groups 是应交的组 id，
+// 空表示全部组）；否则 se 是对方 SE 的称呼。返回新列表与修改后的项目。
+func (w *Workspace) SetReportProjectSE(idOrName string, mine bool, se string, groups []string) ([]ReportProject, ReportProject, error) {
+	projects, err := w.ReportProjects()
+	if err != nil {
+		return nil, ReportProject{}, err
+	}
+	idx := findReportProjectIndex(projects, idOrName)
+	if idx < 0 {
+		return nil, ReportProject{}, fmt.Errorf("%w: 找不到报送项目 %q", ErrNotFound, idOrName)
+	}
+	projects[idx].Mine = mine
+	projects[idx].SE = strings.TrimSpace(se)
+	projects[idx].Groups = nil
+	if mine {
+		projects[idx].Groups = append([]string(nil), groups...)
+	}
+	if err := w.SetReportProjects(projects); err != nil {
+		return nil, ReportProject{}, err
+	}
+	projects, err = w.ReportProjects()
+	if err != nil {
+		return nil, ReportProject{}, err
+	}
+	return projects, projects[idx], nil
 }
 
 // ReportProjects 返回工作台配置的报送项目（按配置顺序）。
@@ -167,6 +202,19 @@ func normalizeReportProjects(projects []ReportProject) ([]ReportProject, error) 
 		}
 		ids[p.ID] = true
 		names[p.Name] = true
+		p.SE = strings.TrimSpace(p.SE)
+		groups := make([]string, 0, len(p.Groups))
+		seen := map[string]bool{}
+		for _, g := range p.Groups {
+			if g = strings.TrimSpace(g); g != "" && !seen[g] {
+				seen[g] = true
+				groups = append(groups, g)
+			}
+		}
+		p.Groups = nil
+		if len(groups) > 0 {
+			p.Groups = groups
+		}
 		out = append(out, p)
 	}
 	return out, nil

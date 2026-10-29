@@ -40,8 +40,10 @@ func fileKind(ws *store.Workspace, path string) string {
 	parts := strings.Split(rel, string(filepath.Separator))
 	// 三层的周报/归一稿/组报：reports/<周>/<层级>/<文件>；
 	// 配置报送项目后的组报多一层：reports/<周>/group/<项目 id>/<组长>.md。
+	// SE 收到的项目报同样多一层：reports/<周或月>/project/<项目 id>/<组 id>.md。
 	ok := (len(parts) == 3 && strings.HasSuffix(parts[2], ".md")) ||
-		(len(parts) == 4 && parts[1] == store.GroupDirName && strings.HasSuffix(parts[3], ".md"))
+		(len(parts) == 4 && (parts[1] == store.GroupDirName || parts[1] == store.ProjectInboxDirName) &&
+			strings.HasSuffix(parts[3], ".md"))
 	if !ok {
 		return ""
 	}
@@ -395,7 +397,11 @@ func readReportOrDraft(path string) (*store.Report, error) {
 	kind := parent
 	if !store.IsDraftKind(kind) {
 		// reports/<周>/group/<项目 id>/<组长>.md
-		if filepath.Base(filepath.Dir(filepath.Dir(path))) == store.GroupDirName {
+		grand := filepath.Base(filepath.Dir(filepath.Dir(path)))
+		if grand == store.ProjectInboxDirName {
+			return store.ReadReportFile(path)
+		}
+		if grand == store.GroupDirName {
 			kind = store.GroupReportKind(parent)
 		} else {
 			return store.ReadReportFile(path)

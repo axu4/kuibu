@@ -24,12 +24,14 @@ type groupJSON struct {
 	Sources       []string `json:"sources"`
 	Missing       []string `json:"missing"`
 	SourceChanged bool     `json:"sourceChanged"`
+	// Delivery 是按项目组报的去向（我是 SE / 交给谁、是否已交）。
+	Delivery *core.ProjectGroupDelivery `json:"delivery,omitempty"`
 }
 
 // reportGroup 分发 report group 子命令。
 func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	if len(args) == 0 {
-		return usagef("report group 需要子命令: generate/assemble/list/show/edit/finalize/unfinalize/submit")
+		return usagef("report group 需要子命令: generate/assemble/list/show/edit/finalize/unfinalize/submit/deliver")
 	}
 	sub, rest := args[0], args[1:]
 	fs := newFlagSet("report group " + sub)
@@ -45,6 +47,8 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 		yes, dryRun     *bool
 		force           *bool
 		file            *string
+		monthFlag       *string
+		undo            *bool
 	)
 	switch sub {
 	case "generate":
@@ -59,6 +63,9 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 	case "assemble":
 		allowUnreviewed = fs.Bool("allow-unreviewed", false, "有未判条目时仍然生成")
 		force = fs.Bool("force", false, "覆盖已人工修改或已定稿的组报（旧版移入历史）")
+	case "deliver":
+		monthFlag = fs.String("month", "", "月份编号；给出时标记项目月报（与 --week 二选一）")
+		undo = fs.Bool("undo", false, "撤销已交标记")
 	case "list":
 	case "show", "finalize", "unfinalize", "submit":
 	default:
@@ -92,6 +99,9 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 	}
 	if sub == "list" {
 		return groupList(ws, week, *group, common, stdout)
+	}
+	if sub == "deliver" {
+		return groupDeliver(ws, week, *weekFlag, *monthFlag, *group, *projectFlag, !*undo, common, stdout, stderr, now)
 	}
 
 	lead, _, err := core.ResolveLead(ws, week, *group)
@@ -153,7 +163,7 @@ func reportGroup(ctx context.Context, args []string, common *commonFlags, stdin 
 		return groupDone(ws, d, "已取消定稿", common, stdout, stderr)
 	default: // submit
 		if kind != store.GroupDirName {
-			return usagef("按项目带入 SE 暂未实现；请先导出该项目组报")
+			return usagef("按项目的组报不用 submit：我是 SE 的项目定稿后自动进 SE 汇总（report se）；交给别人的项目复制后用 report group deliver 标记已交")
 		}
 		r, err := core.SubmitGroupReport(ws, week, lead.ID, now)
 		if err != nil {
@@ -235,9 +245,41 @@ func toGroupJSON(ws *store.Workspace, d *store.Draft, withBody bool) groupJSON {
 		out.Project = projectID
 		if projects, err := ws.ReportProjects(); err == nil {
 			out.ProjectName = store.ReportProjectName(projects, projectID)
+			if p, ok := store.FindReportProject(projects, projectID); ok {
+				delivery := core.DeliveryOf(p, d)
+				out.Delivery = &delivery
+			}
 		}
 	}
 	return out
+}
+
+// groupDeliver 实现 report group deliver：按项目组报已复制给对方 SE 后标记已交。
+func groupDeliver(ws *store.Workspace, week, weekFlag, monthFlag, group, project string, delivered bool,
+	common *commonFlags, stdout, stderr io.Writer, now time.Time) error {
+	if project == "" {
+		return usagef("用法: kuibu report group deliver --project P [--week W | --month M] [--undo]")
+	}
+	period := week
+	if monthFlag != "" {
+		if weekFlag != "" {
+			return usagef("--week 与 --month 只能给一个")
+		}
+		m, err := store.ParseMonth(monthFlag, now)
+		if err != nil {
+			return err
+		}
+		period = m
+	}
+	d, err := core.MarkProjectGroupDelivered(ws, period, group, project, delivered, now)
+	if err != nil {
+		return err
+	}
+	verb := "已标记交给 SE"
+	if !delivered {
+		verb = "已撤销已交标记"
+	}
+	return groupDone(ws, d, verb, common, stdout, stderr)
 }
 
 // printGroupHeader 输出组报头部信息。

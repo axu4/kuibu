@@ -173,10 +173,15 @@ export interface DraftItem {
 }
 
 /**
- * LibraryReport 是周报库里一份已定稿组报。
+ * LibraryReport 是周报库里一份已定稿组报 / 已交项目报 / SE 定稿项目报。
  */
 export interface LibraryReport {
     "id": string;
+
+    /**
+     * Kind 是来源：group / inbox / se。
+     */
+    "kind": string;
     "week": string;
     "group": string;
     "project": string;
@@ -375,6 +380,116 @@ export interface PlanReview {
     "note": string;
     "source": string;
     "carried": boolean;
+}
+
+/**
+ * ProjectGroupDelivery 是 DE 视角某个项目组报的去向。
+ */
+export interface ProjectGroupDelivery {
+    /**
+     * Mine 表示我是这个项目的 SE：定稿后自动出现在 SE 汇总里，不用交。
+     */
+    "mine": boolean;
+
+    /**
+     * SE 是对方 SE 的称呼（Mine 为 false 时）。
+     */
+    "se": string;
+
+    /**
+     * DeliveredAt 是标记已交的时间，未交为空。
+     */
+    "deliveredAt"?: string | null;
+
+    /**
+     * Stale 表示标记已交之后又重新定稿过，需要重新交。
+     */
+    "stale": boolean;
+}
+
+/**
+ * ProjectInbox 是 SE 视角某项目某期的收件情况。
+ */
+export interface ProjectInbox {
+    "period": string;
+    "monthly": boolean;
+    "project": store$0.ReportProject;
+
+    /**
+     * Deadline 是迟交判定时刻（周报日 / 月报收集日当天 24:00）。
+     */
+    "deadline": string;
+    "entries": ProjectInboxEntry[] | null;
+
+    /**
+     * Extra 是交过、但不在应交名单里的组（名单改过之后）。
+     */
+    "extra": ProjectInboxEntry[] | null;
+    "counts": { [_ in string]?: number } | null;
+}
+
+/**
+ * ProjectInboxEntry 是某组在这个项目上的交报情况。
+ */
+export interface ProjectInboxEntry {
+    "groupId": string;
+    "group": string;
+
+    /**
+     * Lead 是该组 DE 姓名。
+     */
+    "lead": string;
+    "leadId"?: string;
+
+    /**
+     * Status 见 Inbox* 常量。
+     */
+    "status": string;
+
+    /**
+     * SubmittedAt 是粘贴归档或组报定稿的时间。
+     */
+    "submittedAt"?: string | null;
+
+    /**
+     * Items 是可合并的条目数（各节列表项合计）。
+     */
+    "items": number;
+}
+
+/**
+ * ProjectInboxSource 是 SE 查看某组交来的原文。
+ */
+export interface ProjectInboxSource {
+    "groupId": string;
+    "group": string;
+
+    /**
+     * Lead 是该组 DE 姓名。
+     */
+    "lead": string;
+    "leadId"?: string;
+
+    /**
+     * Status 见 Inbox* 常量。
+     */
+    "status": string;
+
+    /**
+     * SubmittedAt 是粘贴归档或组报定稿的时间。
+     */
+    "submittedAt"?: string | null;
+
+    /**
+     * Items 是可合并的条目数（各节列表项合计）。
+     */
+    "items": number;
+
+    /**
+     * Source 是 linked（引用定稿组报）或 paste（粘贴归档）。
+     */
+    "source": string;
+    "body": string;
 }
 
 /**

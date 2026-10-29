@@ -34,6 +34,10 @@ func ValidPeriod(p string) error {
 
 // validPeriodFor 组长月报要求月份编号，其余层级要求周编号。
 func validPeriodFor(level, p string) error {
+	// 项目收件箱周报、月报共用，周期编号决定是哪一种。
+	if ProjectIDFromInboxLevel(level) != "" {
+		return ValidPeriod(p)
+	}
 	if level == ReportLevelLeadMonth {
 		if !ValidMonth(p) {
 			return fmt.Errorf("%w: 月报需要月份编号（如 2026-10），得到 %q", ErrInvalid, p)

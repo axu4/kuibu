@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -90,7 +91,91 @@ func (p *GroupPlan) sourceNoun() string {
 	return p.SourceNoun
 }
 
+// GroupOwnerKey 返回某组组报 / 筛选记录 / 月报拉取记录的存储键。
+//
+// 这些文件按组长 personId 存放；同一个人带多个组时（比如自己的组 + 收各 DE 周报的组），
+// 按组配置顺序第一个组沿用 personId（兼容已有数据），其余组用「personId.组 id」，避免互相覆盖。
+func GroupOwnerKey(ws *store.Workspace, leadID, group string) string {
+	if group == "" {
+		return leadID
+	}
+	groups, err := ws.ReportGroups()
+	if err != nil {
+		return leadID
+	}
+	first := ""
+	for _, g := range groups {
+		if g.Lead != leadID {
+			continue
+		}
+		if first == "" {
+			first = g.Name
+		}
+		if g.Name == group {
+			if first == group {
+				return leadID
+			}
+			return leadID + "." + g.ID
+		}
+	}
+	return leadID
+}
+
+// LeadIDFromKey 从存储键还原组长 personId。
+func LeadIDFromKey(key string) string {
+	if i := strings.Index(key, "."); i > 0 {
+		return key[:i]
+	}
+	return key
+}
+
+// leadForKey 按存储键找组长：返回的副本 ID 是存储键，姓名等取自名单。
+func leadForKey(ws *store.Workspace, key string) (*store.Person, error) {
+	p, err := ws.ResolvePerson(LeadIDFromKey(key))
+	if err != nil {
+		return nil, err
+	}
+	cp := *p
+	cp.ID = key
+	return &cp, nil
+}
+
+// groupOwner 返回 ID 换成该组存储键的组长副本，并把旧版混在 personId 下的筛选记录挪到所属组。
+func groupOwner(ws *store.Workspace, week string, lead *store.Person, group string) *store.Person {
+	migrateTriage(ws, week, lead.ID)
+	key := GroupOwnerKey(ws, lead.ID, group)
+	if key == lead.ID {
+		return lead
+	}
+	cp := *lead
+	cp.ID = key
+	return &cp
+}
+
+// migrateTriage：旧版同一组长带多个组时，筛选记录都写在 personId 下，后打开的组会覆盖。
+// 记录里存着组名，属于非首组时挪到该组自己的存储键（目标已存在则不动）。
+func migrateTriage(ws *store.Workspace, week, leadID string) {
+	t, err := ws.ReadTriage(week, leadID)
+	if err != nil || t.Group == "" {
+		return
+	}
+	key := GroupOwnerKey(ws, leadID, t.Group)
+	if key == leadID {
+		return
+	}
+	if _, err := ws.ReadTriage(week, key); err == nil {
+		return
+	}
+	t.Lead = key
+	if err := ws.WriteTriage(t); err != nil {
+		return
+	}
+	_ = os.Remove(ws.TriagePath(week, leadID))
+}
+
 // ResolveLead 找到组长：group 为空时取唯一有组长的组。
+//
+// 返回的组长 ID 是该组的存储键（见 GroupOwnerKey），用于读写组报、筛选记录等文件。
 func ResolveLead(ws *store.Workspace, week, group string) (*store.Person, string, error) {
 	people, err := ws.ListPersons()
 	if err != nil {
@@ -135,7 +220,7 @@ func ResolveLead(ws *store.Workspace, week, group string) (*store.Person, string
 		if group != "" && g == "" {
 			g = group
 		}
-		return leads[0], g, nil
+		return groupOwner(ws, week, leads[0], g), g, nil
 	case len(leads) == 0 && group != "":
 		return nil, "", fmt.Errorf("%w: 组「%s」没有组长，请在名单里把自己加为组长", store.ErrNotFound, group)
 	case len(leads) == 0:
