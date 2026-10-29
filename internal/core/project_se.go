@@ -156,7 +156,7 @@ func linkedGroupReport(ws *store.Workspace, period, projectID string, g GroupInf
 	if g.LeadID == "" {
 		return nil
 	}
-	d, err := ws.ReadGroupReportProject(period, projectID, g.LeadID)
+	d, err := ws.ReadGroupReportProject(period, projectID, GroupOwnerKey(ws, g.LeadID, g.Name))
 	if err != nil {
 		return nil
 	}
@@ -271,7 +271,7 @@ func ReadProjectInboxSource(ws *store.Workspace, period, projectIDOrName, groupI
 		}
 		out.Source, out.Body = "paste", r.Body
 	case InboxLinked:
-		d, err := ws.ReadGroupReportProject(period, view.Project.ID, entry.LeadID)
+		d, err := ws.ReadGroupReportProject(period, view.Project.ID, GroupOwnerKey(ws, entry.LeadID, entry.Group))
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +364,7 @@ func projectSources(ws *store.Workspace, view *ProjectInbox) ([]projectSource, [
 func readEntryBody(ws *store.Workspace, view *ProjectInbox, e ProjectInboxEntry) (projectSource, error) {
 	src := projectSource{GroupID: e.GroupID, Group: e.Group}
 	if e.Status == InboxLinked {
-		d, err := ws.ReadGroupReportProject(view.Period, view.Project.ID, e.LeadID)
+		d, err := ws.ReadGroupReportProject(view.Period, view.Project.ID, GroupOwnerKey(ws, e.LeadID, e.Group))
 		if err != nil {
 			return src, err
 		}

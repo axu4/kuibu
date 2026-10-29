@@ -309,3 +309,84 @@ func TestReportLibraryIncludesInboxAndSE(t *testing.T) {
 		t.Fatalf("按组过滤 = %+v, %v", list, err)
 	}
 }
+
+// 同一个人带两个组（自己的组 + 收各 DE 周报的组）：组报、筛选记录按组分开存，
+// 旧版混在 personId 下的筛选记录挪到所属组，SE 两个组都能引用。
+func TestOneLeadTwoGroupsKeepSeparateFiles(t *testing.T) {
+	ws := newReportWorkspace(t)
+	now := reportNow()
+	week := "2026-W44"
+	me, err := ws.CreatePerson(store.NewPerson{Name: "勇旭", Role: store.RoleLead, Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "张三", Group: "框架组", Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ws.CreatePerson(store.NewPerson{Name: "老陈", Group: "DE组", Now: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.SetReportGroups([]store.ReportGroup{
+		{ID: "gframe", Name: "框架组", Lead: me.ID},
+		{ID: "gde", Name: "DE组", Lead: me.ID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ws.AddReportProject("A 项目"); err != nil {
+		t.Fatal(err)
+	}
+	projects, _, err := ws.SetReportProjectSE("A 项目", true, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pa := projects[0]
+
+	// 旧版：DE组 的筛选记录写在了 personId 下。
+	if err := ws.WriteTriage(&store.Triage{Week: week, Group: "DE组", Lead: me.ID}); err != nil {
+		t.Fatal(err)
+	}
+	frame, _, err := ResolveLead(ws, week, "框架组")
+	if err != nil || frame.ID != me.ID || frame.Name != "勇旭" {
+		t.Fatalf("框架组组长 = %+v, %v", frame, err)
+	}
+	de, _, err := ResolveLead(ws, week, "DE组")
+	if err != nil || de.ID != me.ID+".gde" {
+		t.Fatalf("DE组 存储键 = %+v, %v", de, err)
+	}
+	if tr, err := ws.ReadTriage(week, de.ID); err != nil || tr.Group != "DE组" {
+		t.Fatalf("DE组 筛选记录应挪到自己的键: %+v, %v", tr, err)
+	}
+	if _, err := ws.ReadTriage(week, me.ID); err == nil {
+		t.Fatal("personId 下不应再留 DE组 的筛选记录")
+	}
+
+	for _, g := range []struct {
+		owner *store.Person
+		group string
+	}{{frame, "框架组"}, {de, "DE组"}} {
+		if _, err := ws.SaveGeneratedDraft(store.GeneratedDraft{
+			Kind: store.GroupReportKind(pa.ID), Group: g.group, Person: g.owner.ID, Name: g.owner.Name,
+			Week: week, Body: "## 本周总结\n- " + g.group + " 进展\n", Now: now,
+		}, false); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ws.FinalizeDraftKind(store.GroupReportKind(pa.ID), week, g.owner.ID, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view, err := LoadProjectInbox(ws, week, pa.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inboxStatus(view, "框架组") != InboxLinked || inboxStatus(view, "DE组") != InboxLinked {
+		t.Fatalf("两个组都应引用定稿: %+v", view.Entries)
+	}
+	d, err := AssembleProjectReport(ws, week, pa.ID, false, false, now)
+	if err != nil || !strings.Contains(d.Body, "- 框架组 进展") || !strings.Contains(d.Body, "- DE组 进展") {
+		t.Fatalf("项目报 = %v\n%s", err, d.Body)
+	}
+	lib, err := ListReportLibrary(ws, week, "DE组", "")
+	if err != nil || len(lib) != 1 || lib[0].Kind != LibraryKindGroup {
+		t.Fatalf("周报库 DE组 = %+v, %v", lib, err)
+	}
+}
