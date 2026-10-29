@@ -7,7 +7,7 @@ package core
 //   - 本工作台里整理的组（比如我自己的组）：直接引用该组这个项目的定稿组报，不用再贴；
 //   - 其他 DE：把交来的原文粘贴归档到 reports/<周期>/project/<项目>/<组>.md。
 //
-// 合并不调 AI：按「总结 / 计划 / 其他事项」分节，节内按组列出，各组自己写的小标题
+// 合并不调 AI：按「总结 / 计划 / 其他事项 / AI 使用」分节，节内按组列出，各组自己写的小标题
 // 原样保留（类别是手填的，每期都可能变，不强行归到固定类别）。
 
 import (
@@ -35,14 +35,15 @@ const (
 	InboxMissing = "missing"
 )
 
-// 项目报的三节。
+// 项目报的分节；「AI 使用」和「其他事项」一样，没有内容时不出现。
 const (
 	projectSecSummary = "summary"
 	projectSecPlan    = "plan"
 	projectSecOther   = "other"
+	projectSecAI      = "ai"
 )
 
-var projectSections = []string{projectSecSummary, projectSecPlan, projectSecOther}
+var projectSections = []string{projectSecSummary, projectSecPlan, projectSecOther, projectSecAI}
 
 // ProjectSectionTitle 返回项目报的节名：周报「本周总结 / 下周计划」，月报「本月总结 / 下月计划」。
 func ProjectSectionTitle(period, section string) string {
@@ -58,6 +59,8 @@ func ProjectSectionTitle(period, section string) string {
 			return "下月计划"
 		}
 		return "下周计划"
+	case projectSecAI:
+		return SectionAI
 	}
 	return "其他事项"
 }
@@ -466,7 +469,7 @@ func RenderProjectReport(period string, sources []projectSource, missing []strin
 			}
 		}
 		if part.Len() == 0 {
-			if sec == projectSecOther {
+			if sec == projectSecOther || sec == projectSecAI {
 				continue
 			}
 			part.WriteString("\n- 无\n")
@@ -499,6 +502,8 @@ func projectSectionOf(title string) string {
 			return projectSecSummary
 		case SectionPlan:
 			return projectSecPlan
+		case SectionAI:
+			return projectSecAI
 		}
 		return projectSecOther
 	}
@@ -513,7 +518,7 @@ func projectSectionOf(title string) string {
 	return ""
 }
 
-// splitProjectSections 把一份组报 / DE 交来的原文切成三节，节内的行原样保留；
+// splitProjectSections 把一份组报 / DE 交来的原文按节切开，节内的行原样保留；
 // 原文里的小标题统一降到四级，放在「### 组名」之下。找不到任何节标题时整份算总结。
 func splitProjectSections(body string) map[string][]string {
 	out := map[string][]string{}

@@ -264,6 +264,26 @@ func TestSplitProjectSectionsWholeBodyIsSummary(t *testing.T) {
 	if got[projectSecSummary][0] != "- a" || got[projectSecPlan][0] != "- b" {
 		t.Fatalf("加粗小节 = %+v", got)
 	}
+	got = splitProjectSections("## 本周总结\n- a\n## 下周计划\n- b\n## AI 使用\n- c\n")
+	if len(got[projectSecAI]) != 1 || got[projectSecAI][0] != "- c" || len(got[projectSecPlan]) != 1 {
+		t.Fatalf("AI 使用节 = %+v", got)
+	}
+}
+
+func TestRenderProjectReportAISection(t *testing.T) {
+	sources := []projectSource{
+		{Group: "框架组", Body: "## 本周总结\n- a\n## AI 使用\n- 用 AI 生成用例\n"},
+		{Group: "存储组", Body: "## 本周总结\n- b\n"},
+	}
+	got := RenderProjectReport("2026-W44", sources, nil)
+	want := "## AI 使用\n\n### 框架组\n\n- 用 AI 生成用例\n"
+	if !strings.HasSuffix(got, want) {
+		t.Fatalf("项目报 =\n%s", got)
+	}
+	got = RenderProjectReport("2026-W44", sources[1:], nil)
+	if strings.Contains(got, "AI 使用") {
+		t.Fatalf("没有 AI 使用时不应出这一节:\n%s", got)
+	}
 }
 
 func TestReportLibraryIncludesInboxAndSE(t *testing.T) {

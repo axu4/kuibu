@@ -17,10 +17,11 @@ import (
 var triageItemDomainPattern = regexp.MustCompile(`^【([^】]+)】\s*(.*)$`)
 
 // triageParserVersion 用于让解析规则变化后重新生成筛选记录；改解析逻辑时递增。
-const triageParserVersion = "2"
+const triageParserVersion = "3"
 
-// TriageSections 是筛选的顺序：先本周总结（现有归一稿的「本周完成」），再下周计划，最后风险。
-var TriageSections = []string{SectionDone, SectionPlan, SectionRisk}
+// TriageSections 是筛选的顺序：先本周总结（现有归一稿的「本周完成」），再下周计划、其他事项，
+// 最后 AI 使用。
+var TriageSections = []string{SectionDone, SectionPlan, SectionRisk, SectionAI}
 
 // TriageSectionTitle 返回筛选/组报正文里展示的节名。
 //
@@ -380,7 +381,7 @@ func CountTriage(t *store.Triage) TriageCounts {
 
 // AssembleProjectGroup 按筛选结果生成某个项目的组报草稿。
 //
-// 只吃该项目 accepted 的条目，按 本周总结 / 下周计划 / 风险与求助 分节；正文不带姓名。
+// 只吃该项目 accepted 的条目，按 本周总结 / 下周计划 / 其他事项 / AI 使用 分节；正文不带姓名。
 // 未判条目默认拒绝生成（ErrNeedsConfirm），allowUnreviewed 才继续。
 func AssembleProjectGroup(ws *store.Workspace, week, group, projectIDOrName string, force, allowUnreviewed bool, now time.Time) (*store.Draft, error) {
 	lead, groupName, err := ResolveLead(ws, week, group)
@@ -527,7 +528,7 @@ func isTriageSection(section string) bool {
 
 // parseTriageBody 从组员原文/归一稿里拆条目。
 //
-// 优先用 ParseDraftItems（识别「## 本周完成/本周总结/下周计划/风险与求助」）；
+// 优先用 ParseDraftItems（识别「## 本周完成/本周总结/下周计划/风险与求助/AI 使用」）；
 // 原文没有 Markdown 标题时退化为按行解析，识别常见节名，未识别到标题的列表项
 // 归入「本周完成」，保证已经一条一条写的原文也能直接筛选。
 func parseTriageBody(body string) map[string][]DraftItem {
@@ -556,11 +557,14 @@ func parseTriageBody(body string) map[string][]DraftItem {
 		if trimmed == "" {
 			continue
 		}
-		if strings.HasPrefix(trimmed, "AI经验") || strings.HasPrefix(trimmed, "AI 经验") {
-			section = ""
-			continue
-		}
-		if label := rawSectionLabel(trimmed); label != "" {
+		if rest, ok := SplitAISectionLine(trimmed); ok {
+			// 「AI经验 ：xxx」标题和内容写在同一行时，冒号后的内容算一条。
+			section = SectionAI
+			if rest == "" {
+				continue
+			}
+			trimmed = rest
+		} else if label := rawSectionLabel(trimmed); label != "" {
 			section = label
 			continue
 		}
@@ -591,8 +595,8 @@ func parseTriageBody(body string) map[string][]DraftItem {
 
 // rawSectionLabel 识别组员原文里常见的小节写法；返回空表示不是小节行。
 //
-// 除了「本周总结/下周计划」，也认「本周：」「下周：」「本周工作」「风险」「求助」
-// 和「AI经验」；AI经验 不属于三步流程，返回的 section 为空以跳过其内容。
+// 除了「本周总结/下周计划」，也认「本周：」「下周：」「本周工作」「风险」「求助」，
+// 以及「AI使用 / AI经验 / AI coding实践 / AI做了什么」这类 AI 使用节。
 func rawSectionLabel(line string) string {
 	t := strings.TrimSpace(line)
 	t = strings.TrimSpace(strings.Trim(t, "：:"))
@@ -603,8 +607,8 @@ func rawSectionLabel(line string) string {
 		return SectionPlan
 	case t == "风险" || t == "风险与求助" || t == "求助" || t == "其他" || t == "其他事项" || t == "其他工作" || t == "领导交办":
 		return SectionRisk
-	case strings.HasPrefix(t, "AI经验") || strings.HasPrefix(t, "AI 经验"):
-		return ""
+	case IsAISectionTitle(t):
+		return SectionAI
 	}
 	return ""
 }
