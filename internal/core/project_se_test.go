@@ -265,3 +265,47 @@ func TestSplitProjectSectionsWholeBodyIsSummary(t *testing.T) {
 		t.Fatalf("加粗小节 = %+v", got)
 	}
 }
+
+func TestReportLibraryIncludesInboxAndSE(t *testing.T) {
+	f := newSEFixture(t)
+	week := "2026-W44"
+	f.groupReport(t, week, f.projectA, "## 本周总结\n- A 进展\n", true)
+	if _, err := SubmitProjectInbox(f.ws, week, "A 项目", "存储组", "本周：\n- 存储进展\n", f.now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AssembleProjectReport(f.ws, week, "A 项目", true, false, f.now); err != nil {
+		t.Fatal(err)
+	}
+	kinds := func() map[string]LibraryReport {
+		list, err := ListReportLibrary(f.ws, week, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[string]LibraryReport{}
+		for _, r := range list {
+			out[r.Kind+"/"+r.Group] = r
+		}
+		return out
+	}
+	got := kinds()
+	if _, ok := got[LibraryKindGroup+"/框架组"]; !ok {
+		t.Fatalf("缺本组定稿组报: %+v", got)
+	}
+	inbox, ok := got[LibraryKindInbox+"/存储组"]
+	if !ok || inbox.Project != "A 项目" || inbox.LeadName != "老陈" || inbox.Count != 1 {
+		t.Fatalf("其他 DE 交来的 = %+v", inbox)
+	}
+	if _, ok := got[LibraryKindSE+"/SE 汇总"]; ok {
+		t.Fatal("项目报未定稿不应进周报库")
+	}
+	if _, err := f.ws.FinalizeDraftKind(store.ProjectReportDirName, week, f.projectA.ID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if se, ok := kinds()[LibraryKindSE+"/SE 汇总"]; !ok || se.Project != "A 项目" {
+		t.Fatalf("SE 定稿项目报 = %+v", se)
+	}
+	list, err := ListReportLibrary(f.ws, week, "存储组", "")
+	if err != nil || len(list) != 1 || list[0].Kind != LibraryKindInbox {
+		t.Fatalf("按组过滤 = %+v, %v", list, err)
+	}
+}

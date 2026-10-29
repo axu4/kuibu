@@ -173,10 +173,15 @@ export interface DraftItem {
 }
 
 /**
- * LibraryReport 是周报库里一份已定稿组报。
+ * LibraryReport 是周报库里一份已定稿组报 / 已交项目报 / SE 定稿项目报。
  */
 export interface LibraryReport {
     "id": string;
+
+    /**
+     * Kind 是来源：group / inbox / se。
+     */
+    "kind": string;
     "week": string;
     "group": string;
     "project": string;

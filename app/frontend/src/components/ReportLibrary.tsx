@@ -10,7 +10,17 @@ interface ReportLibraryProps {
   onOpenGroups: () => void;
 }
 
-/** 周报库：所有组已定稿组报，按组 / 项目 / 周查看。默认入口。 */
+/** 周报库条目来源的文案：本组定稿 / 其他 DE 交来 / SE 定稿。 */
+function kindLabel(kind: string): string {
+  if (kind === "inbox") return "DE 交来";
+  if (kind === "se") return "SE 定稿";
+  return "已定稿";
+}
+
+/**
+ * 周报库：本组定稿组报、其他 DE 交给我（SE）的项目周报、SE 定稿的项目周报，
+ * 按组 / 项目 / 周查看。默认入口。
+ */
 export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps) {
   const [week, setWeek] = useState<ReportWeek | null>(null);
   const [rows, setRows] = useState<LibraryReport[]>([]);
@@ -94,7 +104,7 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
           <div>
             <div className="lib-eyebrow">Weekly archive · {week?.week ?? "…"}</div>
             <h1>周报库</h1>
-            <p>所有组定稿后的周报都在这里。按组、项目、周统一查看；组报定稿后自动归档。</p>
+            <p>本组定稿的组报、其他 DE 交来的项目周报、SE 定稿的项目周报都在这里，按组、项目、周统一查看。</p>
           </div>
           <div className="lib-head-actions">
             <span className="lib-scope"><i />全部组</span>
@@ -106,8 +116,8 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
         </div>
 
         <div className="lib-stats">
-          <div><b>{filtered.length}</b><span>份定稿组报</span></div>
-          <div><b>{new Set(filtered.map((r) => r.group)).size}</b><span>个组 · 已归档</span></div>
+          <div><b>{filtered.length}</b><span>份周报</span></div>
+          <div><b>{new Set(filtered.filter((r) => r.kind !== "se").map((r) => r.group)).size}</b><span>个组 · 已归档</span></div>
           <div><b>{new Set(filtered.map((r) => r.project).filter(Boolean)).size}</b><span>个项目</span></div>
           <div className="is-accent"><b>{totalItems}</b><span>条定稿事项</span></div>
         </div>
@@ -131,7 +141,7 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
             ))}
           </select>
           <input className="lib-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜组、项目或事项…" />
-          <span className="lib-note">只显示已定稿 · 只读</span>
+          <span className="lib-note">只显示已定稿 / 已交 · 只读</span>
         </div>
 
         <div className="lib-table">
@@ -147,8 +157,8 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
             </div>
           ) : filtered.length === 0 ? (
             <div className="lib-empty">
-              <b>这一周还没有已定稿组报</b>
-              <span>去「我的组」整理并定稿后，会自动出现在这里。</span>
+              <b>这一周还没有已定稿或已交的周报</b>
+              <span>「我的组」定稿、「项目汇总」里归档其他 DE 交来的内容后，会出现在这里。</span>
               <button type="button" className="btn" onClick={() => void shift(0)}>刷新</button>
             </div>
           ) : (
@@ -157,14 +167,14 @@ export function ReportLibrary({ initialWeek, onOpenGroups }: ReportLibraryProps)
                 <span className="lib-group">
                   <i>{r.group.slice(0, 1)}</i>
                   <b>{r.group}</b>
-                  <small>组长 {r.leadName || "—"}</small>
+                  <small>{r.kind === "se" ? "项目汇总" : `DE ${r.leadName || "—"}`}</small>
                 </span>
                 <span className="lib-project">
                   {r.project && <em>{r.project}</em>}
                   <span>{firstItem(r.body)}</span>
                 </span>
                 <span className="lib-count">{r.count}<small>条</small></span>
-                <span className="lib-time">{formatFinalized(r.finalizedAt)}<small>{r.week} · 已定稿</small></span>
+                <span className="lib-time">{formatFinalized(r.finalizedAt)}<small>{r.week} · {kindLabel(r.kind)}</small></span>
                 <span className="lib-actions"><span>查看</span></span>
               </button>
             ))
@@ -199,15 +209,20 @@ function LibraryPreview({ report, onClose }: { report: LibraryReport; onClose: (
       <div className="modal lib-preview" onMouseDown={(e) => e.stopPropagation()}>
         <div className="lib-preview-head">
           <div>
-            <div className="lib-eyebrow">已定稿 · 只读</div>
+            <div className="lib-eyebrow">{kindLabel(report.kind)} · 只读</div>
             <h2>{report.group}{report.project ? ` · ${report.project}` : ""}</h2>
-            <p>{report.count} 条事项 · 组长 {report.leadName || "—"} · {report.week} {formatFinalized(report.finalizedAt)} 定稿</p>
+            <p>
+              {report.count} 条事项
+              {report.kind !== "se" && ` · DE ${report.leadName || "—"}`} · {report.week} {formatFinalized(report.finalizedAt)}
+              {report.kind === "inbox" ? " 交来" : " 定稿"}
+            </p>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} title="关闭">✕</button>
         </div>
         <div className="lib-preview-body">
           {report.body.split("\n").map((line, i) => {
             if (line.startsWith("## ")) return <h3 key={i}>{line.slice(3)}</h3>;
+            if (/^#{3,6} /.test(line)) return <h4 key={i}>{line.replace(/^#{3,6} /, "")}</h4>;
             const bullet = line.match(/^[-*+]\s+(.*)$/);
             if (bullet) return <p key={i} className="lib-li">{bullet[1]}</p>;
             const num = line.match(/^\d+[.)]\s+(.*)$/);

@@ -6683,3 +6683,10 @@ button.month-src-cell:hover {
 .month-project-row.is-delivery {
   grid-template-columns: minmax(150px, 1.5fr) minmax(90px, 1fr) minmax(110px, 1fr) 120px 68px;
 }
+
+.lib-preview-body h4 {
+  margin: 12px 0 5px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 600;
+}
