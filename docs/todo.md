@@ -4,20 +4,35 @@
 
 ## CLI 用法
 
-所有 `todo` 子命令都支持 `--json` 与 `--workspace <dir>`，参数与位置参数可混排；成功退出码 0，找不到待办退出 1（JSON 错误码 `NOT_FOUND`），找不到工作台退出 10（`NOT_OPEN`）。
+所有 `todo` 子命令都支持 `--json`、`--workspace <dir>` 与 `-h/--help`（输出用法与参数说明，退出码 0），参数与位置参数可混排；成功退出码 0，找不到待办退出 1（JSON 错误码 `NOT_FOUND`），找不到工作台退出 10（`NOT_OPEN`）。
 
 | 命令 | 说明 |
 | --- | --- |
-| `todo add "<文本>" [--due <值>] [--tag t]... [--parent <id>] [--raw] [--dry-run] [--body/--file/--stdin]` | 快速录入待办；文本可由多个位置参数拼接 |
-| `todo list [--view today\|week\|all\|done] [--status todo,doing\|all\|...] [--due today\|tomorrow\|week\|overdue] [--tag t]... [--parent <id>\|--root] [--search <词>] [--tree]` | 列出待办（走索引，先增量同步）；`--view` 与 App 侧栏分组一致：today = 有截止且不晚于今天（含逾期），week = 截止在本周，all = 全部未完成，done = 已完成 / 已取消；不能与 `--status` / `--due` 同用 |
+| `todo add "<文本>" [--due <值>] [--tag t]... [--parent <id>] [--status s] [--link "<url> [标题]"]... [--priority p] [--source s] [--external-id x [--upsert]] [--raw] [--dry-run] [--body/--file/--stdin]` | 快速录入待办；文本可由多个位置参数拼接；一条命令即可设好状态、链接、优先级与来源，`--json` 输出完整待办对象（含 `action: created\|updated`） |
+| `todo list [--view today\|week\|all\|done] [--status todo,doing\|all\|...] [--due today\|tomorrow\|week\|overdue] [--tag t]... [--parent <id>\|--root] [--search <词>] [--priority high,medium,low,none] [--source s] [--external-id x] [--sort priority] [--tree]` | 列出待办（走索引，先增量同步）；`--view` 与 App 侧栏分组一致：today = 有截止且不晚于今天（含逾期），week = 截止在本周，all = 全部未完成，done = 已完成 / 已取消；不能与 `--status` / `--due` 同用。给了 `--source` / `--external-id` 而没给 `--status` / `--view` 时不限状态（方便外部工具去重回写）；`--sort priority` 按 高→中→低→未设 排，默认排序不受优先级影响 |
 | `todo show <id>` | 查看待办详情（含正文、子任务、链接、附件） |
 | `todo done <id>` / `todo reopen <id>` / `todo start <id>` / `todo cancel <id>` | 变更状态；`done` / `cancel` 时若还有未完成子任务，必须加 `--with-children`（连同全部后代）或 `--only-parent`（只改本条），否则退出 8（`NEEDS_CONFIRM`）并说明子任务数 |
-| `todo edit <id> [--title t] [--due <值>\|--no-due] [--tag t ...] [--status s] [--body/--file/--stdin]` | 修改待办，至少给一个修改项 |
+| `todo edit <id> [--title t] [--due <值>\|--no-due] [--tag t ...] [--status s] [--priority high\|medium\|low\|none] [--source s] [--external-id x] [--body/--file/--stdin]` | 修改待办，至少给一个修改项；`--priority none` 清除优先级，`--source ""` / `--external-id ""` 清除 |
 | `todo sub <id> "<文本>"` | 新增子待办，等价于 `todo add "<文本>" --parent <id>` |
-| `todo link <id> <url> [--title t]` / `todo unlink <id> <url>` | 管理链接 |
+| `todo link <id> <url> [--title t]` / `todo unlink <id> <url>` | 管理链接；URL 只要以合法协议名开头（`https:`、`mailto:`、`message:`、`obsidian:` 等）即可，`javascript:` / `data:` 一律拒绝 |
 | `todo attach <id> <file>` / `todo detach <id> <相对路径>` | 管理附件，attach 输出附件相对路径 |
 | `todo mv <id> [--parent <id>\|--root] [--position n]` | 移动待办 |
 | `todo rm <id> [-r\|--recursive]` | 删除待办；有子任务且无 `-r` 时返回 `HAS_CHILDREN` |
+
+### 链接、优先级与来源
+
+- **链接**：校验与打开规则都在核心库 `internal/store/todo_link.go`，CLI 与 App 共用。保存时只要求「协议名 + 冒号 + 非空内容、无空白」，不要求 host，所以 Mail 的 `message://%3C<Message-ID>%3E` 能原样保存；`javascript:`、`data:`、`vbscript:` 拒绝保存。App 里点击链接交给系统打开（macOS 即 `open`）：白名单内的协议直接打开（默认 `http`、`https`、`mailto`、`message`，在「设置 → 通用 → 待办链接」里改，存在用户配置 `linkSchemes`）；白名单外的协议和 `file:` 先弹窗确认；`javascript:` / `data:` 一律拒绝。
+- **优先级**：front matter `priority: high|medium|low`，未设置时不写该字段。App 列表里显示轻量标记，可按优先级筛选与排序（默认仍按截止时间）。
+- **来源**：front matter `source` 是来源——从笔记抽取的待办是来源笔记 ID（App 里可点开笔记），外部工具录入时写来源类型，如 `mail`；`external_id` 是外部系统标识（如邮件 Message-ID），有值才写。同一个 `external_id` 只能属于一条待办：`todo add --external-id x` 撞上已有待办时退出 1，JSON 错误码 `DUPLICATE`；加 `--upsert` 则更新那条（标题、给出的状态 / 优先级 / 来源 / 截止 / 正文，标签与链接合并），`action` 为 `updated`。
+
+```bash
+# 把一封邮件推成待办：状态、优先级、原邮件链接、来源一步到位；重复推送时更新而不是新建
+kuibu todo add "回复客户报价" --raw --status doing --priority high \
+  --link "message://%3C20261029.abc123@mail.example.com%3E 原邮件" \
+  --source mail --external-id "<20261029.abc123@mail.example.com>" --upsert --json
+# 按 external_id 回查（不限状态）
+kuibu todo list --external-id "<20261029.abc123@mail.example.com>" --json
+```
 
 `todo add` 默认对文本做快速录入解析；`--raw` 跳过解析把整段当标题；`--due` 优先于文本解析出的日期，其值既接受 `store.ParseDue` 的格式，也接受快速录入日期表达（如 `明天`、`周四 15:00`）；`--due ""` 等价于不设截止。
 

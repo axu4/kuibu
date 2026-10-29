@@ -408,3 +408,30 @@ func TestEnsureWorkspaceRefusesNonEmptyFallback(t *testing.T) {
 		t.Fatalf("失败时不应写入配置，Locate = %q", got)
 	}
 }
+
+func TestLinkSchemes(t *testing.T) {
+	dir := t.TempDir()
+	env := func(k string) string {
+		if k == "KUIBU_CONFIG_DIR" {
+			return dir
+		}
+		return ""
+	}
+	got, err := LinkSchemes(env)
+	if err != nil || strings.Join(got, ",") != "http,https,mailto,message" {
+		t.Fatalf("默认白名单 = %v, %v", got, err)
+	}
+	got, err = SaveLinkSchemes(env, []string{"HTTPS", "obsidian://"})
+	if err != nil || strings.Join(got, ",") != "https,obsidian" {
+		t.Fatalf("保存白名单 = %v, %v", got, err)
+	}
+	if got, _ := SaveLinkSchemes(env, []string{}); len(got) != 0 {
+		t.Fatalf("清空白名单后应为空，得到 %v", got)
+	}
+	if got, _ := SaveLinkSchemes(env, nil); len(got) != 4 {
+		t.Fatalf("nil 应恢复默认，得到 %v", got)
+	}
+	if _, err := SaveLinkSchemes(env, []string{"javascript"}); err == nil {
+		t.Fatal("javascript 不应能加入白名单")
+	}
+}

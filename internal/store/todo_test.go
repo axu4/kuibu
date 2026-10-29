@@ -89,8 +89,10 @@ func TestTodoFrontMatterGolden(t *testing.T) {
 			{URL: "mailto:a@b.c"},
 		},
 		Attachments: []string{"../assets/20260101-abcdef12-pic.png"},
-		Source:      "note-id",
-		Extra:       map[string]any{"priority": "high"},
+		Source:      "mail",
+		Priority:    PriorityHigh,
+		ExternalID:  "<abc@example.com>",
+		Extra:       map[string]any{"estimate": "2h"},
 	}
 	if err := w.writeTodo(todo); err != nil {
 		t.Fatalf("writeTodo 失败: %v", err)
@@ -120,8 +122,10 @@ links:
     - url: "mailto:a@b.c"
 attachments:
     - ../assets/20260101-abcdef12-pic.png
-source: "note-id"
-priority: high
+source: "mail"
+priority: "high"
+external_id: "<abc@example.com>"
+estimate: 2h
 ---
 详情
 `

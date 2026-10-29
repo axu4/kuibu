@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -31,7 +32,9 @@ type todoJSON struct {
 	Order       int              `json:"order"`
 	Links       []store.TodoLink `json:"links"`
 	Attachments []string         `json:"attachments"`
+	Priority    string           `json:"priority"`
 	Source      string           `json:"source"`
+	ExternalID  string           `json:"externalId"`
 	Path        string           `json:"path"`
 	Body        *string          `json:"body,omitempty"`
 	Children    *[]todoJSON      `json:"children,omitempty"`
@@ -120,30 +123,90 @@ func dedupTags(tags []string) []string {
 	return out
 }
 
+// createOpts 是 add 与 sub 共用的创建参数。
+type createOpts struct {
+	text       string
+	dueFlag    string
+	dueVisited bool
+	tags       []string
+	parentID   string
+	raw        bool
+	dryRun     bool
+	src        bodySource
+	srcVisited bool
+	// status 为空表示默认 todo。
+	status string
+	// links 是 --link 的原始值，形如 "<url>" 或 "<url> <标题>"。
+	links      []string
+	priority   string
+	source     string
+	externalID string
+	// upsert 为 true 时按 externalID 有则更新、无则新建。
+	upsert bool
+}
+
+// parseLinkArg 解析 --link 的值："<url>" 或 "<url> <标题>"（URL 不含空白，第一个空白后是标题）。
+func parseLinkArg(v string) (store.TodoLink, error) {
+	v = strings.TrimSpace(v)
+	url, title := v, ""
+	if i := strings.IndexAny(v, " \t"); i >= 0 {
+		url, title = v[:i], strings.TrimSpace(v[i+1:])
+	}
+	if err := store.ValidateTodoURL(url); err != nil {
+		return store.TodoLink{}, err
+	}
+	return store.TodoLink{URL: url, Title: title}, nil
+}
+
+// parsePriorityArg 解析 --priority：high|medium|low，none 或空表示清除。
+func parsePriorityArg(v string) (string, error) {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "none" {
+		v = ""
+	}
+	if !store.ValidTodoPriority(v) {
+		return "", usagef("非法 --priority 值 %q（high|medium|low|none）", v)
+	}
+	return v, nil
+}
+
 // createTodo 是 add 与 sub 的公共实现。
-func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string,
-	text, dueFlag string, dueVisited bool, flagTags []string, parentID string, raw, dryRun bool, src bodySource, srcVisited bool) error {
-	if strings.TrimSpace(text) == "" {
+func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string, o createOpts) error {
+	if strings.TrimSpace(o.text) == "" {
 		return usagef("需要待办标题文本")
+	}
+	if o.status != "" && !store.ValidTodoStatus(o.status) {
+		return usagef("非法待办状态 %q", o.status)
+	}
+	if o.upsert && o.externalID == "" {
+		return usagef("--upsert 需要同时给出 --external-id")
+	}
+	links := make([]store.TodoLink, 0, len(o.links))
+	for _, v := range o.links {
+		l, err := parseLinkArg(v)
+		if err != nil {
+			return err
+		}
+		links = append(links, l)
 	}
 	now, err := nowFrom(env)
 	if err != nil {
 		return err
 	}
 
-	quick := core.QuickAdd{Input: text, Tags: []string{}, Matches: []core.QuickMatch{}}
-	if raw {
-		quick.Title = strings.TrimSpace(text)
+	quick := core.QuickAdd{Input: o.text, Tags: []string{}, Matches: []core.QuickMatch{}}
+	if o.raw {
+		quick.Title = strings.TrimSpace(o.text)
 	} else {
-		quick = core.ParseQuickAdd(text, now)
+		quick = core.ParseQuickAdd(o.text, now)
 	}
 
 	due := quick.Due
-	if dueVisited {
-		if dueFlag == "" {
+	if o.dueVisited {
+		if o.dueFlag == "" {
 			due = nil
 		} else {
-			d, err := parseDueArg(dueFlag, now)
+			d, err := parseDueArg(o.dueFlag, now)
 			if err != nil {
 				return err
 			}
@@ -151,20 +214,20 @@ func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, 
 		}
 	}
 
-	tags := dedupTags(append(append([]string{}, quick.Tags...), flagTags...))
+	tags := dedupTags(append(append([]string{}, quick.Tags...), o.tags...))
 	final := quick
 	final.Due = due
 	final.Tags = tags
 
 	body := ""
-	if srcVisited {
-		body, err = src.read(stdin)
+	if o.srcVisited {
+		body, err = o.src.read(stdin)
 		if err != nil {
 			return err
 		}
 	}
 
-	if dryRun {
+	if o.dryRun {
 		if common.json {
 			return writeJSON(stdout, map[string]any{"todo": nil, "parsed": final})
 		}
@@ -183,13 +246,73 @@ func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, 
 	if err != nil {
 		return err
 	}
+
+	if o.upsert {
+		existing, err := ws.FindTodoByExternalID(o.externalID)
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			todo, err := ws.UpdateTodo(existing.ID, now, func(t *store.Todo) error {
+				t.Title = final.Title
+				if final.Due != nil || o.dueVisited {
+					t.Due = final.Due
+				}
+				if len(final.Tags) > 0 {
+					t.Tags = dedupTags(append(append([]string{}, t.Tags...), final.Tags...))
+				}
+				if o.srcVisited {
+					t.Body = body
+				}
+				if o.status != "" {
+					t.Status = o.status
+				}
+				if o.priority != "" {
+					t.Priority = o.priority
+				}
+				if o.source != "" {
+					t.Source = o.source
+				}
+				for _, l := range links {
+					found := false
+					for i := range t.Links {
+						if t.Links[i].URL == l.URL {
+							found = true
+							if l.Title != "" {
+								t.Links[i].Title = l.Title
+							}
+						}
+					}
+					if !found {
+						t.Links = append(t.Links, l)
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			upsertTodoIndex(ws, todo.ID, stderr)
+			if common.json {
+				return writeJSON(stdout, map[string]any{"todo": todoJSONFromStore(ws, todo, now, false, nil), "parsed": final, "action": "updated"})
+			}
+			fmt.Fprintf(stdout, "已更新待办 %s「%s」\n", todo.ID, todo.Title)
+			return nil
+		}
+	}
+
 	todo, err := ws.CreateTodo(store.NewTodo{
-		Title:  final.Title,
-		Body:   body,
-		Parent: parentID,
-		Tags:   final.Tags,
-		Due:    final.Due,
-		Now:    now,
+		Title:      final.Title,
+		Body:       body,
+		Parent:     o.parentID,
+		Tags:       final.Tags,
+		Due:        final.Due,
+		Status:     o.status,
+		Links:      links,
+		Priority:   o.priority,
+		Source:     o.source,
+		ExternalID: o.externalID,
+		Now:        now,
 	})
 	if err != nil {
 		return err
@@ -197,7 +320,7 @@ func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, 
 	upsertTodoIndex(ws, todo.ID, stderr)
 
 	if common.json {
-		return writeJSON(stdout, map[string]any{"todo": todoJSONFromStore(ws, todo, now, false, nil), "parsed": final})
+		return writeJSON(stdout, map[string]any{"todo": todoJSONFromStore(ws, todo, now, false, nil), "parsed": final, "action": "created"})
 	}
 	fmt.Fprintf(stdout, "已创建待办 %s「%s」", todo.ID, todo.Title)
 	if todo.Due != nil {
@@ -210,38 +333,60 @@ func createTodo(common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, 
 	return nil
 }
 
+// registerCreateFlags 注册 add 与 sub 共用的参数，返回解析后填充 createOpts 的函数。
+func registerCreateFlags(fs *flag.FlagSet) func(pos []string) (createOpts, error) {
+	var o createOpts
+	var tags, links stringList
+	fs.Var(&tags, "tag", "标签，可重复")
+	dueFlag := fs.String("due", "", "截止日期，优先于文本解析")
+	raw := fs.Bool("raw", false, "不解析文本")
+	dryRun := fs.Bool("dry-run", false, "只输出解析结果，不创建")
+	status := fs.String("status", "", "初始状态: todo|doing|done|canceled（默认 todo）")
+	fs.Var(&links, "link", "链接，可重复；\"<url>\" 或 \"<url> <标题>\"，支持 message:// 等任意协议")
+	priority := fs.String("priority", "", "优先级: high|medium|low（默认不设）")
+	source := fs.String("source", "", "来源，如 mail")
+	externalID := fs.String("external-id", "", "外部系统标识（如邮件 Message-ID），不能与已有待办重复")
+	upsert := fs.Bool("upsert", false, "按 --external-id 有则更新、无则新建")
+	o.src.register(fs)
+	return func(pos []string) (createOpts, error) {
+		visited := visitedSet(visitedFlags(fs))
+		p, err := parsePriorityArg(*priority)
+		if err != nil {
+			return o, err
+		}
+		o.text = strings.Join(pos, " ")
+		o.dueFlag, o.dueVisited = *dueFlag, visited["due"]
+		o.tags, o.raw, o.dryRun = tags, *raw, *dryRun
+		o.srcVisited = visited["body"] || visited["file"] || visited["stdin"]
+		o.status, o.links, o.priority = strings.TrimSpace(*status), links, p
+		o.source, o.externalID, o.upsert = strings.TrimSpace(*source), strings.TrimSpace(*externalID), *upsert
+		return o, nil
+	}
+}
+
 // todoAdd 实现 todo add。
 func todoAdd(args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	fs := newFlagSet("todo add")
 	addCommonFlags(fs, common)
-	var tags stringList
-	fs.Var(&tags, "tag", "标签，可重复")
-	dueFlag := fs.String("due", "", "截止日期，优先于文本解析")
 	parent := fs.String("parent", "", "父待办 ID")
-	raw := fs.Bool("raw", false, "不解析文本")
-	dryRun := fs.Bool("dry-run", false, "只输出解析结果，不创建")
-	var src bodySource
-	src.register(fs)
+	finish := registerCreateFlags(fs)
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
 	}
-	visited := visitedSet(visitedFlags(fs))
-	return createTodo(common, stdin, stdout, stderr, env, strings.Join(pos, " "), *dueFlag,
-		visited["due"], tags, *parent, *raw, *dryRun, src, visited["body"] || visited["file"] || visited["stdin"])
+	o, err := finish(pos)
+	if err != nil {
+		return err
+	}
+	o.parentID = *parent
+	return createTodo(common, stdin, stdout, stderr, env, o)
 }
 
 // todoSub 实现 todo sub <id> "<文本>"，等价于 todo add --parent <id>。
 func todoSub(args []string, common *commonFlags, stdin io.Reader, stdout, stderr io.Writer, env func(string) string) error {
 	fs := newFlagSet("todo sub")
 	addCommonFlags(fs, common)
-	var tags stringList
-	fs.Var(&tags, "tag", "标签，可重复")
-	dueFlag := fs.String("due", "", "截止日期，优先于文本解析")
-	raw := fs.Bool("raw", false, "不解析文本")
-	dryRun := fs.Bool("dry-run", false, "只输出解析结果，不创建")
-	var src bodySource
-	src.register(fs)
+	finish := registerCreateFlags(fs)
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -249,9 +394,12 @@ func todoSub(args []string, common *commonFlags, stdin io.Reader, stdout, stderr
 	if len(pos) < 2 {
 		return usagef("用法: kuibu todo sub <id> \"<文本>\" [--due <值>] [--tag t] [--raw]")
 	}
-	visited := visitedSet(visitedFlags(fs))
-	return createTodo(common, stdin, stdout, stderr, env, strings.Join(pos[1:], " "), *dueFlag,
-		visited["due"], tags, pos[0], *raw, *dryRun, src, visited["body"] || visited["file"] || visited["stdin"])
+	o, err := finish(pos[1:])
+	if err != nil {
+		return err
+	}
+	o.parentID = pos[0]
+	return createTodo(common, stdin, stdout, stderr, env, o)
 }
 
 // todoList 实现 todo list。
@@ -268,6 +416,11 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 	search := fs.String("search", "", "标题与正文检索")
 	tree := fs.Bool("tree", false, "按父子缩进显示")
 	view := fs.String("view", "", "视图: today（含逾期）|week|all|done，与 App 侧栏一致")
+	var priorityFlags stringList
+	fs.Var(&priorityFlags, "priority", "优先级过滤: high|medium|low|none，逗号分隔或重复")
+	source := fs.String("source", "", "按来源精确过滤，如 mail")
+	externalID := fs.String("external-id", "", "按外部标识精确过滤")
+	sortBy := fs.String("sort", "", "排序: 默认按截止时间；priority 按优先级（高→低→未设）")
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
@@ -281,6 +434,22 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 	}
 	if *view != "" && (visited["due"] || visited["status"]) {
 		return usagef("--view 不能与 --due / --status 同时使用")
+	}
+	if *sortBy != "" && *sortBy != "priority" {
+		return usagef("非法 --sort 值 %q（priority）", *sortBy)
+	}
+	var priorities []string
+	for _, v := range priorityFlags {
+		for _, part := range strings.Split(v, ",") {
+			if strings.TrimSpace(part) == "" {
+				continue
+			}
+			p, err := parsePriorityArg(part)
+			if err != nil {
+				return err
+			}
+			priorities = append(priorities, p)
+		}
 	}
 
 	now, err := nowFrom(env)
@@ -313,11 +482,15 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 		}
 	} else if *view != "" {
 		statuses = core.TodoViewStatuses(*view)
+	} else if *source != "" || *externalID != "" {
+		// 按来源 / 外部标识查是为了去重与回写，默认不限状态。
+		statuses = nil
 	} else {
 		statuses = []string{store.StatusTodo, store.StatusDoing}
 	}
 
-	filter := index.TodoFilter{Statuses: statuses, Tags: tags, Query: *search}
+	filter := index.TodoFilter{Statuses: statuses, Tags: tags, Query: *search,
+		Priorities: priorities, Source: strings.TrimSpace(*source), ExternalID: strings.TrimSpace(*externalID)}
 	if visited["due"] && *dueFlag != "" {
 		switch *dueFlag {
 		case "today", "tomorrow", "week":
@@ -368,6 +541,11 @@ func todoList(ctx context.Context, args []string, common *commonFlags, stdout, s
 			}
 		}
 		matched = kept
+	}
+	if *sortBy == "priority" {
+		sort.SliceStable(matched, func(i, j int) bool {
+			return store.TodoPriorityRank(matched[i].Priority) < store.TodoPriorityRank(matched[j].Priority)
+		})
 	}
 
 	if *tree {
@@ -477,10 +655,18 @@ func todoShow(args []string, common *commonFlags, stdout, stderr io.Writer, env 
 	} else {
 		fmt.Fprintln(stdout, "父任务: 顶层")
 	}
+	if t.Priority != "" {
+		fmt.Fprintf(stdout, "优先级: %s\n", priorityLabel(t.Priority))
+	} else {
+		fmt.Fprintln(stdout, "优先级: -")
+	}
 	if t.Source != "" {
 		fmt.Fprintf(stdout, "来源: %s\n", t.Source)
 	} else {
 		fmt.Fprintln(stdout, "来源: -")
+	}
+	if t.ExternalID != "" {
+		fmt.Fprintf(stdout, "外部标识: %s\n", t.ExternalID)
 	}
 	if len(t.Links) > 0 {
 		fmt.Fprintln(stdout, "链接:")
@@ -588,19 +774,27 @@ func todoEdit(args []string, common *commonFlags, stdin io.Reader, stdout, stder
 	var tags stringList
 	fs.Var(&tags, "tag", "替换标签，可重复")
 	statusFlag := fs.String("status", "", "新状态: todo|doing|done|canceled")
+	priorityFlag := fs.String("priority", "", "新优先级: high|medium|low，none 清除")
+	source := fs.String("source", "", "新来源，空串清除")
+	externalID := fs.String("external-id", "", "新外部标识，空串清除")
 	var src bodySource
 	src.register(fs)
 	pos, err := parseCommand(fs, args)
 	if err != nil {
 		return err
 	}
-	if err := requireArgs(pos, 1, "用法: kuibu todo edit <id> [--title t] [--due <值>|--no-due] [--tag t ...] [--status s] [--body/--file/--stdin]"); err != nil {
+	if err := requireArgs(pos, 1, "用法: kuibu todo edit <id> [--title t] [--due <值>|--no-due] [--tag t ...] [--status s] [--priority p] [--source s] [--external-id x] [--body/--file/--stdin]"); err != nil {
 		return err
 	}
 	visited := visitedSet(visitedFlags(fs))
 	srcVisited := visited["body"] || visited["file"] || visited["stdin"]
-	if !visited["title"] && !visited["due"] && !visited["no-due"] && !visited["tag"] && !visited["status"] && !srcVisited {
-		return usagef("todo edit 至少需要一个修改项（--title/--due/--no-due/--tag/--status/--body/--file/--stdin）")
+	if !visited["title"] && !visited["due"] && !visited["no-due"] && !visited["tag"] && !visited["status"] &&
+		!visited["priority"] && !visited["source"] && !visited["external-id"] && !srcVisited {
+		return usagef("todo edit 至少需要一个修改项（--title/--due/--no-due/--tag/--status/--priority/--source/--external-id/--body/--file/--stdin）")
+	}
+	priority, err := parsePriorityArg(*priorityFlag)
+	if err != nil {
+		return err
 	}
 	if visited["due"] && *noDue {
 		return usagef("--due 与 --no-due 不能同时使用")
@@ -645,6 +839,15 @@ func todoEdit(args []string, common *commonFlags, stdin io.Reader, stdout, stder
 		}
 		if visited["status"] {
 			t.Status = *statusFlag
+		}
+		if visited["priority"] {
+			t.Priority = priority
+		}
+		if visited["source"] {
+			t.Source = strings.TrimSpace(*source)
+		}
+		if visited["external-id"] {
+			t.ExternalID = strings.TrimSpace(*externalID)
 		}
 		if srcVisited {
 			t.Body = body
@@ -1030,9 +1233,26 @@ func statusLabel(s string) string {
 	}
 }
 
+// priorityLabel 返回优先级的中文名。
+func priorityLabel(p string) string {
+	switch p {
+	case store.PriorityHigh:
+		return "高"
+	case store.PriorityMedium:
+		return "中"
+	case store.PriorityLow:
+		return "低"
+	}
+	return p
+}
+
 // formatTodoLine 格式化一行待办（人类输出）。
 func formatTodoLine(m index.TodoMeta, now time.Time, children struct{ total, done int }) string {
-	line := statusMark(m.Status) + " " + m.ID + "  " + m.Title
+	line := statusMark(m.Status) + " " + m.ID + "  "
+	if m.Priority != "" {
+		line += "[" + priorityLabel(m.Priority) + "] "
+	}
+	line += m.Title
 	if m.Due != "" {
 		line += "  " + formatDueHuman(m.Due)
 		if (m.Status == store.StatusTodo || m.Status == store.StatusDoing) && m.DueAt != nil && !m.DueAt.IsZero() && m.DueAt.Before(now) {
@@ -1093,7 +1313,9 @@ func todoJSONFromStore(ws *store.Workspace, t *store.Todo, now time.Time, withBo
 		Order:       t.Order,
 		Links:       links,
 		Attachments: atts,
+		Priority:    t.Priority,
 		Source:      t.Source,
+		ExternalID:  t.ExternalID,
 		Path:        filepath.Join(ws.TodosDir(), t.ID+".md"),
 		Children:    children,
 	}
@@ -1149,7 +1371,9 @@ func todoJSONFromMeta(m index.TodoMeta, now time.Time, children *[]todoJSON) tod
 		Order:       m.Order,
 		Links:       links,
 		Attachments: atts,
+		Priority:    m.Priority,
 		Source:      m.Source,
+		ExternalID:  m.ExternalID,
 		Path:        m.Path,
 		Children:    children,
 	}

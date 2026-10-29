@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -150,7 +149,7 @@ func (d *Due) At(loc *time.Location) time.Time {
 
 // TodoLink 是待办附带的一个链接。
 type TodoLink struct {
-	// URL 是链接地址，含 scheme（http/https/mailto 等）。
+	// URL 是链接地址，含 scheme（http/https/mailto/message 等），校验见 ValidateTodoURL。
 	URL string `json:"url"`
 	// Title 是链接标题，可为空。
 	Title string `json:"title"`
@@ -184,8 +183,12 @@ type Todo struct {
 	Links []TodoLink
 	// Attachments 是相对待办文件的资源路径列表，形如 ../assets/<文件名>。
 	Attachments []string
-	// Source 是来源笔记 ID，可为空。
+	// Priority 是优先级：high/medium/low，空表示未设置。
+	Priority string
+	// Source 是来源：从笔记抽取时是来源笔记 ID，外部工具录入时是来源类型（如 mail），可为空。
 	Source string
+	// ExternalID 是外部系统里的标识（如邮件 Message-ID），供外部工具去重回写，可为空。
+	ExternalID string
 	// Extra 保存 front matter 中未识别的字段。
 	Extra map[string]any
 
@@ -209,8 +212,12 @@ type NewTodo struct {
 	Status string
 	// Links 是链接列表。
 	Links []TodoLink
-	// Source 是来源笔记 ID，可空。
+	// Priority 是优先级，空表示未设置。
+	Priority string
+	// Source 是来源（来源笔记 ID 或 mail 等来源类型），可空。
 	Source string
+	// ExternalID 是外部系统标识，非空时不能与已有待办重复。
+	ExternalID string
 	// Now 是创建时间，零值则使用 time.Now()。
 	Now time.Time
 }
@@ -231,6 +238,8 @@ var knownTodoFrontMatterKeys = map[string]bool{
 	"links":       true,
 	"attachments": true,
 	"source":      true,
+	"priority":    true,
+	"external_id": true,
 }
 
 // todoPath 返回待办文件的绝对路径。
@@ -277,6 +286,21 @@ func (w *Workspace) CreateTodo(in NewTodo) (*Todo, error) {
 	if !ValidTodoStatus(status) {
 		return nil, fmt.Errorf("%w: 非法待办状态 %q", ErrInvalid, status)
 	}
+	if !ValidTodoPriority(in.Priority) {
+		return nil, fmt.Errorf("%w: 非法待办优先级 %q", ErrInvalid, in.Priority)
+	}
+	for _, l := range in.Links {
+		if err := ValidateTodoURL(l.URL); err != nil {
+			return nil, err
+		}
+	}
+	if in.ExternalID != "" {
+		for _, m := range metas {
+			if m.ExternalID == in.ExternalID {
+				return nil, todoDuplicateError(in.ExternalID, m.ID)
+			}
+		}
+	}
 
 	todo := &Todo{
 		Title:       in.Title,
@@ -288,9 +312,11 @@ func (w *Workspace) CreateTodo(in NewTodo) (*Todo, error) {
 		Parent:      in.Parent,
 		Order:       order,
 		Body:        in.Body,
-		Links:       append([]TodoLink(nil), in.Links...),
+		Links:       dedupTodoLinks(in.Links),
 		Attachments: []string{},
+		Priority:    in.Priority,
 		Source:      in.Source,
+		ExternalID:  in.ExternalID,
 	}
 	if status == StatusDone {
 		t := now
@@ -359,6 +385,7 @@ func (w *Workspace) UpdateTodo(id string, now time.Time, fn func(*Todo) error) (
 		return nil, err
 	}
 	oldStatus := todo.Status
+	oldExternalID := todo.ExternalID
 	if fn != nil {
 		if err := fn(todo); err != nil {
 			return nil, err
@@ -377,6 +404,18 @@ func (w *Workspace) UpdateTodo(id string, now time.Time, fn func(*Todo) error) (
 	}
 	if strings.TrimSpace(todo.Title) == "" {
 		return nil, fmt.Errorf("%w: 待办标题不能为空", ErrInvalid)
+	}
+	if !ValidTodoPriority(todo.Priority) {
+		return nil, fmt.Errorf("%w: 非法待办优先级 %q", ErrInvalid, todo.Priority)
+	}
+	if todo.ExternalID != "" && todo.ExternalID != oldExternalID {
+		other, err := w.FindTodoByExternalID(todo.ExternalID)
+		if err != nil {
+			return nil, err
+		}
+		if other != nil && other.ID != id {
+			return nil, todoDuplicateError(todo.ExternalID, other.ID)
+		}
 	}
 
 	if todo.Status == StatusDone && oldStatus != StatusDone {
@@ -515,10 +554,10 @@ func (w *Workspace) DeleteTodo(id string, recursive bool) error {
 	return nil
 }
 
-// AddTodoLink 给待办添加链接。URL 必须含 scheme；同 URL 已存在时只更新标题。
+// AddTodoLink 给待办添加链接。URL 校验见 ValidateTodoURL；同 URL 已存在时只更新标题。
 func (w *Workspace) AddTodoLink(id string, link TodoLink, now time.Time) (*Todo, error) {
-	if !validTodoURL(link.URL) {
-		return nil, fmt.Errorf("%w: 非法链接 URL %q", ErrInvalid, link.URL)
+	if err := ValidateTodoURL(link.URL); err != nil {
+		return nil, err
 	}
 	return w.UpdateTodo(id, now, func(t *Todo) error {
 		for i := range t.Links {
@@ -626,7 +665,9 @@ func readTodoFile(path string) (*Todo, error) {
 			todo.Order = parsed.Order
 			todo.Links = parsed.Links
 			todo.Attachments = parsed.Attachments
+			todo.Priority = parsed.Priority
 			todo.Source = parsed.Source
+			todo.ExternalID = parsed.ExternalID
 			todo.DoneAt = parsed.DoneAt
 			todo.Extra = parsed.Extra
 			todo.extraNodes = parsed.extraNodes
@@ -643,6 +684,9 @@ func readTodoFile(path string) (*Todo, error) {
 	// 状态缺失或非法时按 todo 处理，但不会因此静默改写文件。
 	if !ValidTodoStatus(todo.Status) {
 		todo.Status = StatusTodo
+	}
+	if !ValidTodoPriority(todo.Priority) {
+		todo.Priority = ""
 	}
 	if todo.Title == "" {
 		todo.Title = deriveTitle(todo.Body, id)
@@ -709,6 +753,10 @@ func decodeTodoFrontMatter(front []byte) *Todo {
 			_ = valNode.Decode(&todo.Attachments)
 		case "source":
 			_ = valNode.Decode(&todo.Source)
+		case "priority":
+			_ = valNode.Decode(&todo.Priority)
+		case "external_id":
+			_ = valNode.Decode(&todo.ExternalID)
 		case "id":
 			// ID 以文件名为准，忽略 front matter 里的值。
 		case "type":
@@ -776,7 +824,8 @@ func (w *Workspace) writeTodo(todo *Todo) error {
 //
 // front matter 字段顺序固定为 id, title, type（固定 "todo"）, status, due,
 // created, updated, done_at, tags, parent, order, links, attachments, source，
-// 之后按 key 字母序写未知字段。due/done_at 无值时写空字符串以保持字段稳定。
+// 之后是 priority、external_id（有值才写，避免老待办一改就多出空字段），
+// 再按 key 字母序写未知字段。due/done_at 无值时写空字符串以保持字段稳定。
 func marshalTodo(todo *Todo) ([]byte, error) {
 	root := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 
@@ -809,6 +858,12 @@ func marshalTodo(todo *Todo) ([]byte, error) {
 		return nil, fmt.Errorf("序列化 attachments 失败: %w", err)
 	}
 	appendFrontMatterKey(root, "source", stringNode(todo.Source))
+	if todo.Priority != "" {
+		appendFrontMatterKey(root, "priority", stringNode(todo.Priority))
+	}
+	if todo.ExternalID != "" {
+		appendFrontMatterKey(root, "external_id", stringNode(todo.ExternalID))
+	}
 
 	if err := appendExtraFrontMatter(root, todo.Extra, todo.extraNodes, knownTodoFrontMatterKeys); err != nil {
 		return nil, err
@@ -937,13 +992,43 @@ func (w *Workspace) todoRenumber(list []*Todo) error {
 	return nil
 }
 
-// validTodoURL 判断链接 URL 是否合法（url.Parse 成功且 scheme 非空）。
-func validTodoURL(s string) bool {
-	u, err := url.Parse(s)
-	if err != nil {
-		return false
+// FindTodoByExternalID 按 external_id 查找待办，找不到返回 nil, nil。
+func (w *Workspace) FindTodoByExternalID(externalID string) (*Todo, error) {
+	if externalID == "" {
+		return nil, nil
 	}
-	return u.Scheme != ""
+	metas, err := w.listTodoMetas()
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range metas {
+		if m.ExternalID == externalID {
+			return w.GetTodo(m.ID)
+		}
+	}
+	return nil, nil
+}
+
+// todoDuplicateError 构造 external_id 重复的错误。
+func todoDuplicateError(externalID, existing string) error {
+	return newTodoError(ErrDuplicate, "external_id %q 已被待办 %s 使用（如需更新请加 --upsert）", externalID, existing)
+}
+
+// dedupTodoLinks 按 URL 去重保序，后出现的同 URL 只更新标题。
+func dedupTodoLinks(links []TodoLink) []TodoLink {
+	out := make([]TodoLink, 0, len(links))
+	pos := map[string]int{}
+	for _, l := range links {
+		if i, ok := pos[l.URL]; ok {
+			if l.Title != "" {
+				out[i].Title = l.Title
+			}
+			continue
+		}
+		pos[l.URL] = len(out)
+		out = append(out, l)
+	}
+	return out
 }
 
 // SetTodoStatusTree 把待办及其全部后代设为 status（已是该状态的后代不改写），

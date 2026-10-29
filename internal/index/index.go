@@ -21,7 +21,7 @@ import (
 
 // schemaVersion 是索引数据库结构版本，记录在 PRAGMA user_version 中。
 // 版本不匹配时 Open 会删掉旧表并重建。
-const schemaVersion = 3
+const schemaVersion = 4
 
 // indexFileName 是索引文件名，位于工作台的 .kuibu/ 目录下。
 const indexFileName = "index.db"
@@ -218,6 +218,8 @@ func (ix *Index) initSchema() error {
 			links       TEXT NOT NULL DEFAULT '[]',
 			attachments TEXT NOT NULL DEFAULT '[]',
 			source      TEXT NOT NULL DEFAULT '',
+			priority    TEXT NOT NULL DEFAULT '',
+			external_id TEXT NOT NULL DEFAULT '',
 			created     TEXT NOT NULL DEFAULT '',
 			updated     TEXT NOT NULL DEFAULT '',
 			path        TEXT NOT NULL,
@@ -225,6 +227,7 @@ func (ix *Index) initSchema() error {
 			size        INTEGER NOT NULL DEFAULT 0,
 			extra       TEXT NOT NULL DEFAULT '{}'
 		)`,
+		`CREATE INDEX todos_external_id ON todos(external_id)`,
 		`CREATE INDEX todos_parent_ord ON todos(parent, ord, id)`,
 		`CREATE INDEX todos_status_due ON todos(status, due_date)`,
 		`CREATE INDEX todos_path ON todos(path)`,
@@ -811,11 +814,11 @@ func (ix *Index) upsertTodo(ctx context.Context, tx *sql.Tx, path string, force 
 
 	_, err = tx.ExecContext(ctx, `INSERT INTO todos
 		(id, title, status, due_date, due_time, due_at, done_at, parent, ord,
-		 tags, links, attachments, source, created, updated, path, mtime, size, extra)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 tags, links, attachments, source, priority, external_id, created, updated, path, mtime, size, extra)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		todo.ID, todo.Title, todo.Status, dueDate, dueTime, dueAt, doneAt,
 		todo.Parent, todo.Order, string(tags), string(links), string(attachments),
-		todo.Source, formatTime(todo.Created), formatTime(todo.Updated),
+		todo.Source, todo.Priority, todo.ExternalID, formatTime(todo.Created), formatTime(todo.Updated),
 		path, info.ModTime().UnixNano(), info.Size(), string(extra))
 	if err != nil {
 		return Change{}, fmt.Errorf("写入待办索引项失败: %w", err)

@@ -6,7 +6,7 @@ import type { TodoItem, TodoTag } from "../../bindings/github.com/axu4/kuibu/app
 import { TodoDetail } from "./TodoDetail";
 import { Icon } from "./Icon";
 import type { IconName } from "./Icon";
-import { formatDue, readableError, statusClass } from "../lib/todo";
+import { PRIORITY_OPTIONS, formatDue, priorityLabel, readableError, statusClass } from "../lib/todo";
 
 /** 列表视图。 */
 type Group = "today" | "week" | "all" | "done";
@@ -58,6 +58,9 @@ export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) 
   const [group, setGroup] = useState<Group>("today");
   const [tag, setTag] = useState("");
   const [query, setQuery] = useState("");
+  // 优先级筛选（""=全部，none=未设置）与排序（""=默认按截止，priority=按优先级）。
+  const [priority, setPriority] = useState("");
+  const [sort, setSort] = useState("");
   const [list, setList] = useState<TodoItem[]>([]);
   const [tags, setTags] = useState<TodoTag[]>([]);
   const [counts, setCounts] = useState<Record<Group, number>>({
@@ -87,13 +90,19 @@ export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) 
   tagRef.current = tag;
   const queryRef = useRef(query);
   queryRef.current = query;
+  const priorityRef = useRef(priority);
+  priorityRef.current = priority;
+  const sortRef = useRef(sort);
+  sortRef.current = sort;
 
   /** 刷新分组数量（每组一次，成本很低）。 */
   const refreshCounts = useCallback(async () => {
     try {
       const results = await Promise.all(
         GROUPS.map((g) =>
-          TodoService.List({ view: g.key, tag: "", query: "" }).then((items) => items ?? []),
+          TodoService.List({ view: g.key, tag: "", query: "", priority: "", sort: "" }).then(
+            (items) => items ?? [],
+          ),
         ),
       );
       const next: Record<Group, number> = { today: 0, week: 0, all: 0, done: 0 };
@@ -114,6 +123,8 @@ export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) 
         view: groupRef.current,
         tag: tagRef.current,
         query: queryRef.current,
+        priority: priorityRef.current,
+        sort: sortRef.current,
       });
       setList(items ?? []);
       setError(null);
@@ -163,7 +174,7 @@ export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) 
   // 首次加载与分组/标签/检索变化时刷新列表。
   useEffect(() => {
     void refreshList();
-  }, [group, tag, refreshList]);
+  }, [group, tag, priority, sort, refreshList]);
 
   useEffect(() => {
     void refreshCounts();
@@ -364,6 +375,30 @@ export function TodoView({ onOpenNote, navHost, initialTodoId }: TodoViewProps) 
                   <Icon name="close" size={11} />
                 </button>
               )}
+              <div className="toolbar-spacer" />
+              <select
+                className="head-select"
+                value={priority}
+                title="按优先级筛选"
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="">全部优先级</option>
+                {PRIORITY_OPTIONS.map((p) => (
+                  <option key={p} value={p}>
+                    {priorityLabel(p)}优先级
+                  </option>
+                ))}
+                <option value="none">未设优先级</option>
+              </select>
+              <select
+                className="head-select"
+                value={sort}
+                title="排序方式"
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="">按截止时间</option>
+                <option value="priority">按优先级</option>
+              </select>
             </div>
           </header>
 
@@ -537,6 +572,12 @@ function TodoRow({ item, depth, selectedId, onSelect, onChanged, onError }: Todo
           onClick={(e) => e.stopPropagation()}
           onChange={() => void toggle()}
         />
+
+        {item.priority && (
+          <span className={`todo-priority is-${item.priority}`} title={`${priorityLabel(item.priority)}优先级`}>
+            {priorityLabel(item.priority)}
+          </span>
+        )}
 
         <span className="todo-title" title={item.title}>
           {item.title}

@@ -20,6 +20,9 @@ type UserConfig struct {
 	QuickNoteShortcut string `json:"quickNoteShortcut,omitempty"`
 	// AutoCheckUpdate 是否自动检查在线更新；nil 视为 true。
 	AutoCheckUpdate *bool `json:"autoCheckUpdate,omitempty"`
+	// LinkSchemes 是待办链接点击后直接打开的协议白名单；nil（含 JSON null / 缺省）
+	// 表示用 store.DefaultLinkSchemes，空数组表示全部协议都要点击前确认。
+	LinkSchemes []string `json:"linkSchemes"`
 }
 
 // AutoCheckUpdateEnabled 返回是否自动检查更新；未配置（nil）时默认为 true。
@@ -153,6 +156,40 @@ func SaveQuickNoteShortcut(env func(string) string, accel string) error {
 	}
 	cfg.QuickNoteShortcut = strings.TrimSpace(accel)
 	return Save(env, cfg)
+}
+
+// LinkSchemes 返回待办链接协议白名单，未配置时返回 store.DefaultLinkSchemes 的副本。
+func LinkSchemes(env func(string) string) ([]string, error) {
+	cfg, err := Load(env)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.LinkSchemes == nil {
+		return append([]string(nil), store.DefaultLinkSchemes...), nil
+	}
+	return cfg.LinkSchemes, nil
+}
+
+// SaveLinkSchemes 规整并保存待办链接协议白名单，保留其他字段；nil 表示恢复默认。
+// 返回实际生效的白名单。
+func SaveLinkSchemes(env func(string) string, schemes []string) ([]string, error) {
+	cfg, err := Load(env)
+	if err != nil {
+		return nil, err
+	}
+	if schemes == nil {
+		cfg.LinkSchemes = nil
+	} else {
+		clean, err := store.NormalizeLinkSchemes(schemes)
+		if err != nil {
+			return nil, err
+		}
+		cfg.LinkSchemes = clean
+	}
+	if err := Save(env, cfg); err != nil {
+		return nil, err
+	}
+	return LinkSchemes(env)
 }
 
 // DefaultWorkspace 返回用户配置里的默认工作台目录，未配置时返回空字符串。

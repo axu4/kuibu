@@ -32,6 +32,13 @@ export function AttachPaths(id: string, paths: string[] | null): $CancellablePro
 }
 
 /**
+ * CheckLink 判定点击链接时怎么处理，规则在 store.CheckLinkOpen。
+ */
+export function CheckLink(url: string): $CancellablePromise<$models.LinkCheck> {
+    return $Call.ByID(2752983707, url);
+}
+
+/**
  * ChooseAndAttach 弹原生文件对话框选择文件并归档为附件。
  */
 export function ChooseAndAttach(id: string): $CancellablePromise<$models.TodoItem> {
@@ -76,6 +83,13 @@ export function HandleDroppedFiles(todoID: string, files: string[] | null): $Can
 }
 
 /**
+ * LinkSchemes 返回点击后直接打开的链接协议白名单。
+ */
+export function LinkSchemes(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(3384752823);
+}
+
+/**
  * List 按视图/标签/检索词返回待办列表。
  */
 export function List(filter: $models.TodoListFilter): $CancellablePromise<$models.TodoItem[] | null> {
@@ -107,10 +121,13 @@ export function OpenChildrenCount(id: string): $CancellablePromise<number> {
 }
 
 /**
- * OpenLink 用系统默认浏览器打开链接，只允许 http/https/mailto。
+ * OpenLink 交给系统打开链接（macOS 上即 open），能跳到 Mail 等本地 App。
+ * 
+ * 白名单内的协议直接打开；file: 与白名单外的协议需要 confirmed 为 true（前端
+ * 已弹窗确认）；javascript:/data: 等一律拒绝。
  */
-export function OpenLink(url: string): $CancellablePromise<void> {
-    return $Call.ByID(1277564221, url);
+export function OpenLink(url: string, confirmed: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1277564221, url, confirmed);
 }
 
 /**
@@ -125,6 +142,13 @@ export function Preview(text: string): $CancellablePromise<$models.QuickAddPrevi
  */
 export function RemoveLink(id: string, url: string): $CancellablePromise<$models.TodoItem> {
     return $Call.ByID(953924417, id, url);
+}
+
+/**
+ * SetLinkSchemes 保存链接协议白名单并返回规整后的结果；reset 为 true 时恢复默认。
+ */
+export function SetLinkSchemes(schemes: string[] | null, reset: boolean): $CancellablePromise<string[] | null> {
+    return $Call.ByID(3659751941, schemes, reset);
 }
 
 /**
@@ -153,6 +177,13 @@ export function UpdateBody(id: string, body: string): $CancellablePromise<void> 
  */
 export function UpdateDue(id: string, raw: string): $CancellablePromise<$models.TodoItem> {
     return $Call.ByID(3374746990, id, raw);
+}
+
+/**
+ * UpdatePriority 修改优先级：high/medium/low，空字符串清除。
+ */
+export function UpdatePriority(id: string, priority: string): $CancellablePromise<$models.TodoItem> {
+    return $Call.ByID(3834533180, id, priority);
 }
 
 /**

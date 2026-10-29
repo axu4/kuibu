@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/axu4/kuibu/internal/config"
 	"github.com/axu4/kuibu/internal/core"
 	"github.com/axu4/kuibu/internal/index"
 	"github.com/axu4/kuibu/internal/store"
@@ -71,9 +74,13 @@ type TodoItem struct {
 	Links []TodoLink `json:"links"`
 	// Attachments 是附件列表。
 	Attachments []TodoAttachment `json:"attachments"`
-	// Source 是来源笔记 ID，可空。
+	// Priority 是优先级 high/medium/low，空表示未设置。
+	Priority string `json:"priority"`
+	// Source 是来源：来源笔记 ID，或外部工具写入的来源类型（如 mail），可空。
 	Source string `json:"source"`
-	// SourceTitle 是来源笔记标题，仅在 Get 中填充。
+	// ExternalID 是外部系统标识（如邮件 Message-ID），可空。
+	ExternalID string `json:"externalId"`
+	// SourceTitle 是来源笔记标题，仅在 Get 中且来源是笔记时填充。
 	SourceTitle string `json:"sourceTitle"`
 	// Children 是子任务（仅列表的顶层项与 Get 填充）。
 	Children []TodoItem `json:"children"`
@@ -95,6 +102,20 @@ type TodoListFilter struct {
 	Tag string `json:"tag"`
 	// Query 是按标题/正文的检索词，空表示不过滤。
 	Query string `json:"query"`
+	// Priority 是优先级筛选：high/medium/low/none（未设置），空表示不过滤。
+	Priority string `json:"priority"`
+	// Sort 是排序：空为默认（按截止时间），priority 为按优先级高→低→未设。
+	Sort string `json:"sort"`
+}
+
+// LinkCheck 是点击链接前的判定结果。
+type LinkCheck struct {
+	// Action 是 open（直接打开）/ confirm（需二次确认）/ deny（拒绝）。
+	Action string `json:"action"`
+	// Scheme 是链接协议名（小写）。
+	Scheme string `json:"scheme"`
+	// Reason 是 deny 时的原因。
+	Reason string `json:"reason"`
 }
 
 // TodoTag 是标签及其未完成数量。
@@ -146,6 +167,8 @@ type TodoService struct {
 	openURL  func(string) error
 	// pickFiles 在测试里替换，默认弹原生多选文件对话框。
 	pickFiles func() ([]string, error)
+	// env 读取用户配置（链接协议白名单）用，测试里替换；nil 时用 os.Getenv。
+	env func(string) string
 }
 
 // newTodoService 创建待办服务，复用 WorkspaceService 的工作台与索引。
@@ -280,6 +303,16 @@ func (s *TodoService) List(filter TodoListFilter) ([]TodoItem, error) {
 	if filter.Tag != "" {
 		metaFilter.Tags = []string{filter.Tag}
 	}
+	switch filter.Priority {
+	case "":
+	case "none":
+		metaFilter.Priorities = []string{""}
+	default:
+		if !store.ValidTodoPriority(filter.Priority) {
+			return nil, fmt.Errorf("%w: 非法优先级筛选 %q", store.ErrInvalid, filter.Priority)
+		}
+		metaFilter.Priorities = []string{filter.Priority}
+	}
 	metas, err := idx.ListTodos(metaFilter)
 	if err != nil {
 		return nil, err
@@ -327,7 +360,21 @@ func (s *TodoService) List(filter TodoListFilter) ([]TodoItem, error) {
 	if roots == nil {
 		roots = []TodoItem{}
 	}
+	if filter.Sort == "priority" {
+		sortItemsByPriority(roots)
+	}
 	return roots, nil
+}
+
+// sortItemsByPriority 按优先级稳定排序（高→中→低→未设），子任务同样处理；
+// 同优先级保持默认顺序。
+func sortItemsByPriority(items []TodoItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		return store.TodoPriorityRank(items[i].Priority) < store.TodoPriorityRank(items[j].Priority)
+	})
+	for i := range items {
+		sortItemsByPriority(items[i].Children)
+	}
 }
 
 // listItem 把一条索引元数据转成列表项，并递归挂上匹配到的子任务。
@@ -376,7 +423,9 @@ func (s *TodoService) itemFromMeta(m index.TodoMeta) TodoItem {
 		Body:        "",
 		Links:       links,
 		Attachments: attachments,
+		Priority:    m.Priority,
 		Source:      m.Source,
+		ExternalID:  m.ExternalID,
 		Children:    []TodoItem{},
 		Created:     formatTime(m.Created),
 		Updated:     formatTime(m.Updated),
@@ -435,6 +484,7 @@ func (s *TodoService) getItem(ws *store.Workspace, idx *index.Index, id string) 
 	}
 
 	if item.Source != "" {
+		// 来源可能是笔记 ID，也可能是 mail 这类来源类型；查不到笔记就只显示原文。
 		if src, err := idx.Get(item.Source); err == nil {
 			item.SourceTitle = src.Title
 		}
@@ -527,6 +577,18 @@ func (s *TodoService) UpdateTags(id string, tags []string) (TodoItem, error) {
 	})
 }
 
+// UpdatePriority 修改优先级：high/medium/low，空字符串清除。
+func (s *TodoService) UpdatePriority(id, priority string) (TodoItem, error) {
+	priority = strings.TrimSpace(priority)
+	if !store.ValidTodoPriority(priority) {
+		return TodoItem{}, fmt.Errorf("%w: 非法待办优先级 %q", store.ErrInvalid, priority)
+	}
+	return s.update(id, func(t *store.Todo) error {
+		t.Priority = priority
+		return nil
+	})
+}
+
 // UpdateBody 保存详情正文。
 func (s *TodoService) UpdateBody(id, body string) error {
 	_, err := s.update(id, func(t *store.Todo) error {
@@ -603,13 +665,62 @@ func (s *TodoService) RemoveLink(id, url string) (TodoItem, error) {
 	return s.getItem(ws, idx, id)
 }
 
-// OpenLink 用系统默认浏览器打开链接，只允许 http/https/mailto。
-func (s *TodoService) OpenLink(url string) error {
+// getenv 返回读取用户配置用的环境变量函数。
+func (s *TodoService) getenv() func(string) string {
+	if s.env != nil {
+		return s.env
+	}
+	return os.Getenv
+}
+
+// LinkSchemes 返回点击后直接打开的链接协议白名单。
+func (s *TodoService) LinkSchemes() ([]string, error) {
+	return config.LinkSchemes(s.getenv())
+}
+
+// SetLinkSchemes 保存链接协议白名单并返回规整后的结果；reset 为 true 时恢复默认。
+func (s *TodoService) SetLinkSchemes(schemes []string, reset bool) ([]string, error) {
+	if reset {
+		return config.SaveLinkSchemes(s.getenv(), nil)
+	}
+	if schemes == nil {
+		schemes = []string{}
+	}
+	return config.SaveLinkSchemes(s.getenv(), schemes)
+}
+
+// CheckLink 判定点击链接时怎么处理，规则在 store.CheckLinkOpen。
+func (s *TodoService) CheckLink(url string) (LinkCheck, error) {
 	url = strings.TrimSpace(url)
-	lower := strings.ToLower(url)
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") &&
-		!strings.HasPrefix(lower, "mailto:") {
-		return fmt.Errorf("%w: 不支持的链接协议 %q", store.ErrInvalid, url)
+	allowed, err := s.LinkSchemes()
+	if err != nil {
+		return LinkCheck{}, err
+	}
+	action, err := store.CheckLinkOpen(url, allowed)
+	out := LinkCheck{Action: action, Scheme: store.LinkScheme(url)}
+	if err != nil {
+		out.Reason = err.Error()
+	}
+	return out, nil
+}
+
+// OpenLink 交给系统打开链接（macOS 上即 open），能跳到 Mail 等本地 App。
+//
+// 白名单内的协议直接打开；file: 与白名单外的协议需要 confirmed 为 true（前端
+// 已弹窗确认）；javascript:/data: 等一律拒绝。
+func (s *TodoService) OpenLink(url string, confirmed bool) error {
+	url = strings.TrimSpace(url)
+	check, err := s.CheckLink(url)
+	if err != nil {
+		return err
+	}
+	switch check.Action {
+	case store.LinkDeny:
+		return fmt.Errorf("%w: %s", store.ErrInvalid, check.Reason)
+	case store.LinkConfirm:
+		if !confirmed {
+			return fmt.Errorf("%w: 打开 %s: 链接前需要确认", store.ErrNeedsConfirm, check.Scheme)
+		}
 	}
 	return s.open(url, true)
 }

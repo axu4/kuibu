@@ -14,7 +14,7 @@ import (
 
 // todoMetaColumns 是 todos 表中查询 TodoMeta 所需的列。
 const todoMetaColumns = `id, title, status, due_date, due_time, due_at, done_at, parent, ord,
-	tags, links, attachments, source, created, updated, path, extra`
+	tags, links, attachments, source, priority, external_id, created, updated, path, extra`
 
 // todoDefaultOrder 是 ListTodos 的默认排序：
 //
@@ -56,8 +56,12 @@ type TodoMeta struct {
 	Links []store.TodoLink `json:"links"`
 	// Attachments 是附件相对路径列表。
 	Attachments []string `json:"attachments"`
-	// Source 是来源笔记 ID，可空。
+	// Priority 是优先级 high/medium/low，空表示未设置。
+	Priority string `json:"priority"`
+	// Source 是来源（来源笔记 ID 或 mail 等来源类型），可空。
 	Source string `json:"source"`
+	// ExternalID 是外部系统标识，可空。
+	ExternalID string `json:"externalId"`
 	// Created 是创建时间。
 	Created time.Time `json:"created"`
 	// Updated 是最后更新时间。
@@ -81,6 +85,12 @@ type TodoFilter struct {
 	DueTo   string
 	// OverdueAt 非零时，只要状态为 todo/doing 且截止时刻早于该时刻的待办。
 	OverdueAt time.Time
+	// Priorities 是允许的优先级列表（"" 表示未设置），空表示不过滤。
+	Priorities []string
+	// Source 非空时只要来源完全相等的待办。
+	Source string
+	// ExternalID 非空时只要 external_id 完全相等的待办。
+	ExternalID string
 	// Query 是全文检索，规则同笔记 Search：>=3 字符走 FTS trigram，否则 LIKE。
 	Query string
 	// Limit 限制返回条数，<=0 表示不限制。
@@ -99,6 +109,20 @@ func (ix *Index) ListTodos(f TodoFilter) ([]TodoMeta, error) {
 		for _, s := range f.Statuses {
 			args = append(args, s)
 		}
+	}
+	if len(f.Priorities) > 0 {
+		conds = append(conds, "priority IN ("+strings.TrimSuffix(strings.Repeat("?,", len(f.Priorities)), ",")+")")
+		for _, p := range f.Priorities {
+			args = append(args, p)
+		}
+	}
+	if f.Source != "" {
+		conds = append(conds, "source = ?")
+		args = append(args, f.Source)
+	}
+	if f.ExternalID != "" {
+		conds = append(conds, "external_id = ?")
+		args = append(args, f.ExternalID)
 	}
 	if f.Parent != nil {
 		conds = append(conds, "parent = ?")
@@ -310,7 +334,7 @@ func scanTodoMeta(s scanner) (TodoMeta, error) {
 	)
 	if err := s.Scan(&meta.ID, &meta.Title, &meta.Status, &dueDate, &dueTime, &dueAt, &doneAt,
 		&meta.Parent, &meta.Order, &tags, &links, &attachments, &meta.Source,
-		&created, &updated, &meta.Path, &extra); err != nil {
+		&meta.Priority, &meta.ExternalID, &created, &updated, &meta.Path, &extra); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TodoMeta{}, err
 		}

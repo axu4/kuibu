@@ -34,8 +34,8 @@ const usageText = `用法:
   note extract-todos <id> [--dry-run]    把笔记里的「- [ ] …」行抽成待办（不重复）
   note migrate-folders                   把有子笔记的普通笔记就地转为目录（升级老工作台，可重复执行）
   meeting open [--week W] | list         本周周会笔记（没有就建）/ 列出周会
-  todo add <文本> [--due <值>]           快速录入待办
-  todo list [--view v] [--status s] [--due d]  列出待办（--view today|week|all|done）
+  todo add <文本> [--due <值>]           快速录入待办（--status --link --priority --source --external-id --upsert 一步到位）
+  todo list [--view v] [--status s] [--due d]  列出待办（--view today|week|all|done；--priority/--source/--external-id 过滤，--sort priority）
   todo show <id>                         查看待办详情
   todo done|reopen|start|cancel <id>     变更待办状态（done/cancel 有未完成子任务时需 --with-children 或 --only-parent）
   todo edit <id> [--title t] ...         修改待办
@@ -91,7 +91,7 @@ const usageText = `用法:
   llm test [<名称>]                      连通测试（固定测试语）
   llm send [--model m] [--yes]           外发正文（stdin）；不带 --yes 只预览并退出 8
   version [--json]                       打印版本号
-  help                                   打印本帮助
+  help                                   打印本帮助（每个子命令都支持 -h / --help）
 
 笔记树:
   树由每条笔记的 parent + order 推导，只有目录（type=folder）能包含笔记。新建子笔记时
@@ -103,7 +103,7 @@ const usageText = `用法:
 
 退出码:
   0  成功
-  1  参数错误、笔记不存在、成环、仍有子节点等
+  1  参数错误、笔记不存在、成环、仍有子节点、待办 external_id 重复（JSON 错误码 DUPLICATE）等
   7  NOT_FINAL（引用/导出了未定稿内容）
   8  NEEDS_CONFIRM（需人工确认）
   9  HUMAN_EDITS_EXIST（存在人工修改，拒绝覆盖）
@@ -163,6 +163,10 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 
 	var common commonFlags
 	rest, err := parseLeadingGlobals(args, &common)
+	if errors.Is(err, flag.ErrHelp) {
+		fmt.Fprint(stdout, usageText)
+		return OK
+	}
 	if err != nil {
 		return report(err, common.json, stderr)
 	}
@@ -217,10 +221,121 @@ func RunContext(ctx context.Context, args []string, stdin io.Reader, stdout, std
 		fmt.Fprint(stderr, usageText)
 		return Error
 	}
+	var help *helpRequest
+	if errors.As(err, &help) {
+		fmt.Fprint(stdout, help.text())
+		return OK
+	}
+	if err != nil && wantsHelp(cmdArgs) {
+		// 子命令分发层（如 kuibu todo --help、kuibu report group -h）还没走到参数解析，
+		// 按命令路径从总览里摘出相关用法。
+		fmt.Fprint(stdout, topicHelp(cmd, cmdArgs))
+		return OK
+	}
 	if err != nil {
 		return report(err, common.json, stderr)
 	}
 	return OK
+}
+
+// errHelp 表示参数里出现了 -h / --help。
+var errHelp = errors.New("help requested")
+
+// helpRequest 是子命令收到 -h / --help 时返回的「错误」，Run 把它当成正常输出用法。
+type helpRequest struct {
+	fs *flag.FlagSet
+}
+
+// Error 实现 error 接口。
+func (h *helpRequest) Error() string { return "help requested" }
+
+// text 返回子命令用法：总览里的相关行加上全部参数说明。
+func (h *helpRequest) text() string {
+	var b strings.Builder
+	name := h.fs.Name()
+	fmt.Fprintf(&b, "用法: kuibu %s [参数...]\n", name)
+	if lines := usageLines(name); len(lines) > 0 {
+		b.WriteString("\n")
+		for _, l := range lines {
+			b.WriteString(l + "\n")
+		}
+	}
+	b.WriteString("\n参数:\n")
+	h.fs.VisitAll(func(f *flag.Flag) {
+		head := "  --" + f.Name
+		if !isBoolFlag(f) {
+			head += " <值>"
+		}
+		writeHelpRow(&b, head, f.Usage)
+	})
+	writeHelpRow(&b, "  -h, --help", "显示本帮助")
+	return b.String()
+}
+
+// writeHelpRow 写一行「参数 说明」，按显示宽度（中文算两格）对齐说明列。
+func writeHelpRow(b *strings.Builder, head, usage string) {
+	width := 0
+	for _, r := range head {
+		width++
+		if r > 0x7f {
+			width++
+		}
+	}
+	b.WriteString(head)
+	b.WriteString(strings.Repeat(" ", max(28-width, 1)))
+	b.WriteString(usage + "\n")
+}
+
+// isHelpArg 判断参数是否是 -h / --help。
+func isHelpArg(a string) bool {
+	return a == "-h" || a == "--help" || a == "-help"
+}
+
+// wantsHelp 判断参数里（-- 之前）是否出现了 -h / --help。
+func wantsHelp(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if isHelpArg(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// topicHelp 按命令路径（命令名加 -h 之前的子命令词）从总览里摘出相关用法；
+// 路径过长匹配不到时逐级缩短，都匹配不到时返回完整总览。
+func topicHelp(cmd string, args []string) string {
+	path := []string{cmd}
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			break
+		}
+		path = append(path, a)
+	}
+	for n := len(path); n > 0; n-- {
+		if lines := usageLines(strings.Join(path[:n], " ")); len(lines) > 0 {
+			return "用法:\n" + strings.Join(lines, "\n") + "\n\n每个子命令都支持 -h / --help 查看参数。\n"
+		}
+	}
+	return usageText
+}
+
+// usageLines 返回总览里以命令路径 name 开头的行（name 之后是空格、| 或行尾）。
+func usageLines(name string) []string {
+	var out []string
+	for _, line := range strings.Split(usageText, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "  ") || !strings.HasPrefix(trimmed, name) {
+			continue
+		}
+		rest := trimmed[len(name):]
+		if rest == "" || rest[0] == ' ' || rest[0] == '|' {
+			out = append(out, line)
+		}
+	}
+	return out
 }
 
 // hasJSONFlag 判断参数里是否出现了 --json。
@@ -247,6 +362,9 @@ func parseLeadingGlobals(args []string, common *commonFlags) ([]string, error) {
 	fs.SetOutput(io.Discard)
 	addCommonFlags(fs, common)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil, err
+		}
 		return nil, usagef("%v", err)
 	}
 	return fs.Args(), nil
@@ -268,6 +386,9 @@ func newFlagSet(name string) *flag.FlagSet {
 // parseCommand 解析子命令参数，允许参数与位置参数混排。
 func parseCommand(fs *flag.FlagSet, args []string) ([]string, error) {
 	pos, err := parseInterspersed(fs, args)
+	if errors.Is(err, errHelp) {
+		return nil, &helpRequest{fs: fs}
+	}
 	if err != nil {
 		return nil, usagef("%v", err)
 	}
@@ -300,6 +421,9 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 			return nil, fmt.Errorf("非法参数 %q", arg)
 		}
 		f := fs.Lookup(name)
+		if f == nil && isHelpArg(arg) {
+			return nil, errHelp
+		}
 		if f == nil {
 			return nil, fmt.Errorf("未知参数 %q", arg)
 		}
@@ -373,6 +497,8 @@ func classify(err error) (string, int) {
 		return "INVALID", Error
 	case errors.Is(err, store.ErrConflict):
 		return "CONFLICT", Error
+	case errors.Is(err, store.ErrDuplicate):
+		return "DUPLICATE", Error
 	case errors.Is(err, store.ErrAmbiguousPerson):
 		return "AMBIGUOUS_PERSON", Error
 	case errors.Is(err, store.ErrNeedsConfirm):

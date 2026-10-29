@@ -1925,6 +1925,42 @@ kbd {
   vertical-align: 1px;
 }
 
+/* 优先级标记：只在设置了优先级时出现，颜色轻，不抢标题。 */
+.todo-priority {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--ink-3);
+  background: var(--hover);
+}
+
+.todo-priority.is-high {
+  color: var(--seal);
+  background: var(--seal-soft);
+}
+
+.todo-priority.is-medium {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.head-select {
+  height: 22px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.head-select:hover {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
 .todo-meta {
   flex: 0 0 auto;
   display: flex;
@@ -2101,6 +2137,14 @@ kbd {
   color: var(--amber);
 }
 
+.segmented-btn.is-active.is-priority-high {
+  color: var(--seal);
+}
+
+.segmented-btn.is-active.is-priority-medium {
+  color: var(--amber);
+}
+
 .segmented-btn.is-active.is-done {
   color: var(--accent);
 }
@@ -2196,6 +2240,21 @@ kbd {
   text-decoration: underline;
   text-decoration-color: var(--accent-line);
   text-underline-offset: 3px;
+}
+
+.source-text {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px;
+  color: var(--ink-2);
+}
+
+.modal .modal-url {
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
 }
 
 .source-link:hover {
